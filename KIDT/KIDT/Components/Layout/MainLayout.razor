@@ -1,3 +1,48 @@
-﻿@inherits LayoutComponentBase
+﻿@* Layout-Komponente:
+  - Stellt gemeinsame Struktur (Topbar, Sidebar, Footer) für alle Seiten bereit.
+  - @Body rendert jeweils die aktive Page-Komponente
+   *@
 
-@Body
+@inherits LayoutComponentBase
+
+<div class="layout">
+    <div class="sidebar @(isCollapsed ? "collapsed" : "expanded")">
+        <!-- Toggle Button -->
+        <button @onclick="ToggleSidebar" title="Randleiste schließen" class="toggle-btn">
+            <img src="images/sidebar.png" alt="Randleiste schließen" />
+        </button>
+        <a href="/Neuer Chat" title="Neuer Chat" class="nav-btn">
+            <img src="images/new-chat.png" alt="Neuer Chat" />
+            <span>Neuer Chat</span>
+        </a>
+        <a href="/Kalender" title="Kalender" class="nav-btn">
+            <img src="images/calendar.png" alt="Kalender" />
+            <span>Kalender</span>
+        </a>
+        <a href="/Daten"  title="Daten" class="nav-btn">
+            <img src="images/data.png" alt="Daten" />
+            <span>Daten</span>
+        </a>
+    </div>
+
+    <div class="content">
+        <header>
+            <h3>Header</h3>
+        </header>
+        <main>
+            @Body
+        </main>
+        <footer>
+            <h3>Footer</h3>
+        </footer>
+    </div>
+</div>
+
+@code {
+    private bool isCollapsed = false; // Start: Sidebar breit
+
+    private void ToggleSidebar()
+    {
+        isCollapsed = !isCollapsed;
+    }
+}

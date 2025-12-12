@@ -1,0 +1,136 @@
+.layout {
+    display: flex;
+    height: 98vh;
+}
+
+.sidebar {
+    background: #0f1a2e;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* verhindert volle Breite */
+    transition: width 0.3s ease;
+    height: 99vh;
+    padding: 10px 6px 10px 10px; /* oben/links etwas weniger, rechts deutlich weniger */
+    row-gap: 6px; /* Abstand zwischen den Elementen */
+}
+
+    .sidebar.expanded {
+        width: 300px;
+    }
+
+    .sidebar.collapsed {
+        width: 50px;
+    }
+
+.toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: .5rem;
+}
+
+    .toggle-btn img {
+        width: 24px;
+        height: 24px;
+    }
+
+nav {
+    padding: 1rem;
+}
+
+.nav-btn {
+    display: inline-flex;
+    align-items: center;
+    color: white;
+    text-decoration: none;
+    padding: .5rem;
+    margin: .25rem 0;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+    .nav-btn img {
+        width: 20px;
+        height: 20px;
+    }
+
+    .nav-btn span {
+        margin-left: 12px;
+        white-space: nowrap;
+        transition: opacity 0.3s ease, margin 0.3s ease;
+    }
+
+.sidebar.collapsed .nav-btn span {
+    opacity: 0;
+    margin-left: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+/* Inhalt/Layout des rechten Bereichs */
+.content {
+    flex: 1;
+    height: 100vh;
+    overflow-y: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    box-sizing: border-box;
+    scrollbar-color: rgba(255,255,255,0.25) #1a2438;
+    scrollbar-width: thin;
+}
+
+    .content::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    .content::-webkit-scrollbar-track {
+        background: #1a2438;
+        border-radius: 8px;
+    }
+
+    .content::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.25);
+        border-radius: 8px;
+        border: 2px solid #1a2438;
+    }
+
+        .content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.35);
+        }
+
+header {
+    flex: 0 0 10%;
+    background: #1a2438;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    text-align: center;
+}
+
+    header h3 {
+        padding: 10px;
+    }
+
+main {
+    flex: 1;
+    background: #1a2438;
+    text-align: center;
+    position: relative;
+}
+
+footer {
+    flex: 0 0 5%;
+    background: #1a2438;
+    color: #fff;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    text-align: center;
+}
+
+header, main, footer {
+    margin: 0;
+    padding: 0;
+}
