@@ -1,108 +1,108 @@
-.layout {
-    display: flex;
+.layout { /* Root: Layout-Flexbox */
+    display: flex; /* Sidebar + Content nebeneinander */
     height: 98vh;
 }
 
-.sidebar {
+.sidebar { /* linke Navigationsleiste */
     background: #0f1a2e;
     color: white;
     display: flex;
     flex-direction: column;
-    align-items: flex-start; /* verhindert volle Breite */
-    transition: width 0.3s ease;
+    align-items: flex-start; /* verhindert volle Breite der Elemente */
+    transition: width 0.3s ease; /* weicher Breitenwechsel */
     height: 99vh;
-    padding: 10px 6px 10px 10px; /* oben/links etwas weniger, rechts deutlich weniger */
-    row-gap: 6px; /* Abstand zwischen den Elementen */
+    padding: 10px 6px 10px 10px; /* Innenabstand (oben rechts unten links) */
+    row-gap: 6px; /* Abstand zwischen Items */
 }
 
-    .sidebar.expanded {
+    .sidebar.expanded { /* breite Sidebar */
         width: 300px;
     }
 
-    .sidebar.collapsed {
+    .sidebar.collapsed { /* schmale Sidebar */
         width: 50px;
     }
 
-.toggle-btn {
+.toggle-btn { /* Button zum Umschalten */
     background: none;
     border: none;
-    cursor: pointer;
+    cursor: pointer; /* zeigt Klickbarkeit */
     padding: .5rem;
 }
 
-    .toggle-btn img {
+    .toggle-btn img { /* Icon-Größe */
         width: 24px;
         height: 24px;
     }
 
-nav {
+nav { /* Navigationsbereich */
     padding: 1rem;
 }
 
-.nav-btn {
-    display: inline-flex;
+.nav-btn { /* Link-Buttons */
+    display: inline-flex; /* Icon + Text nebeneinander */
     align-items: center;
     color: white;
     text-decoration: none;
     padding: .5rem;
-    margin: .25rem 0;
+    margin: .25rem 0; /* Abstand zwischen Buttons */
     border-radius: 4px;
-    transition: all 0.3s ease;
+    transition: all 0.3s ease; /* sanfter Übergang */
 }
 
-    .nav-btn img {
+    .nav-btn img { /* Icon-Größe */
         width: 20px;
         height: 20px;
     }
 
-    .nav-btn span {
+    .nav-btn span { /* Text neben Icon */
         margin-left: 12px;
-        white-space: nowrap;
-        transition: opacity 0.3s ease, margin 0.3s ease;
+        white-space: nowrap; /* keine Umbrüche */
+        transition: opacity 0.3s ease, margin 0.3s ease; /* sanftes Ein-/Ausblenden */
     }
 
-.sidebar.collapsed .nav-btn span {
-    opacity: 0;
+.sidebar.collapsed .nav-btn span { /* wenn Sidebar zugeklappt */
+    opacity: 0; /* Text ausblenden */
     margin-left: 0;
     width: 0;
-    overflow: hidden;
+    overflow: hidden; /* Text abschneiden */
 }
 
 /* Inhalt/Layout des rechten Bereichs */
-.content {
-    flex: 1;
+.content { /* rechter Inhalt */
+    flex: 1; /* nimmt verbleibenden Platz ein */
     height: 100vh;
-    overflow-y: auto;
+    overflow-y: auto; /* vertikales Scrollen */
     position: relative;
     display: flex;
     flex-direction: column;
     padding: 10px;
     box-sizing: border-box;
     scrollbar-color: rgba(255,255,255,0.25) #1a2438;
-    scrollbar-width: thin;
+    scrollbar-width: thin; /* schmale Scrollbar */
 }
 
-    .content::-webkit-scrollbar {
+    .content::-webkit-scrollbar { /* WebKit Scrollbar-Größe */
         width: 10px;
         height: 10px;
     }
 
-    .content::-webkit-scrollbar-track {
+    .content::-webkit-scrollbar-track { /* Scrollbar-Hintergrund */
         background: #1a2438;
         border-radius: 8px;
     }
 
-    .content::-webkit-scrollbar-thumb {
+    .content::-webkit-scrollbar-thumb { /* Scrollbar-Regler */
         background: rgba(255,255,255,0.25);
         border-radius: 8px;
         border: 2px solid #1a2438;
     }
 
-        .content::-webkit-scrollbar-thumb:hover {
+        .content::-webkit-scrollbar-thumb:hover { /* Hover Effekt */
             background: rgba(255,255,255,0.35);
         }
 
-header {
+header { /* Kopfbereich */
     flex: 0 0 10%;
     background: #1a2438;
     border-top-left-radius: 10px;
@@ -110,18 +110,18 @@ header {
     text-align: center;
 }
 
-    header h3 {
+    header h3 { /* Titel im Header, aktuell Placeholder*/
         padding: 10px;
     }
 
-main {
+main { /* Hauptinhalt */
     flex: 1;
     background: #1a2438;
     text-align: center;
     position: relative;
 }
 
-footer {
+footer { /* Fußbereich */
     flex: 0 0 5%;
     background: #1a2438;
     color: #fff;
@@ -130,7 +130,7 @@ footer {
     text-align: center;
 }
 
-header, main, footer {
-    margin: 0;
-    padding: 0;
+header, main, footer { /* vereinheitlicht */
+    margin: 0; /* kein Außenabstand */
+    padding: 0; /* kein Innenabstand */
 }

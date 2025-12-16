@@ -1,99 +1,98 @@
-﻿@* Ziel: Chat-Seite mit Nachrichtenliste und Eingabebox *@
+﻿@* Chat-Seite mit Nachrichtenliste und Eingabebox *@
 @page "/"
-
-<div class="chat-container">
-    <div class="messages">
-        <div class="messages-inner">
+<div class="chat-container"> @* Hauptcontainer *@
+    <div class="messages"> @* Bereich mit Nachrichten und Scroll *@
+        <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
             @foreach (var msg in Messages)
             {
-                <div class="message-bubble">@msg</div>
+                <div class="message-bubble">@msg</div> @* Einzelne Bubble anzeigen *@
             }
         </div>
     </div>
 
-    <div class="chat-input-container">
-        <div class="chat-input @(Messages.Count > 0 ? "has-messages" : null)" role="search" aria-label="Chat Eingabe">
-            <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols"></textarea>
-            <button class="chat-send" title="Senden" aria-label="Nachricht senden" @onclick="SendMessage">Senden</button>
+    <div class="chat-input-container"> @* Container für die Eingabe *@
+        <div class="chat-input @(Messages.Count > 0 ? "has-messages" : null)" role="search" aria-label="Chat Eingabe"> @* Input-Boc mit Klassen-Toggle *@
+            <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols"></textarea> @* Textfeld, gebunden an Property InputText *@
+            <button class="chat-send" title="Senden" aria-label="Nachricht senden" @onclick="SendMessage">Senden</button> @* Senden-Button, ruft SendMessage auf *@
         </div>
     </div>
 </div>
 
 @code {
-    // Nachrichtenliste
-    private List<string> Messages = new();
+    private List<string> Messages = new(); // Liste aller Nachrichten
 
     // Eingabe: wächst stufenweise pro Zeile
-    private const int MaxRows = 19; // ~10cm Höhe
-    private const int Cols = 60;    // grobe Zeichenbreite pro Zeile
-    private int rows = 1;           // Startzeilen
+    private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
+    private const int Cols = 60;    // angenommene Zeichenbreite pro Zeile
+    private int rows = 1;           // aktuelle Zeilenanzahl des Textareas
 
-    private string inputText = string.Empty;
+    private string inputText = string.Empty; // internes Feld, startet leer
     private string InputText
     {
-        get { return inputText; }
+        get { return inputText; } // liefert aktuellen Text zurück
         set
         {
-            if (value == null) value = string.Empty;
-            inputText = value;
-            UpdateRows();
+            if (value == null) value = string.Empty; // null zu leerem String konvertieren
+            inputText = value; // Feld setzen
+            UpdateRows(); // Zeilenanzahl neu berechnen
         }
     }
 
-    private void UpdateRows()
+    private void UpdateRows() // Methode die aus inputText die sichtbaren Zeilen berechnet und rows begrenzt
     {
         var lines = inputText.Split('\n');
-        int total = 0;
+        int total = 0; // Zähler für sichtbare Zeilen
         foreach (var line in lines)
         {
-            int wraps = (int)Math.Ceiling(line.Length / (double)Cols);
-            if (wraps < 1) wraps = 1;
-            total += wraps;
+            int wraps = (int)Math.Ceiling(line.Length / (double)Cols); // berechne Zeilenumbrüche
+            if (wraps < 1) wraps = 1; // mindestens eine Zeile
+            total += wraps; // aufaddieren
         }
-        rows = Math.Clamp(total, 2, MaxRows);
+        rows = Math.Clamp(total, 2, MaxRows); // auf Bereich beschränken
     }
 
-    private void SendMessage()
+    private void SendMessage() // Methode zum Senden der Nachricht aus inputText
     {
-        var text = (InputText ?? string.Empty).Trim();
-        if (text.Length == 0) return;
+        var text = (InputText ?? string.Empty).Trim(); // Text holen und trimmen (Whitespace-Zeichen entfernen)
+        if (text.Length == 0) return; // leere Nachrichten nicht senden
         Messages.Add(text);
-        InputText = string.Empty;
-        rows = 2;
+        InputText = string.Empty; // Eingabe zurücksetzen
+        rows = 2; // Eingabefeld auf 2 Zeilen setzen
     }
 }
 
 <style>
     body { margin: 0; }
-    .chat-container { height: 100%; display: flex; flex-direction: column; }
+    .chat-container { height: 100%; display: flex; flex-direction: column; } /* Hauptlayout vertikal */
 
     /* Nachrichtenbereich (mit Scrollbar) */
-    .messages { flex: 1; overflow-y: auto; padding: 16px 16px 160px; box-sizing: border-box; display: flex; justify-content: center; scrollbar-color: rgba(255,255,255,0.25) #1a2438; scrollbar-width: thin; }
-    .messages::-webkit-scrollbar { width: 8px; height: 8px; }
-    .messages::-webkit-scrollbar-track { background: #1a2438; border-radius: 8px; }
-    .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; border: 2px solid #1a2438; }
-    .messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }
+    .messages { flex: 1; overflow-y: auto; padding: 16px 16px 160px; box-sizing: border-box; display: flex; justify-content: center; scrollbar-color: rgba(255,255,255,0.25) #1a2438; scrollbar-width: thin; } /* Scrollbereich */
+    .messages::-webkit-scrollbar { width: 8px; height: 8px; } /* Scrollbar Größe */
+    .messages::-webkit-scrollbar-track { background: #1a2438; border-radius: 8px; } /* Scrollbar Hintergrund */
+    .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; border: 2px solid #1a2438; } /* Scrollbar-Regler */
+    .messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); } /* Hover Effekt vom Regler */
 
-    /* Innenbereich: gleiche Breite wie Input, rechts ausgerichtet */
-    .messages-inner { width: min(800px, calc(100% - 120px)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 0.25cm 0 0.25cm 0.25cm; box-sizing: border-box; }
+    /* Innenbereich: */
+    .messages-inner { width: min(800px, calc(100% - 120px)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 0.25cm 0 0.25cm 0.25cm; box-sizing: border-box; } /* Listenausrichtung */
 
     /* Bubbles sind schmal und passen sich dem Inhalt an */
-    .message-bubble { display: inline-block; max-width: min(600px, 90%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.25cm; border-radius: 12px; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; margin: 0; box-sizing: border-box; }
+    .message-bubble { display: inline-block; max-width: min(600px, 90%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.25cm; border-radius: 12px; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; margin: 0; box-sizing: border-box; } /* einzelne Nachricht */
 
-    /* Input-Box klebt unten mittig, Klicks erlaubt */
+    /* Input-Box: */
     .chat-input-container { position: sticky; bottom: 12%; display: flex; justify-content: center; pointer-events: none; }
-    .chat-input { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #1a2438; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; width: min(800px, calc(100% - 120px)); box-sizing: border-box; transition: box-shadow 0.2s ease; }
-    .chat-input.has-messages { box-shadow: 0 0 24px 6px rgba(0,0,0,0.55); }
+    .chat-input { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #1a2438; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; width: min(800px, calc(100% - 120px)); box-sizing: border-box; transition: box-shadow 0.2s ease; } /* Input-Box Stil */
+    .chat-input.has-messages { box-shadow: 0 0 24px 6px rgba(0,0,0,0.55); } /* zusätzlicher Schatten bei Nachrichten */
 
-    .chat-textbox { flex: 1; min-height: 44px; max-height: 10cm; line-height: 20px; padding: 10px 12px; border-radius: 8px; border: none; background: #202a3f; color: #fff; overflow-y: auto; resize: none; width: 100%; box-sizing: border-box; scrollbar-color: rgba(255,255,255,0.25) rgba(0,0,0,0.25); scrollbar-width: thin; }
-    .chat-textbox::-webkit-scrollbar { width: 8px; height: 8px; }
-    .chat-textbox::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 8px; }
-    .chat-textbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.30); border-radius: 8px; border: 2px solid rgba(0,0,0,0.25); }
-    .chat-textbox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.40); }
+    /* Textarea bzw. Chat-Input-Box */
+    .chat-textbox { flex: 1; min-height: 44px; max-height: 10cm; line-height: 20px; padding: 10px 12px; border-radius: 8px; border: none; background: #202a3f; color: #fff; overflow-y: auto; resize: none; width: 100%; box-sizing: border-box; scrollbar-color: rgba(255,255,255,0.25) rgba(0,0,0,0.25); scrollbar-width: thin; } /* Textarea Stil */
+    .chat-textbox::-webkit-scrollbar { width: 8px; height: 8px; } /* Textarea scrollbar */
+    .chat-textbox::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 8px; } /* Textarea scrollbar Hintergrund */
+    .chat-textbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.30); border-radius: 8px; border: 2px solid rgba(0,0,0,0.25); } /* Textarea scrollbar Regler */
+    .chat-textbox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.40); } /* Textarea scrollbar Regler Hover */
     .chat-textbox::placeholder { color: #cfd3dc; }
 
     /* Senden-Button */
-    .chat-send { margin-left: auto; padding: 10px 14px; border-radius: 8px; border: none; background: #202a3f; color: #e5eaf3; cursor: pointer; align-self: center; transition: background 0.2s ease, transform 0.05s ease; }
-    .chat-send:hover { background: #243047; }
-    .chat-send:active { transform: translateY(1px); }
+    .chat-send { margin-left: auto; padding: 10px 14px; border-radius: 8px; border: none; background: #202a3f; color: #e5eaf3; cursor: pointer; align-self: center; transition: background 0.2s ease, transform 0.05s ease; } /* Button Stil */
+    .chat-send:hover { background: #243047; } /* Hover */
+    .chat-send:active { transform: translateY(1px); } /* Active Effekt */
 </style>

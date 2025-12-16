@@ -1,39 +1,39 @@
 ﻿@* Layout-Komponente:
-  - Stellt gemeinsame Struktur (Topbar, Sidebar, Footer) für alle Seiten bereit.
+  - Stellt gemeinsame Struktur (Sidebar, Header, Main & Footer) für alle Seiten bereit.
   - @Body rendert jeweils die aktive Page-Komponente
    *@
 
 @inherits LayoutComponentBase
 
-<div class="layout">
-    <div class="sidebar @(isCollapsed ? "collapsed" : "expanded")">
+<div class="layout"> @* Root-Container für Layout *@
+    <div class="sidebar @(isCollapsed ? "collapsed" : "expanded")"> @* Sidebar mit collapsed/expanded State *@
         <!-- Toggle Button -->
-        <button @onclick="ToggleSidebar" title="Randleiste schließen" class="toggle-btn">
+        <button @onclick="ToggleSidebar" title="Randleiste schließen" class="toggle-btn"> @* Schaltet Sidebar um *@
             <img src="images/sidebar.png" alt="Randleiste schließen" />
         </button>
-        <a href="/Neuer Chat" title="Neuer Chat" class="nav-btn">
+        <a href="/Neuer Chat" title="Neuer Chat" class="nav-btn"> @* Link zu neuem Chat *@
             <img src="images/new-chat.png" alt="Neuer Chat" />
-            <span>Neuer Chat</span>
+            <span>Neuer Chat</span> @* Beschriftung der Links (verschwindet bei collapsed) *@
         </a>
-        <a href="/Kalender" title="Kalender" class="nav-btn">
+        <a href="/Kalender" title="Kalender" class="nav-btn"> @* Link zum Kalender *@
             <img src="images/calendar.png" alt="Kalender" />
             <span>Kalender</span>
         </a>
-        <a href="/Daten"  title="Daten" class="nav-btn">
+        <a href="/Daten"  title="Daten" class="nav-btn"> @* Link zu Daten-Seite *@
             <img src="images/data.png" alt="Daten" />
             <span>Daten</span>
         </a>
     </div>
 
-    <div class="content">
+    <div class="content"> @* Hauptinhalt rechts von Sidebar, die große Content-Box*@
         <header>
-            <h3>Header</h3>
+            <h3>Header</h3> @* Placeholder *@
         </header>
-        <main>
-            @Body
+        <main> @* Variable Content-Bereich *@
+            @Body @* Rendert die aktuell aktive Page-Komponente *@
         </main>
-        <footer>
-            <h3>Footer</h3>
+        <footer> @* Fußbereich *@
+            <h3>Footer</h3> @* Placeholder *@
         </footer>
     </div>
 </div>
@@ -41,8 +41,8 @@
 @code {
     private bool isCollapsed = false; // Start: Sidebar breit
 
-    private void ToggleSidebar()
+    private void ToggleSidebar() // Methode zum Umschalten der Sidebar
     {
-        isCollapsed = !isCollapsed;
+        isCollapsed = !isCollapsed; // Zustand umschalten (kehrt den boolischen Wert um)
     }
 }
