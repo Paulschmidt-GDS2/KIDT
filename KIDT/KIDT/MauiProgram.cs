@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using KIDT.Services;
 
 namespace KIDT
 {
@@ -15,6 +16,7 @@ namespace KIDT
                 });
 
             builder.Services.AddMauiBlazorWebView();
+            builder.Services.AddSingleton<ChatMcpService>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();
