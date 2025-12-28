@@ -1,25 +1,35 @@
-﻿@* Chat-Seite mit Nachrichtenliste und Eingabebox *@
-@page "/"
+﻿@page "/"
+@* Chat-Seite mit Nachrichtenliste und Eingabebox *@
+@using Microsoft.AspNetCore.Components.Web
+@inject KIDT.Services.ChatMcpService Chat
+
 <div class="chat-container"> @* Hauptcontainer *@
     <div class="messages"> @* Bereich mit Nachrichten und Scroll *@
         <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
             @foreach (var msg in Messages)
             {
-                <div class="message-bubble">@msg</div> @* Einzelne Bubble anzeigen *@
+                <div class="message-bubble @(msg.IsUser ? "user" : "assistant")">@msg.Text</div> @* Einzelne Bubble mit Klasse je nach Sender *@
             }
         </div>
     </div>
 
     <div class="chat-input-container"> @* Container für die Eingabe *@
-        <div class="chat-input @(Messages.Count > 0 ? "has-messages" : null)" role="search" aria-label="Chat Eingabe"> @* Input-Boc mit Klassen-Toggle *@
-            <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols"></textarea> @* Textfeld, gebunden an Property InputText *@
-            <button class="chat-send" title="Senden" aria-label="Nachricht senden" @onclick="SendMessage">Senden</button> @* Senden-Button, ruft SendMessage auf *@
+        <div class="chat-input @(Messages.Count > 0 ? "has-messages" : null)" role="search" aria-label="Chat Eingabe"> @* Input-Box mit Klassen-Toggle *@
+            <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" @onkeydown="HandleKeyDown" rows="@rows" cols="@Cols"></textarea> @* Textfeld, gebunden an Property InputText *@
+            <button class="chat-send" title="Upload (später)" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Button wird Platzhalter-Upload-Button *@
         </div>
     </div>
 </div>
 
 @code {
-    private List<string> Messages = new(); // Liste aller Nachrichten
+    // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
+    private class ChatMessage
+    {
+        public string Text { get; set; } = string.Empty;
+        public bool IsUser { get; set; }
+    }
+
+    private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
 
     // Eingabe: wächst stufenweise pro Zeile
     private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
@@ -51,14 +61,35 @@
         rows = Math.Clamp(total, 2, MaxRows); // auf Bereich beschränken
     }
 
-    private void SendMessage() // Methode zum Senden der Nachricht aus inputText
+    private async Task SendMessage() // Methode zum Senden der Nachricht aus inputText
     {
         var text = (InputText ?? string.Empty).Trim(); // Text holen und trimmen (Whitespace-Zeichen entfernen)
         if (text.Length == 0) return; // leere Nachrichten nicht senden
-        Messages.Add(text);
+        
+        // Benutzer-Nachricht hinzufügen
+        Messages.Add(new ChatMessage { Text = text, IsUser = true });
         InputText = string.Empty; // Eingabe zurücksetzen
-        rows = 2; // Eingabefeld auf 2 Zeilen setzen
+        rows = 1; // Eingabefeld auf 1 Zeile setzen
+
+        // Antwort vom Modell (über MCP + MCP-Server) holen und anzeigen
+        var reply = await Chat.SendAsync(text);
+        if (!string.IsNullOrWhiteSpace(reply))
+        {
+            // Assistent-Nachricht hinzufügen
+            Messages.Add(new ChatMessage { Text = reply, IsUser = false });
+        }
+        StateHasChanged();
     }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e) // Enter = senden, Shift+Enter = neue Zeile
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendMessage();
+        }
+    }
+
+    private void OnUploadClick() { /* Platzhalter für zukünftigen Datei-Upload */ }
 }
 
 <style>
@@ -72,11 +103,17 @@
     .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; border: 2px solid #1a2438; } /* Scrollbar-Regler */
     .messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); } /* Hover Effekt vom Regler */
 
-    /* Innenbereich: */
-    .messages-inner { width: min(800px, calc(100% - 120px)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 0.25cm 0 0.25cm 0.25cm; box-sizing: border-box; } /* Listenausrichtung */
+    /* Innenbereich: Nachrichten mit mehr Abstand */
+    .messages-inner { width: min(800px, calc(100% - 120px)); display: flex; flex-direction: column; gap: 16px; padding: 0.25cm 0 0.25cm 0.25cm; box-sizing: border-box; } /* Listenausrichtung mit 16px Abstand */
 
-    /* Bubbles sind schmal und passen sich dem Inhalt an */
-    .message-bubble { display: inline-block; max-width: min(600px, 90%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 0.25cm; border-radius: 12px; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; margin: 0; box-sizing: border-box; } /* einzelne Nachricht */
+    /* Basis-Stil für alle Bubbles */
+    .message-bubble { display: inline-block; max-width: min(600px, 90%); padding: 0.25cm; border-radius: 12px; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; margin: 0; box-sizing: border-box; } /* einzelne Nachricht */
+
+    /* Benutzer-Nachrichten (rechts, blau-grau) mit zusätzlichem Abstand nach oben */
+    .message-bubble.user { align-self: flex-end; background: rgba(70, 100, 150, 0.20); border: 1px solid rgba(100, 140, 200, 0.30); color: #e8f0ff; margin-left: auto; margin-top: 8px; } /* Benutzer rechts mit extra Abstand */
+
+    /* Assistent-Nachrichten (links, dunkelgrau) mit zusätzlichem Abstand nach oben */
+    .message-bubble.assistant { align-self: flex-start; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-right: auto; margin-top: 8px; } /* Assistent links mit extra Abstand */
 
     /* Input-Box: */
     .chat-input-container { position: sticky; bottom: 12%; display: flex; justify-content: center; pointer-events: none; }
