@@ -1,136 +1,169 @@
-.layout { /* Root: Layout-Flexbox */
-    display: flex; /* Sidebar + Content nebeneinander */
-    height: 98vh;
+/* === LAYOUT-STRUKTUR === */
+
+/* Root-Container für Layout */
+.layout {
+    display: flex; /* Sidebar und Content-Box nebeneinander */
+    height: 98vh; /* Fast volle Viewport-Höhe */
 }
 
-.sidebar { /* linke Navigationsleiste */
-    background: #0f1a2e;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start; /* verhindert volle Breite der Elemente */
-    transition: width 0.3s ease; /* weicher Breitenwechsel */
-    height: 99vh;
-    padding: 10px 6px 10px 10px; /* Innenabstand (oben rechts unten links) */
-    row-gap: 6px; /* Abstand zwischen Items */
+/* === SIDEBAR === */
+
+/* Linke Navigationsleiste */
+.sidebar {
+    background: #10100f; /* Dunkler Hintergrund */
+    color: #84804d; /* Textfarbe */
+    display: flex; /* Flexbox für vertikale Anordnung */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    align-items: flex-start; /* Links ausrichten */
+    transition: width 0.3s ease; /* Sanfter Breitenwechsel */
+    height: 99vh; /* Fast volle Viewport-Höhe */
+    padding: 10px 6px 10px 10px; /* Innenabstand oben/rechts/unten/links */
+    row-gap: 6px; /* Vertikaler Abstand zwischen Items */
 }
 
-    .sidebar.expanded { /* breite Sidebar */
-        width: 300px;
-    }
-
-    .sidebar.collapsed { /* schmale Sidebar */
-        width: 50px;
-    }
-
-.toggle-btn { /* Button zum Umschalten */
-    background: none;
-    border: none;
-    cursor: pointer; /* zeigt Klickbarkeit */
-    padding: .5rem;
+/* Sidebar ausgeklappt */
+.sidebar.expanded {
+    width: 300px; /* Breite wenn ausgeklappt */
 }
 
-    .toggle-btn img { /* Icon-Größe */
-        width: 24px;
-        height: 24px;
-    }
-
-nav { /* Navigationsbereich */
-    padding: 1rem;
+/* Sidebar eingeklappt */
+.sidebar.collapsed {
+    width: 50px; /* Schmale Breite wenn eingeklappt */
 }
 
-.nav-btn { /* Link-Buttons */
-    display: inline-flex; /* Icon + Text nebeneinander */
-    align-items: center;
-    color: white;
-    text-decoration: none;
-    padding: .5rem;
-    margin: .25rem 0; /* Abstand zwischen Buttons */
-    border-radius: 4px;
-    transition: all 0.3s ease; /* sanfter Übergang */
+/* === SIDEBAR-BUTTONS === */
+
+/* Toggle-Button zum Ein-/Ausklappen */
+.toggle-btn {
+    background: none; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    cursor: pointer; /* Zeiger-Cursor */
+    padding: .5rem; /* Innenabstand */
 }
 
-    .nav-btn img { /* Icon-Größe */
-        width: 20px;
-        height: 20px;
-    }
-
-    .nav-btn span { /* Text neben Icon */
-        margin-left: 12px;
-        white-space: nowrap; /* keine Umbrüche */
-        transition: opacity 0.3s ease, margin 0.3s ease; /* sanftes Ein-/Ausblenden */
-    }
-
-.sidebar.collapsed .nav-btn span { /* wenn Sidebar zugeklappt */
-    opacity: 0; /* Text ausblenden */
-    margin-left: 0;
-    width: 0;
-    overflow: hidden; /* Text abschneiden */
+/* Icon im Toggle-Button */
+.toggle-btn img {
+    width: 24px; /* Icon-Breite */
+    height: 24px; /* Icon-Höhe */
 }
 
-/* Inhalt/Layout des rechten Bereichs */
-.content { /* rechter Inhalt */
-    flex: 1; /* nimmt verbleibenden Platz ein */
-    height: 100vh;
-    overflow-y: auto; /* vertikales Scrollen */
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    box-sizing: border-box;
-    scrollbar-color: rgba(255,255,255,0.25) #1a2438;
-    scrollbar-width: thin; /* schmale Scrollbar */
+/* Navigationsbereich */
+nav {
+    padding: 1rem; /* Innenabstand */
 }
 
-    .content::-webkit-scrollbar { /* WebKit Scrollbar-Größe */
-        width: 10px;
-        height: 10px;
-    }
-
-    .content::-webkit-scrollbar-track { /* Scrollbar-Hintergrund */
-        background: #1a2438;
-        border-radius: 8px;
-    }
-
-    .content::-webkit-scrollbar-thumb { /* Scrollbar-Regler */
-        background: rgba(255,255,255,0.25);
-        border-radius: 8px;
-        border: 2px solid #1a2438;
-    }
-
-        .content::-webkit-scrollbar-thumb:hover { /* Hover Effekt */
-            background: rgba(255,255,255,0.35);
-        }
-
-header { /* Kopfbereich */
-    flex: 0 0 10%;
-    background: #1a2438;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    text-align: center;
+/* Navigations-Link-Buttons */
+.nav-btn {
+    display: inline-flex; /* Icon und Text nebeneinander */
+    align-items: center; /* Vertikal zentrieren */
+    color: white; /* Textfarbe */
+    text-decoration: none; /* Keine Unterstreichung */
+    padding: .5rem; /* Innenabstand */
+    margin: .25rem 0; /* Vertikaler Außenabstand */
+    border-radius: 4px; /* Leicht abgerundete Ecken */
+    transition: all 0.3s ease; /* Sanfte Übergänge */
 }
 
-    header h3 { /* Titel im Header, aktuell Placeholder*/
-        padding: 10px;
-    }
-
-main { /* Hauptinhalt */
-    flex: 1;
-    background: #1a2438;
-    text-align: center;
-    position: relative;
+/* Icon in Navigations-Buttons */
+.nav-btn img {
+    width: 20px; /* Icon-Breite */
+    height: 20px; /* Icon-Höhe */
 }
 
-footer { /* Fußbereich */
-    flex: 0 0 5%;
-    background: #1a2438;
-    color: #fff;
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
-    text-align: center;
+/* Text neben Icon in Navigations-Buttons */
+.nav-btn span {
+    margin-left: 12px; /* Abstand zum Icon */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    transition: opacity 0.3s ease, margin 0.3s ease; /* Sanftes Ein-/Ausblenden */
 }
 
-header, main, footer { /* vereinheitlicht */
-    margin: 0; /* kein Außenabstand */
-    padding: 0; /* kein Innenabstand */
+/* Text ausblenden wenn Sidebar eingeklappt */
+.sidebar.collapsed .nav-btn span {
+    opacity: 0; /* Unsichtbar machen */
+    margin-left: 0; /* Kein Abstand */
+    width: 0; /* Keine Breite */
+    overflow: hidden; /* Überfluss verstecken */
+}
+
+/* === CONTENT-BEREICH === */
+
+/* Rechter Hauptinhalt-Bereich */
+.content {
+    flex: 1; /* Nimmt verbleibenden Platz ein */
+    height: 100vh; /* Volle Viewport-Höhe */
+    overflow-y: auto; /* Vertikaler Scroll */
+    position: relative; /* Für absolute Positionierung von Kindern */
+    display: flex; /* Flexbox für Layout */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    padding: 10px; /* Innenabstand */
+    margin-right: 3px; /* Rechter Außenabstand */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    scrollbar-color: rgba(255,255,255,0.25) transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+}
+
+/* Scrollbar-Breite für Chrome/Safari */
+.content::-webkit-scrollbar {
+    width: 10px; /* Scrollbar-Breite */
+    height: 10px; /* Scrollbar-Höhe */
+}
+
+/* Scrollbar-Hintergrund für Chrome/Safari */
+.content::-webkit-scrollbar-track {
+    background: transparent; /* Transparenter Hintergrund */
+    border-radius: 8px; /* Abgerundete Ecken */
+}
+
+/* Scrollbar-Griff für Chrome/Safari */
+.content::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.25); /* Halbdurchsichtiger Griff */
+    border-radius: 8px; /* Abgerundete Ecken */
+    border: 2px solid transparent; /* Transparenter Rahmen */
+    background-clip: padding-box; /* Hintergrund nur im Padding-Bereich */
+}
+
+/* Scrollbar-Griff beim Hover */
+.content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.35); /* Heller beim Hover */
+    background-clip: padding-box; /* Hintergrund nur im Padding-Bereich */
+}
+
+/* === CONTENT-LAYOUT-BEREICHE === */
+
+/* Kopfbereich */
+header {
+    flex: 0 0 10%; /* Fixe Höhe 10% */
+    background: #191916; /* Dunkler Hintergrund */
+    border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
+    border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
+    text-align: center; /* Text zentrieren */
+}
+
+/* Überschrift im Header */
+header h3 {
+    padding: 10px; /* Innenabstand */
+}
+
+/* Hauptinhalt-Bereich */
+main {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    background: #191916; /* Dunkler Hintergrund */
+    text-align: center; /* Text zentrieren */
+    position: relative; /* Für absolute Positionierung von Kindern */
+}
+
+/* Fußbereich */
+footer {
+    flex: 0 0 5%; /* Fixe Höhe 5% */
+    background: #191916; /* Dunkler Hintergrund */
+    color: #fff; /* Weiße Textfarbe */
+    border-bottom-left-radius: 10px; /* Untere linke Ecke abrunden */
+    border-bottom-right-radius: 10px; /* Untere rechte Ecke abrunden */
+    text-align: center; /* Text zentrieren */
+}
+
+/* Gemeinsame Styles für Header/Main/Footer */
+header, main, footer {
+    margin: 0; /* Kein Außenabstand */
+    padding: 0; /* Kein Innenabstand */
 }

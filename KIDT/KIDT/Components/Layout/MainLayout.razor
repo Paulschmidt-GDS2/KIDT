@@ -6,7 +6,19 @@
 @inherits LayoutComponentBase
 
 <div class="layout"> @* Root-Container für Layout *@
-    <div class="sidebar @(isCollapsed ? "collapsed" : "expanded")"> @* Sidebar mit collapsed/expanded State *@
+    @* CSS-Klasse für Sidebar bestimmen *@
+    @{
+        string sidebarClass = "sidebar "; // Basis-Klasse
+        if (isCollapsed) // Ist Sidebar eingeklappt?
+        {
+            sidebarClass += "collapsed"; // Ja -> collapsed-Klasse
+        }
+        else // Nein -> Sidebar ausgeklappt
+        {
+            sidebarClass += "expanded"; // expanded-Klasse
+        }
+    }
+    <div class="@sidebarClass"> @* Sidebar mit dynamischer Klasse *@
         <!-- Toggle Button -->
         <button @onclick="ToggleSidebar" title="Randleiste schließen" class="toggle-btn"> @* Schaltet Sidebar um *@
             <img src="images/sidebar.png" alt="Randleiste schließen" />
@@ -25,14 +37,14 @@
         </a>
     </div>
 
-    <div class="content"> @* Hauptinhalt rechts von Sidebar, die große Content-Box*@
+    <div class="content"> @* Hauptinhalt rechts von Sidebar, die Content-Box*@
         <header>
             <h3>Header</h3> @* Placeholder *@
         </header>
-        <main> @* Variable Content-Bereich *@
+        <main> @* Haupt-Bereich von Chat-Seite in Content-Box *@
             @Body @* Rendert die aktuell aktive Page-Komponente *@
         </main>
-        <footer> @* Fußbereich *@
+        <footer>
             <h3>Footer</h3> @* Placeholder *@
         </footer>
     </div>

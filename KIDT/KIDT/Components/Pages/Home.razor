@@ -1,135 +1,242 @@
-ï»¿@page "/"
-@* Chat-Seite mit Nachrichtenliste und Eingabebox *@
+@* Chat-Hauptseite in Main mit Chat-History und Inputbox *@
+@page "/"
 @using Microsoft.AspNetCore.Components.Web
 @inject KIDT.Services.ChatMcpService Chat
+@inject KIDT.Services.ChatDbService Db
 
 <div class="chat-container"> @* Hauptcontainer *@
     <div class="messages"> @* Bereich mit Nachrichten und Scroll *@
         <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
-            @foreach (var msg in Messages)
+            @foreach (var msg in Messages) @* Durchlaufe alle Nachrichten *@
             {
-                <div class="message-bubble @(msg.IsUser ? "user" : "assistant")">@msg.Text</div> @* Einzelne Bubble mit Klasse je nach Sender *@
+                string bubbleClass; // Variable für CSS-Klasse der Bubble
+                if (msg.IsUser) // Check: Ist es User-Nachricht?
+                {
+                    bubbleClass = "message-bubble user"; // Ja ? User-Klasse
+                }
+                else // Nein, Assistent-Nachricht
+                {
+                    bubbleClass = "message-bubble assistant"; // Assistent-Klasse
+                }
+
+                <div class="@bubbleClass">
+                    @if (msg.IsLoading) @* Check: Ist dies eine Loading-Nachricht? *@
+                    {
+                        <span class="blinking-cursor">_</span>
+                    }
+                    else if (msg.IsUser) @* Wenn User-Nachricht *@
+                    {
+                        @msg.Text
+                    }
+                    else @* Wenn Assistent-Nachricht *@
+                    {
+                        <span class="typewriter">@msg.DisplayText</span>
+                    }
+                </div>
             }
         </div>
     </div>
 
-    <div class="chat-input-container"> @* Container fÃ¼r die Eingabe *@
-        <div class="chat-input @(Messages.Count > 0 ? "has-messages" : null)" role="search" aria-label="Chat Eingabe"> @* Input-Box mit Klassen-Toggle *@
+    <div class="chat-input-container"> @* Container für die Eingabe *@
+        @* Datei-Badge: Zeigt angehängte Datei an *@
+        @if (!string.IsNullOrEmpty(UploadedFileName)) @* Check: Ist Datei angehängt? *@
+        {
+            <div class="file-badge"> @* Badge-Container *@
+                <img src="images/file.png" alt="Datei" class="file-icon" />
+                <span class="file-name">@UploadedFileName</span> @* Dateiname anzeigen *@
+                <button class="file-remove" @onclick="RemoveFile" title="Datei entfernen" aria-label="Datei entfernen">
+                    <img src="images/remove.png" alt="Entfernen" />
+                </button>
+            </div>
+        }
+
+        <div class="chat-input" role="search" aria-label="Chat Eingabe"> @* Input-Box *@
             <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" @onkeydown="HandleKeyDown" rows="@rows" cols="@Cols"></textarea> @* Textfeld, gebunden an Property InputText *@
-            <button class="chat-send" title="Upload (spÃ¤ter)" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Button wird Platzhalter-Upload-Button *@
+            <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Upload-Button *@
         </div>
     </div>
 </div>
 
 @code {
     // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
-    private class ChatMessage
+    private class ChatMessage // Klasse für eine Chat-Nachricht
     {
-        public string Text { get; set; } = string.Empty;
-        public bool IsUser { get; set; }
+        public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
+        public bool IsUser { get; set; } // true = Benutzer, false = Assistent
+        public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
+        public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
     }
 
     private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
+    private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
-    // Eingabe: wÃ¤chst stufenweise pro Zeile
+    // Eingabe: wächst stufenweise pro Zeile
     private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
     private const int Cols = 60;    // angenommene Zeichenbreite pro Zeile
     private int rows = 1;           // aktuelle Zeilenanzahl des Textareas
 
     private string inputText = string.Empty; // internes Feld, startet leer
-    private string InputText
+    private string InputText // Property für gegenseitige Synchronisation (Textfeld und Variable sind gekoppelt und synchron)
     {
-        get { return inputText; } // liefert aktuellen Text zurÃ¼ck
-        set
+        get { return inputText; } // liefert aktuellen Text zurück
+        set // Setter: Wird bei jeder Eingabe aufgerufen
         {
-            if (value == null) value = string.Empty; // null zu leerem String konvertieren
+            if (value == null) value = string.Empty; // null zu leerem String konvertieren (value = neuer Wert der gesetzt wird)
             inputText = value; // Feld setzen
             UpdateRows(); // Zeilenanzahl neu berechnen
         }
     }
 
+    private string UploadedFileName = string.Empty; // Aktuell angehängte Datei (leer = keine Datei)
+
+    protected override async Task OnInitializedAsync() // Wird beim App-Start aufgerufen
+    {
+        var backgroundTask = Task.Run(Chat.InitializeAsync); // Starte Modell-Laden im Hintergrund (UI blockiert nicht)
+
+        currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Datenbank: Chat erstellen
+        List<KIDT.Models.Message> dbMessages = await Db.LoadMessagesAsync(currentConversationId); // Datenbank: Nachrichten laden
+
+        foreach (KIDT.Models.Message dbMsg in dbMessages) // Datenbank: DB-Messages in UI konvertieren
+        {
+            var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser };
+            if (dbMsg.IsUser) // User-Nachrichten direkt anzeigen
+            {
+                chatMsg.DisplayText = dbMsg.Text;
+                Messages.Add(chatMsg);
+            }
+            else // Assistent-Nachrichten mit Typewriter
+            {
+                Messages.Add(chatMsg);
+                var typewriterTask = TypewriterEffect(chatMsg, dbMsg.Text); // Starte Typewriter im Hintergrund
+            }
+        }
+    }
+
     private void UpdateRows() // Methode die aus inputText die sichtbaren Zeilen berechnet und rows begrenzt
     {
-        var lines = inputText.Split('\n');
-        int total = 0; // ZÃ¤hler fÃ¼r sichtbare Zeilen
-        foreach (var line in lines)
+        var lines = inputText.Split('\n'); // Splitte bei Newlines
+        int total = 0; // Zähler für sichtbare Zeilen
+        foreach (var line in lines) // Durchlaufe alle Zeilen
         {
-            int wraps = (int)Math.Ceiling(line.Length / (double)Cols); // berechne ZeilenumbrÃ¼che
+            int wraps = (int)Math.Ceiling(line.Length / (double)Cols); // berechne Zeilenumbrüche
             if (wraps < 1) wraps = 1; // mindestens eine Zeile
             total += wraps; // aufaddieren
         }
-        rows = Math.Clamp(total, 2, MaxRows); // auf Bereich beschrÃ¤nken
+        rows = Math.Clamp(total, 1, MaxRows); // auf Bereich beschränken (min 1, max 19)
+    }
+
+    private async Task TypewriterEffect(ChatMessage message, string fullText) // Typewriter-Effekt
+    {
+        message.DisplayText = ""; // Start mit leerem Text
+        
+        for (int i = 0; i < fullText.Length; i++) // Durchlaufe jeden Buchstaben
+        {
+            message.DisplayText += fullText[i]; // Füge nächsten Buchstaben hinzu
+            StateHasChanged(); // UI aktualisieren
+            await Task.Delay(50); // 50ms Pause zwischen Buchstaben
+        }
+        message.Text = fullText; // Setze vollständigen Text
+        StateHasChanged(); // Final UI update
     }
 
     private async Task SendMessage() // Methode zum Senden der Nachricht aus inputText
     {
-        var text = (InputText ?? string.Empty).Trim(); // Text holen und trimmen (Whitespace-Zeichen entfernen)
+        string text = InputText; // Hole InputText
+        if (text == null) // Check: Ist null?
+        {
+            text = string.Empty; // Setze auf leer
+        }
+        text = text.Trim(); // Trimme Whitespace
         if (text.Length == 0) return; // leere Nachrichten nicht senden
         
-        // Benutzer-Nachricht hinzufÃ¼gen
-        Messages.Add(new ChatMessage { Text = text, IsUser = true });
-        InputText = string.Empty; // Eingabe zurÃ¼cksetzen
+        Messages.Add(new ChatMessage { Text = text, DisplayText = text, IsUser = true }); // Benutzer-Nachricht hinzufügen
+        await Db.SaveMessageAsync(currentConversationId, true, text); // Datenbank: Speichern
+        InputText = string.Empty; // Eingabe zurücksetzen
         rows = 1; // Eingabefeld auf 1 Zeile setzen
 
-        // Antwort vom Modell (Ã¼ber MCP + MCP-Server) holen und anzeigen
-        var reply = await Chat.SendAsync(text);
-        if (!string.IsNullOrWhiteSpace(reply))
+        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
+        Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
+        StateHasChanged(); // UI aktualisieren um Loading-Bubble zu zeigen
+
+        var replyTask = Chat.SendAsync(text); // Starte Modell-Anfrage asynchron
+        var minDelayTask = Task.Delay(1600); // Mindestens 1600ms (2x Blink-Zyklus)
+        await Task.WhenAll(replyTask, minDelayTask); // Warte auf beide: Antwort und Mindestzeit
+        var reply = await replyTask; // Hole die Antwort
+
+        Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
+
+        if (!string.IsNullOrWhiteSpace(reply)) // Füge echte Assistent-Nachricht hinzu (wenn nicht leer)
         {
-            // Assistent-Nachricht hinzufÃ¼gen
-            Messages.Add(new ChatMessage { Text = reply, IsUser = false });
+            var assistantMessage = new ChatMessage { Text = "", IsUser = false, IsLoading = false }; // Assistent-Nachricht hinzufügen
+            Messages.Add(assistantMessage);
+            await Db.SaveMessageAsync(currentConversationId, false, reply); // Datenbank: Speichern
+            
+            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt
         }
-        StateHasChanged();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e) // Enter = senden, Shift+Enter = neue Zeile
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
+        if (e.Key == "Enter" && !e.ShiftKey) // Check: Enter ohne Shift gedrückt?
         {
-            await SendMessage();
+            await SendMessage(); // Wenn ja, Sende Nachricht
         }
     }
 
-    private void OnUploadClick() { /* Platzhalter fÃ¼r zukÃ¼nftigen Datei-Upload */ }
+    private async Task OnUploadClick() // Upload-Button geklickt: Öffnet Datei-Dialog und lädt Datei
+    {
+        try
+        {
+            var result = await FilePicker.PickAsync(new PickOptions // Öffne Datei-Auswahl-Dialog (FilePicker: Windows-Explorer öffnen)
+            {
+                PickerTitle = "Wähle eine Datei aus", // Dialog-Titel
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>> // Erlaubte Dateitypen
+                {
+                    { DevicePlatform.WinUI, new[] { ".pdf", ".txt", ".md", ".json" } } // PDF, TXT, MD, JSON
+                })
+            });
+
+            if (result != null) // Check: Hat User eine Datei ausgewählt?
+            {
+                UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
+                StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
+
+                Messages.Add(new ChatMessage { Text = "Datei wird geladen...", IsUser = false, IsLoading = true }); // Zeige Loading-Nachricht (Loading-Bubble anzeigen)
+                StateHasChanged(); // UI aktualisieren
+
+                string uploadResult = await Chat.UploadFileAsync(result.FullPath); // Lade Datei über ChatMcpService (Extrahiere Text aus Datei)
+
+                Messages.RemoveAt(Messages.Count - 1); // Entferne Loading-Nachricht (Lösche letzte Nachricht)
+
+                var uploadMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Zeige Ergebnis-Nachricht
+                Messages.Add(uploadMessage);
+                
+                await TypewriterEffect(uploadMessage, uploadResult); // Typewriter-Effekt für Upload-Ergebnis
+
+                if (uploadResult.StartsWith("Fehler")) // Check: War Upload fehlgeschlagen?
+                {
+                    UploadedFileName = string.Empty; // Entferne Badge bei Fehler
+                    StateHasChanged(); // UI aktualisieren
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            UploadedFileName = string.Empty; // Entferne Badge bei Fehler
+            var errorMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Fehler-Nachricht
+            Messages.Add(errorMessage);
+            await TypewriterEffect(errorMessage, $"Fehler beim Datei-Upload: {ex.Message}"); // Fehlerausgabe mit Typewriter
+            StateHasChanged(); // UI aktualisieren
+        }
+    }
+
+    private void RemoveFile() // Datei entfernen: Löscht Badge und Datei aus Service
+    {
+        UploadedFileName = string.Empty; // Entferne Dateiname aus UI
+        Chat.ClearFile(); // Entferne Datei aus Service
+        var confirmMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Bestätigungs-Nachricht
+        Messages.Add(confirmMessage);
+        var confirmTask = TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Bestätigung mit Typewriter
+        StateHasChanged(); // UI aktualisieren
+    }
 }
-
-<style>
-    body { margin: 0; }
-    .chat-container { height: 100%; display: flex; flex-direction: column; } /* Hauptlayout vertikal */
-
-    /* Nachrichtenbereich (mit Scrollbar) */
-    .messages { flex: 1; overflow-y: auto; padding: 16px 16px 160px; box-sizing: border-box; display: flex; justify-content: center; scrollbar-color: rgba(255,255,255,0.25) #1a2438; scrollbar-width: thin; } /* Scrollbereich */
-    .messages::-webkit-scrollbar { width: 8px; height: 8px; } /* Scrollbar GrÃ¶ÃŸe */
-    .messages::-webkit-scrollbar-track { background: #1a2438; border-radius: 8px; } /* Scrollbar Hintergrund */
-    .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 8px; border: 2px solid #1a2438; } /* Scrollbar-Regler */
-    .messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); } /* Hover Effekt vom Regler */
-
-    /* Innenbereich: Nachrichten mit mehr Abstand */
-    .messages-inner { width: min(800px, calc(100% - 120px)); display: flex; flex-direction: column; gap: 16px; padding: 0.25cm 0 0.25cm 0.25cm; box-sizing: border-box; } /* Listenausrichtung mit 16px Abstand */
-
-    /* Basis-Stil fÃ¼r alle Bubbles */
-    .message-bubble { display: inline-block; max-width: min(600px, 90%); padding: 0.25cm; border-radius: 12px; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; margin: 0; box-sizing: border-box; } /* einzelne Nachricht */
-
-    /* Benutzer-Nachrichten (rechts, blau-grau) mit zusÃ¤tzlichem Abstand nach oben */
-    .message-bubble.user { align-self: flex-end; background: rgba(70, 100, 150, 0.20); border: 1px solid rgba(100, 140, 200, 0.30); color: #e8f0ff; margin-left: auto; margin-top: 8px; } /* Benutzer rechts mit extra Abstand */
-
-    /* Assistent-Nachrichten (links, dunkelgrau) mit zusÃ¤tzlichem Abstand nach oben */
-    .message-bubble.assistant { align-self: flex-start; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-right: auto; margin-top: 8px; } /* Assistent links mit extra Abstand */
-
-    /* Input-Box: */
-    .chat-input-container { position: sticky; bottom: 12%; display: flex; justify-content: center; pointer-events: none; }
-    .chat-input { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #1a2438; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; width: min(800px, calc(100% - 120px)); box-sizing: border-box; transition: box-shadow 0.2s ease; } /* Input-Box Stil */
-    .chat-input.has-messages { box-shadow: 0 0 24px 6px rgba(0,0,0,0.55); } /* zusÃ¤tzlicher Schatten bei Nachrichten */
-
-    /* Textarea bzw. Chat-Input-Box */
-    .chat-textbox { flex: 1; min-height: 44px; max-height: 10cm; line-height: 20px; padding: 10px 12px; border-radius: 8px; border: none; background: #202a3f; color: #fff; overflow-y: auto; resize: none; width: 100%; box-sizing: border-box; scrollbar-color: rgba(255,255,255,0.25) rgba(0,0,0,0.25); scrollbar-width: thin; } /* Textarea Stil */
-    .chat-textbox::-webkit-scrollbar { width: 8px; height: 8px; } /* Textarea scrollbar */
-    .chat-textbox::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 8px; } /* Textarea scrollbar Hintergrund */
-    .chat-textbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.30); border-radius: 8px; border: 2px solid rgba(0,0,0,0.25); } /* Textarea scrollbar Regler */
-    .chat-textbox::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.40); } /* Textarea scrollbar Regler Hover */
-    .chat-textbox::placeholder { color: #cfd3dc; }
-
-    /* Senden-Button */
-    .chat-send { margin-left: auto; padding: 10px 14px; border-radius: 8px; border: none; background: #202a3f; color: #e5eaf3; cursor: pointer; align-self: center; transition: background 0.2s ease, transform 0.05s ease; } /* Button Stil */
-    .chat-send:hover { background: #243047; } /* Hover */
-    .chat-send:active { transform: translateY(1px); } /* Active Effekt */
-</style>

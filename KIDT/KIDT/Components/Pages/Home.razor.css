@@ -1,0 +1,282 @@
+/* Home.razor Component Styles */
+
+/* Body ohne Rand */
+body {
+    margin: 0; /* Entfernt Standard-Browser-Rand */
+}
+
+/* Chat-Hauptcontainer */
+.chat-container {
+    height: 100%; /* Füllt gesamte Höhe */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+}
+
+/* === NACHRICHTENBEREICH === */
+
+/* Scrollbarer Bereich für Nachrichten */
+.messages {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    overflow-y: auto; /* Vertikaler Scroll wenn nötig */
+    padding: 16px 16px 160px; /* Abstand oben/seitlich/unten */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    display: flex; /* Flexbox für Zentrierung */
+    justify-content: center; /* Horizontal zentrieren */
+    scrollbar-color: rgba(255,255,255,0.25) #1a2438; /* Scrollbar-Farben Firefox */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+}
+
+    /* Scrollbar-Breite für Chrome/Safari */
+    .messages::-webkit-scrollbar {
+        width: 8px; /* Breite der Scrollbar */
+        height: 8px; /* Höhe für horizontale Scrollbar */
+    }
+
+    /* Scrollbar-Hintergrund für Chrome/Safari */
+    .messages::-webkit-scrollbar-track {
+        background: #1a2438; /* Dunkelblauer Hintergrund */
+        border-radius: 8px; /* Abgerundete Ecken */
+    }
+
+    /* Scrollbar-Griff für Chrome/Safari */
+    .messages::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.25); /* Halbdurchsichtiger Griff */
+        border-radius: 8px; /* Abgerundete Ecken */
+        border: 2px solid #1a2438; /* Rahmen um Griff */
+    }
+
+        /* Scrollbar-Griff beim Hover */
+        .messages::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.35); /* Heller beim Hover */
+        }
+
+/* Innerer Container für Nachrichten */
+.messages-inner {
+    width: min(800px, calc(100% - 120px)); /* Max 800px oder Fensterbreite minus 120px */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Nachrichten vertikal stapeln */
+    gap: 16px; /* Abstand zwischen Nachrichten */
+    padding: 0.25cm 0 0.25cm 0.25cm; /* Padding oben/rechts/unten/links */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+}
+
+/* === NACHRICHTEN-BUBBLES === */
+
+/* Basis-Stil für alle Nachrichten-Bubbles */
+.message-bubble {
+    display: inline-block; /* Inline-Element mit Block-Eigenschaften */
+    max-width: min(600px, 90%); /* Max 600px oder 90% der Container-Breite */
+    padding: 0.25cm; /* Innenabstand */
+    border-radius: 6px; /* Abgerundete Ecken */
+    text-align: left; /* Text linksbündig */
+    word-wrap: break-word; /* Lange Wörter umbrechen */
+    overflow-wrap: anywhere; /* Text bei Bedarf umbrechen */
+    margin: 0; /* Kein Außenabstand */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    white-space: pre-wrap; /* Zeilenumbrüche und Whitespace beibehalten */
+}
+
+    /* User-Nachrichten (rechts) */
+    .message-bubble.user {
+        align-self: flex-end; /* Rechts im Container ausrichten */
+        background: transparent; /* Kein Hintergrund */
+        border: 2px solid rgba(255, 255, 255, 0.10); /* Halbdurchsichtiger Rahmen */
+        color: #948f61; /* Textfarbe */
+        margin-left: auto; /* Rechts ausrichten */
+        margin-top: 8px; /* Abstand nach oben */
+    }
+
+    /* Assistent-Nachrichten (links) */
+    .message-bubble.assistant {
+        align-self: flex-start; /* Links im Container ausrichten */
+        background: transparent; /* Kein Hintergrund */
+        border: none; /* Kein Rahmen */
+        color: #948f61; /* Textfarbe */
+        margin-right: auto; /* Links ausrichten */
+        margin-top: 8px; /* Abstand nach oben */
+    }
+
+/* === LOADING-ANIMATION === */
+
+/* Blinkender Cursor wie in Konsole */
+.blinking-cursor {
+    color: #948f61; /* Farbe passend zum Text */
+    font-size: 18px; /* Gleiche Schriftgröße wie normaler Text */
+    animation: blink 1.0s infinite; /* Animation alle 1.0 Sekunden */
+}
+
+/* Keyframes für Blink-Animation */
+@keyframes blink {
+    0%, 49% {
+        opacity: 1; /* Sichtbar */
+    }
+    50%, 100% {
+        opacity: 0; /* Unsichtbar */
+    }
+}
+
+/* === DATEI-BADGE === */
+
+/* Badge für angehängte Datei */
+.file-badge {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    align-items: center; /* Vertikal zentrieren */
+    gap: 8px; /* Abstand zwischen Icon/Name/Button */
+    padding: 8px 12px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    margin-bottom: 8px; /* Abstand zur Input-Box */
+    width: fit-content; /* Nur so breit wie Inhalt */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    align-self: flex-start; /* Links ausrichten */
+    margin-left: calc((100% - min(800px, calc(100% - 120px))) / 2); /* Linksbündig mit Input-Box */
+    pointer-events: auto; /* Klicks auf Badge erlauben */
+}
+
+/* Datei-Icon */
+.file-icon {
+    width: 16px; /* Icon-Breite */
+    height: 16px; /* Icon-Höhe */
+}
+
+/* Dateiname im Badge */
+.file-name {
+    color: #948f61; /* Textfarbe */
+    font-size: 14px; /* Schriftgröße */
+    max-width: 300px; /* Maximale Breite */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+/* === INPUT-BEREICH === */
+
+/* Container für File-Badge und Input-Box */
+.chat-input-container {
+    position: sticky; /* Fixiert bei Scroll */
+    bottom: 12%; /* 12% vom unteren Rand */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    align-items: center; /* Horizontal zentrieren */
+    pointer-events: none; /* Klicks durchlassen */
+}
+
+/* Die eigentliche Input-Box */
+.chat-input {
+    pointer-events: auto; /* Klicks auf dieser Box erlauben */
+    display: flex; /* Flexbox für horizontale Anordnung */
+    align-items: center; /* Vertikal zentrieren */
+    gap: 8px; /* Abstand zwischen Textbox und Button */
+    padding: 10px 12px; /* Innenabstand */
+    background: #191916; /* Dunkler Hintergrund */
+    border: 2px solid rgba(255,255,255,0.12); /* Halbdurchsichtiger Rahmen */
+    border-radius: 6px; /* Abgerundete Ecken */
+    width: min(800px, calc(100% - 120px)); /* Max 800px oder Fensterbreite minus 120px */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    transition: box-shadow 0.2s ease; /* Smooth Shadow-Übergang */
+}
+
+/* === TEXTBOX === */
+
+/* Mehrzeiliges Textfeld */
+.chat-textbox {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    min-height: 44px; /* Mindesthöhe */
+    max-height: 10cm; /* Maximale Höhe */
+    line-height: 28px; /* Zeilenhöhe */
+    padding: 8px 12px; /* Innenabstand */
+    border-radius: 8px; /* Abgerundete Ecken */
+    border: none; /* Kein Rahmen */
+    background: #191916; /* Dunkler Hintergrund */
+    color: #948f61; /* Textfarbe */
+    font-size: 18px; /* Schriftgröße */
+    overflow-y: auto; /* Vertikaler Scroll bei Bedarf */
+    resize: none; /* Größenänderung deaktivieren */
+    width: 100%; /* Volle Breite */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    scrollbar-color: rgba(255,255,255,0.25) transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+    outline: none; /* Kein Outline */
+    vertical-align: middle; /* Vertikal zentrieren */
+}
+
+    /* Textbox bei Fokus */
+    .chat-textbox:focus {
+        outline: none; /* Kein Fokus-Outline */
+        border: none; /* Kein Rahmen */
+    }
+
+    /* Scrollbar-Breite für Chrome/Safari */
+    .chat-textbox::-webkit-scrollbar {
+        width: 8px; /* Scrollbar-Breite */
+        height: 8px; /* Scrollbar-Höhe */
+    }
+
+    /* Scrollbar-Hintergrund für Chrome/Safari */
+    .chat-textbox::-webkit-scrollbar-track {
+        background: transparent; /* Transparenter Hintergrund */
+        border-radius: 8px; /* Abgerundete Ecken */
+    }
+
+    /* Scrollbar-Griff für Chrome/Safari */
+    .chat-textbox::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.30); /* Halbdurchsichtiger Griff */
+        border-radius: 8px; /* Abgerundete Ecken */
+        border: 2px solid transparent; /* Transparenter Rahmen */
+    }
+
+        /* Scrollbar-Griff beim Hover */
+        .chat-textbox::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.40); /* Heller beim Hover */
+        }
+
+    /* Platzhalter-Text im Textfeld */
+    .chat-textbox::placeholder {
+        color: #948f61; /* Farbe passend zum Text */
+        opacity: 0.6; /* Leicht transparent */
+    }
+
+/* === BUTTONS === */
+
+/* Upload-Button */
+.chat-upload {
+    padding: 10px 14px; /* Innenabstand */
+    border-radius: 6px; /* Abgerundete Ecken */
+    border: 2px solid rgba(255,255,255,0.12); /* Halbdurchsichtiger Rahmen */
+    background: #191916; /* heller Hintergrund */
+    color: #948f61; /* Textfarbe */
+    cursor: pointer; /* Zeiger-Cursor */
+    font-size: 18px; /* Schriftgröße */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    outline: none; /* Kein Outline */
+}
+
+    /* Upload-Button beim Hover */
+    .chat-upload:hover {
+        background: #10100f; /* dunkler Hintergrund wie NAV*/
+    }
+
+/* Entfernen-Button im File-Badge */
+.file-remove {
+    background: none; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    cursor: pointer; /* Zeiger-Cursor */
+    padding: 4px; /* Kleiner Innenabstand */
+    margin: 0; /* Kein Außenabstand */
+    opacity: 0.7; /* Leicht transparent */
+    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
+    line-height: 1; /* Zeilenhöhe 1 */
+    display: flex; /* Flexbox für Icon */
+    align-items: center; /* Icon zentrieren */
+}
+
+    /* Icon im Entfernen-Button */
+    .file-remove img {
+        width: 16px; /* Icon-Breite */
+        height: 16px; /* Icon-Höhe */
+    }
+
+    /* Entfernen-Button beim Hover */
+    .file-remove:hover {
+        opacity: 1; /* Voll sichtbar beim Hover */
+    }
