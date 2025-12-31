@@ -7,129 +7,173 @@ namespace KIDT.Services;
 /// - ToolSpecialistService (qwen2.5) für Analysen & Dateien
 /// - ConversationService (llama3.1) für allgemeine Konversation
 /// </summary>
-public class ChatMcpService : IAsyncDisposable
+public class ChatMcpService : IAsyncDisposable // Router-Service mit automatischer asynchroner Aufräumung
 {
-    private ToolSpecialistService? _toolSpecialist; // Nullable: qwen2.5 für Dokumenten-Analyse
-    private ConversationService? _conversation; // Nullable: llama3.1 für Konversation
-    private bool _isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
-    private bool _hasUploadedFile = false; // Flag: Markiert ob Datei hochgeladen wurde
+    private ToolSpecialistService? toolSpecialist; // qwen2.5 Service-Instanz (wird später initialisiert)
+    private ConversationService? conversation; // llama3.1 Service-Instanz (wird später initialisiert)
+    private FileService? fileService; // Service für Datei-Extraktion (wird später initialisiert)
+    private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
+    private string currentFileName = string.Empty; // Aktuell angehängte Datei (leer = keine Datei)
+    private string currentFileContent = string.Empty; // Extrahierter Text der Datei (leer = kein Inhalt)
 
-    // Schlüsselwörter-Array: Wenn enthalten ? Tool-Spezialist verwenden (erweitert für bessere Erkennung)
-    private readonly string[] _analysisKeywords = new[]
-    {
-        // Analyse-Varianten
-        "analysier", "analyse", "analysiere",
-        
-        // Text-Metriken
-        "wörter", "wort", "zeichen", "text", "buchstaben",
-        
-        // Länge/Größe
-        "länge", "lang", "wie lang", "wie gross", "wie groß", "größe",
-        
-        // Zählen
+    private readonly string[] analysisKeywords = new[] // Keywords für Tool-Spezialist-Routing
+    {  
+        "analysier", "analyse", "analysiere",  
+        "wörter", "wort", "zeichen", "text", "buchstaben",       
+        "länge", "lang", "wie lang", "wie gross", "wie groß", "größe", 
         "zähle", "zähl", "gezählt", "anzahl",
-        
-        // Messen/Bestimmen
         "messe", "mess", "ermittle", "bestimme",
-        
-        // Dokumente/Dateien
         "dokument", "datei", "lies", "lese", "liest", "öffne", "inhalt",
-        
-        // Prüfen/Überprüfen
         "prüfe", "prüf", "überprüfe", "check"
     };
 
-    public async Task InitializeAsync() // Erstellt beide Service-Instanzen wenn noch nicht vorhanden
+    public async Task InitializeAsync() // Initialisiert beide Services (qwen2.5 + llama3.1 + FileService)
     {
-        if (_isInitialized) return; // Guard: Wenn schon initialisiert ? raus
+        if (this.isInitialized) return; // Wenn schon initialisiert -> raus
 
         try
         {
-            Debug.WriteLine("[Router] Initialisiere spezialisierte Services..."); // Log-Ausgabe
+            Debug.WriteLine("[Router] Initialisiere spezialisierte Services...");
 
-            _toolSpecialist = new ToolSpecialistService(); // Erstelle qwen2.5 Service-Instanz
-            _conversation = new ConversationService(); // Erstelle llama3.1 Service-Instanz
+            this.toolSpecialist = new ToolSpecialistService(); // Erstelle qwen2.5 Service-Instanz
+            this.conversation = new ConversationService(); // Erstelle llama3.1 Service-Instanz
+            this.fileService = new FileService(); // Erstelle FileService-Instanz
 
-            _isInitialized = true; // Setze Flag auf true
-            Debug.WriteLine("[Router] Router erfolgreich initialisiert."); // Log-Ausgabe: Erfolg
+            this.isInitialized = true; // Setze Flag auf true
+            Debug.WriteLine("[Router] Router erfolgreich initialisiert.");
         }
         catch (Exception ex)
         {
             throw new Exception($"Fehler bei der Initialisierung von ChatMcpService Router: {ex.Message}", ex);
         }
 
-        await Task.CompletedTask; // Async-Pattern: Dummy-Await
+        await Task.CompletedTask; // Macht Methode async-kompatibel
     }
 
-    public async Task<string> SendAsync(string userMessage) // Routet Nachricht an qwen2.5 oder llama3.1 basierend auf Keyword-Match
+    public async Task<string> SendAsync(string userMessage) // Routet Nachricht an qwen2.5 oder llama3.1
     {
-        if (!_isInitialized) // Check: Ist Router initialisiert?
+        if (!this.isInitialized) // Ist Router initialisiert?
         {
-            await InitializeAsync(); // Nein ? Initialisiere jetzt
+            await InitializeAsync(); // Nein -> Initialisiere jetzt
         }
 
         try
         {
             var useToolSpecialist = ShouldUseToolSpecialist(userMessage); // Routing-Entscheidung treffen
 
-            if (useToolSpecialist) // Check: Tool-Spezialist verwenden?
+            string result; // Variable für Ergebnis
+
+            if (useToolSpecialist) // Wird Tool-Spezialist verwendet?
             {
-                // Log: Zeige erste 50 Zeichen der Nachricht
-                Debug.WriteLine($"[Router] ? Tool-Spezialist (qwen2.5) für: {userMessage.Substring(0, Math.Min(50, userMessage.Length))}...");
-                return await _toolSpecialist!.SendAsync(userMessage); // Leite an qwen2.5 weiter, ! = null-forgiving
+                int maxChars = Math.Min(50, userMessage.Length); // Maximal 50 Zeichen für Log
+                Debug.WriteLine($"[Router] Tool-Spezialist (qwen2.5) für: {userMessage.Substring(0, maxChars)}...");
+                result = await this.toolSpecialist!.SendAsync(userMessage, this.currentFileContent, this.currentFileName); // Leite an qwen2.5 weiter (mit Datei)
             }
-            else // Nein ? Konversation verwenden
+            else // Nein -> Konversation verwenden
             {
-                // Log: Zeige erste 50 Zeichen der Nachricht
-                Debug.WriteLine($"[Router] ? Konversation (llama3.1) für: {userMessage.Substring(0, Math.Min(50, userMessage.Length))}...");
-                return await _conversation!.SendAsync(userMessage); // Leite an llama3.1 weiter, ! = null-forgiving
+                int maxChars = Math.Min(50, userMessage.Length); // Maximal 50 Zeichen für Log
+                Debug.WriteLine($"[Router] Konversation (llama3.1) für: {userMessage.Substring(0, maxChars)}...");
+                result = await this.conversation!.SendAsync(userMessage, this.currentFileContent, this.currentFileName); // Leite an llama3.1 weiter (mit Datei)
             }
+            
+            return result; // Gib Ergebnis zurück
         }
         catch (Exception ex)
         {
+            Debug.WriteLine($"[Router] Fehler: {ex.Message}");
             return $"Fehler beim Routing: {ex.Message}";
         }
     }
 
-    private bool ShouldUseToolSpecialist(string userMessage) // Gibt true wenn Keyword oder Datei-Upload, sonst false
+    /// <summary>
+    /// Lädt eine Datei und extrahiert den Text für nachfolgende Nachrichten.
+    /// </summary>
+    public async Task<string> UploadFileAsync(string filePath) // Lädt Datei und extrahiert Text
     {
-        if (_hasUploadedFile) // Check: Wurde Datei hochgeladen?
+        if (!this.isInitialized) // Ist Router initialisiert?
         {
-            Debug.WriteLine("[Router] Datei-Upload erkannt ? Tool-Spezialist"); // Log-Ausgabe
-            return true; // Ja ? immer Tool-Spezialist
+            await InitializeAsync(); // Nein -> Initialisiere jetzt
+        }
+
+        try
+        {
+            Debug.WriteLine($"[Router] Lade Datei: {filePath}");
+            
+            this.currentFileName = Path.GetFileName(filePath); // Hole nur Dateinamen (ohne Pfad)
+            this.currentFileContent = await this.fileService!.ExtractTextAsync(filePath); // Extrahiere Text mit FileService
+
+            if (this.currentFileContent.StartsWith("Fehler:")) // War Extraktion erfolgreich?
+            {
+                string errorMessage = this.currentFileContent; // Speichere Fehlermeldung
+                this.currentFileName = string.Empty; // Setze zurück bei Fehler
+                this.currentFileContent = string.Empty; // Setze zurück bei Fehler
+                Debug.WriteLine("[Router] Upload fehlgeschlagen");
+                return errorMessage;
+            }
+
+            Debug.WriteLine($"[Router] Datei geladen: {this.currentFileName} ({this.currentFileContent.Length} Zeichen)");
+            return $"Datei '{this.currentFileName}' erfolgreich geladen. Stelle jetzt deine Frage dazu!";
+        }
+        catch (Exception ex)
+        {
+            this.currentFileName = string.Empty; // Setze zurück bei Fehler
+            this.currentFileContent = string.Empty; // Setze zurück bei Fehler
+            Debug.WriteLine($"[Router] Upload-Fehler: {ex.Message}");
+            return $"Fehler beim Hochladen: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Entfernt die aktuell angehängte Datei.
+    /// </summary>
+    public void ClearFile() // Entfernt angehängte Datei
+    {
+        this.currentFileName = string.Empty; // Dateiname löschen
+        this.currentFileContent = string.Empty; // Datei-Inhalt löschen
+        Debug.WriteLine("[Router] Datei entfernt");
+    }
+
+    /// <summary>
+    /// Gibt den Namen der aktuell angehängten Datei zurück (oder leer).
+    /// </summary>
+    public string GetCurrentFileName() // Gibt Dateinamen zurück (oder leer)
+    {
+        return this.currentFileName; // Gib aktuellen Dateinamen zurück
+    }
+
+    private bool ShouldUseToolSpecialist(string userMessage) // Entscheidet ob Tool-Spezialist oder Konversation
+    {
+        if (!string.IsNullOrEmpty(this.currentFileName)) // Ist eine Datei angehängt?
+        {
+            Debug.WriteLine("[Router] Datei angehängt ? Tool-Spezialist");
+            return true; // Ja -> immer Tool-Spezialist
         }
 
         var messageLower = userMessage.ToLowerInvariant(); // Konvertiere zu Lowercase für Case-insensitive Vergleich
         
-        foreach (var keyword in _analysisKeywords) // Iteriere über alle Keywords
+        foreach (var keyword in this.analysisKeywords) // Durchlaufe alle Keywords
         {
             if (messageLower.Contains(keyword)) // Check: Enthält Nachricht dieses Keyword?
             {
-                Debug.WriteLine($"[Router] Schlüsselwort '{keyword}' erkannt ? Tool-Spezialist"); // Log: Welches Keyword gefunden
-                return true; // Ja ? Tool-Spezialist verwenden
+                Debug.WriteLine($"[Router] Schlüsselwort '{keyword}' erkannt ? Tool-Spezialist");
+                return true; // Ja -> Tool-Spezialist verwenden
             }
         }
 
-        Debug.WriteLine("[Router] Keine Analyse-Indikatoren ? Konversation"); // Log: Kein Keyword gefunden
+        Debug.WriteLine("[Router] Keine Analyse-Indikatoren ? Konversation");
         return false; // Standard: Konversations-Modell
     }
 
-    public void SetFileUploaded(bool hasFile) // Setzt Datei-Upload Flag für UI-Integration
+    public async ValueTask DisposeAsync() // Räumt beide Services auf
     {
-        _hasUploadedFile = hasFile; // Setze Flag
-        Debug.WriteLine($"[Router] Datei-Upload Status: {hasFile}"); // Log: Neuer Status
-    }
-
-    public async ValueTask DisposeAsync() // Räumt beide Services auf wenn vorhanden
-    {
-        if (_toolSpecialist != null) // Check: Tool-Spezialist existiert?
+        if (this.toolSpecialist != null) // Wenn Tool-Spezialist existiert?
         {
-            await _toolSpecialist.DisposeAsync(); // Ja ? Dispose aufrufen
+            await this.toolSpecialist.DisposeAsync(); // Ja -> Räume auf
         }
         
-        if (_conversation != null) // Check: Konversation-Service existiert?
+        if (this.conversation != null) // Wenn Konversation existiert?
         {
-            await _conversation.DisposeAsync(); // Ja ? Dispose aufrufen
+            await this.conversation.DisposeAsync(); // Ja -> Räume auf
         }
     }
 }
