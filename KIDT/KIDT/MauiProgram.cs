@@ -16,7 +16,8 @@ namespace KIDT
                 });
 
             builder.Services.AddMauiBlazorWebView();
-            builder.Services.AddSingleton<ChatMcpService>();
+            builder.Services.AddSingleton<ChatMcpService>(); // Chat-Service registrieren
+            builder.Services.AddSingleton<ChatDbService>(); // Datenbank-Service registrieren
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();
