@@ -13,7 +13,7 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
 {
     private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
     private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
-    private ChatHistory chatHistory = new(); // Chat-History: Speichert Konversations-Verlauf
+    private string systemInstructions = "Du bist ein Dokumenten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Standard-Systemanweisung
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
 
     public async Task InitializeAsync() // Lädt qwen2.5, registriert MCP-Tools, lädt Instructions aus MD-Datei
@@ -46,7 +46,7 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
                 instructions = "Du bist ein Dokumenten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Fallback-Prompt
             }
 
-            this.chatHistory.AddSystemMessage(instructions); // Füge Instructions als System-Message zur History hinzu
+            this.systemInstructions = instructions; // Setze Systemanweisung
             this.isInitialized = true; // Setze Flag auf true
         }
         catch (Exception ex)
@@ -57,10 +57,20 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
 
     public async Task<string> SendAsync(string userMessage) // Sendet Nachricht ohne Datei
     {
-        return await SendAsync(userMessage, string.Empty, string.Empty); // Aufruf mit leeren Datei-Parametern
+        return await SendAsync(userMessage, string.Empty, string.Empty, 3000); // Aufruf mit leeren Datei-Parametern und Standard-MaxTokens
     }
 
     public async Task<string> SendAsync(string userMessage, string fileContent, string fileName) // Sendet Nachricht mit optionalem Datei-Anhang
+    {
+        return await SendAsync(userMessage, fileContent, fileName, 3000); // Aufruf mit Standard-MaxTokens
+    }
+
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens) // Sendet Nachricht mit optionalem Datei-Anhang und benutzerdefiniertem MaxTokens
+    {
+        return await SendAsync(userMessage, fileContent, fileName, maxTokens, string.Empty);
+    }
+
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sendet Nachricht mit optionalem Datei-Anhang, benutzerdefiniertem MaxTokens und letztem Gesprächsverlauf
     {
         if (!this.isInitialized) // Ist Service initialisiert?
         {
@@ -74,6 +84,14 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
         
         try
         {
+            var chatHistory = new ChatHistory();
+            chatHistory.AddSystemMessage(this.systemInstructions);
+            
+            if (!string.IsNullOrEmpty(recentContext))
+            {
+                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}");
+            }
+            
             string finalMessage = userMessage; // Baue finale User-Nachricht (Standard: ohne Datei)
             
             if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Ist Datei angehängt?
@@ -90,37 +108,7 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
                 finalMessage = $"[Datei: {fileName}]\n\n{limitedContent}\n\n---\n\n{userMessage}"; // Füge Datei-Kontext vor User-Nachricht hinzu
             }
 
-            this.chatHistory.AddUserMessage(finalMessage); // Füge User-Nachricht zur History hinzu
-
-            var words = finalMessage.Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries); // Splitte bei Leerzeichen/Tabs/Newlines
-            int wordCount = words.Length; // Zähle Wörter in finaler Nachricht
-
-            int maxTokens; // Variable für MaxTokens-Limit
-            
-            if (wordCount <= 10) // Sehr kurze Analyse-Anfragen (z.B. "Analysiere: Test")
-            {
-                maxTokens = 150; // Präzise Kurzanalyse mit Tool-Daten
-            }
-            else if (wordCount <= 30) // Kurze bis mittlere Anfragen
-            {
-                maxTokens = 350; // Strukturierte Analyse mit Details
-            }
-            else if (wordCount <= 100) // Mittlere Anfragen
-            {
-                maxTokens = 600; // Vollständige Struktur mit ausführlicher Analyse
-            }
-            else if (wordCount <= 500) // Mittellange Dokumente
-            {
-                maxTokens = 1200; // Detaillierte Code-Analysen und Zusammenfassungen
-            }
-            else if (wordCount <= 2000) // Lange Dokumente (Code-PDFs, große TXT-Dateien)
-            {
-                maxTokens = 2000; // Umfangreiche Analysen mit mehreren Aspekten
-            }
-            else // Sehr lange Dokumente (große PDFs)
-            {
-                maxTokens = 3000; // Maximum für tiefgehende Analysen komplexer Dokumente
-            }
+            chatHistory.AddUserMessage(finalMessage); // Füge User-Nachricht zur History hinzu
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
@@ -130,7 +118,7 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
             };
             
             var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an Ollama (async)
-                this.chatHistory, // Mit bisheriger Konversations-History
+                chatHistory, // Mit bisheriger Konversations-History
                 executionSettings: settings, // Mit dynamischen Settings
                 kernel: this.kernel // Mit MCP-Tools für Analyse
             );
@@ -138,19 +126,33 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
             string assistantMessage;
             if (response.Content != null) // Hat Response einen Content?
             {
-                assistantMessage = response.Content; // Nehme Response direkt (Ollama liefert bereits UTF-8)
+                assistantMessage = EnsureUtf8(response.Content);
             }
             else // Kein Content
             {
                 assistantMessage = "Keine Antwort erhalten."; // Fallback-Nachricht
             }
             
-            this.chatHistory.AddMessage(response.Role, assistantMessage); // Füge Antwort zur History hinzu
             return assistantMessage; // Gibt Antwort zurück
         }
         catch (Exception ex)
         {
             return $"Fehler: {ex.Message}";
+        }
+    }
+
+    private string EnsureUtf8(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        
+        try
+        {
+            var bytes = Encoding.Default.GetBytes(text);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return text;
         }
     }
 

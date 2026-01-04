@@ -45,6 +45,9 @@
     
     <!-- Prompt Files -->
     <MauiAsset Include="Prompts\*.md" />
+    
+    <!-- OpenAI API Key -->
+    <None Include="openai-api-key.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

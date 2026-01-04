@@ -40,7 +40,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
         await this.db.SaveChangesAsync(); // Speichere in Datenbank
     }
 
-    public async Task<List<Message>> LoadMessagesAsync(int conversationId) // Nachrichten laden
+    public Task<List<Message>> LoadMessagesAsync(int conversationId) // Nachrichten laden
     {
         List<Message> allMessages = this.db.Messages.ToList(); // Hole alle Messages aus DB
         List<Message> filteredMessages = new List<Message>(); // Leere Liste für gefilterte Messages
@@ -52,6 +52,32 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 filteredMessages.Add(msg); // Ja -> Füge hinzu
             }
         }
-        return filteredMessages; // Gib gefilterte Liste zurück
+        
+        return Task.FromResult(filteredMessages); // Gib gefilterte Liste zurück
+    }
+
+    public async Task<string> GetFullChatHistoryAsync(int conversationId) // Hole GESAMTEN aktuellen Chat-Verlauf als String
+    {
+        List<Message> allMessages = await LoadMessagesAsync(conversationId); // Lade alle Nachrichten für diesen Chat
+
+        if (allMessages.Count == 0) // Keine Nachrichten?
+        {
+            return string.Empty; // Gib leer zurück
+        }
+
+        List<string> contextLines = new List<string>(); // Liste für formatierte Zeilen
+
+        foreach (Message msg in allMessages) // Durchlaufe alle Nachrichten
+        {
+            string role = "Assistant"; // Standard: Assistant
+            if (msg.IsUser) // Ist User-Nachricht?
+            {
+                role = "User"; // Ja -> User
+            }
+            
+            contextLines.Add($"{role}: {msg.Text}"); // Füge formatierte Zeile hinzu
+        }
+
+        return string.Join("\n", contextLines); // Gib kompletten Chat-Verlauf zurück
     }
 }

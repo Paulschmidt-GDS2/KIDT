@@ -14,8 +14,8 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 {
     private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
     private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
-    private ChatHistory chatHistory = new(); // Chat-History: Speichert Konversations-Verlauf
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
+    private string systemInstructions = string.Empty; // System-Instructions (werden bei jedem Call neu verwendet)
 
     public async Task InitializeAsync() // Lädt phi3:mini, lädt Instructions aus MD-Datei
     {
@@ -36,20 +36,17 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             this.chatService = this.kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service aus Kernel
 
             var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "conversation-instructions.md"); // Erstelle Pfad zur MD-Datei
-            string instructions;
             
             if (File.Exists(instructionsPath)) // Existiert Instructions-Datei?
             {
-                instructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Datei asynchron mit UTF-8
+                this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Datei asynchron mit UTF-8
                 Debug.WriteLine("[Conversation] Custom Instructions geladen.");
             }
             else // Datei existiert nicht
             {
-                instructions = "Du bist ein freundlicher Chat-Assistent. Sei kurz und natürlich."; // Fallback-Prompt
+                this.systemInstructions = "Du bist ein freundlicher Chat-Assistent. Sei kurz und natürlich."; // Fallback-Prompt
                 Debug.WriteLine("[Conversation] WARNUNG: Instructions-Datei nicht gefunden. Fallback verwendet.");
             }
-
-            this.chatHistory.AddSystemMessage(instructions); // Füge Instructions als System-Message zur History hinzu
 
             this.isInitialized = true; // Setze Flag auf true
         }
@@ -61,10 +58,15 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
     public async Task<string> SendAsync(string userMessage) // Sendet Nachricht ohne Datei
     {
-        return await SendAsync(userMessage, string.Empty, string.Empty); // Aufruf mit leeren Datei-Parametern
+        return await SendAsync(userMessage, string.Empty, string.Empty, 150); // Aufruf mit leeren Datei-Parametern
     }
 
     public async Task<string> SendAsync(string userMessage, string fileContent, string fileName) // Sendet Nachricht mit optionalem Datei-Anhang
+    {
+        return await SendAsync(userMessage, fileContent, fileName, 150);
+    }
+
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens) // Sendet Nachricht mit optionalem Datei-Anhang und MaxTokens
     {
         if (!this.isInitialized) // Ist Service initialisiert?
         {
@@ -78,41 +80,9 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         try
         {
-            string finalMessage = userMessage; // Baue finale User-Nachricht (Standard: ohne Datei)
-            
-            if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Ist Datei angehängt?
-            {
-                finalMessage = $"[Datei: {fileName}]\n\n{fileContent}\n\n---\n\n{userMessage}"; // Füge Datei-Kontext vor User-Nachricht hinzu
-                Debug.WriteLine($"[Conversation] Datei angehängt: {fileName} ({fileContent.Length} Zeichen)");
-            }
-
-            this.chatHistory.AddUserMessage(finalMessage); // Füge User-Nachricht zur History hinzu
-
-            var words = finalMessage.Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries); // Splitte bei Leerzeichen/Tabs/Newlines
-            int wordCount = words.Length; // Zähle Wörter in finaler Nachricht
-
-            int maxTokens; // Variable für MaxTokens-Limit
-            
-            if (wordCount <= 5) // Sehr kurze Nachrichten (Hallo, Hi, Danke)
-            {
-                maxTokens = 20; // Sehr kurze Antworten: ~5-10 Wörter
-            }
-            else if (wordCount <= 15) // Kurze Fragen
-            {
-                maxTokens = 80; // Kurze Antworten: ~15-20 Wörter (1-2 Sätze)
-            }
-            else if (wordCount <= 50) // Mittlere Fragen
-            {
-                maxTokens = 200; // Mittlere Antworten: ~40-60 Wörter (3-5 Sätze)
-            }
-            else if (wordCount <= 500) // Mittellange Dokumente
-            {
-                maxTokens = 400; // Ausführliche Antworten: ~80-120 Wörter
-            }
-            else // Sehr lange Dokumente (PDFs)
-            {
-                maxTokens = 800; // Mehr Platz für Zusammenfassungen
-            }
+            var chatHistory = new ChatHistory(); // Erstelle frische Chat-History für jeden Call
+            chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+            chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
@@ -121,7 +91,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             };
 
             var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an Ollama (async)
-                this.chatHistory, // Mit bisheriger Konversations-History
+                chatHistory, // Mit frischer History (kein alter Kontext)
                 executionSettings: settings, // Mit dynamischen Settings
                 kernel: this.kernel // Ohne MCP-Tools (nur Konversation)
             );
@@ -129,21 +99,34 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             string assistantMessage;
             if (response.Content != null) // Hat Response einen Content?
             {
-                assistantMessage = response.Content; // Nehme Response direkt (Ollama liefert bereits UTF-8)
+                assistantMessage = EnsureUtf8(response.Content);
             }
             else // Kein Content
             {
                 assistantMessage = "Keine Antwort erhalten."; // Fallback-Nachricht
             }
-            
-            this.chatHistory.AddMessage(response.Role, assistantMessage); // Füge Antwort zur History hinzu
 
-            Debug.WriteLine($"[Conversation] Antwort generiert: {assistantMessage.Length} Zeichen (MaxTokens: {maxTokens}, Wörter: {wordCount})");
+            Debug.WriteLine($"[Conversation] Antwort generiert: {assistantMessage.Length} Zeichen (MaxTokens: {maxTokens})");
             return assistantMessage; // Gibt Antwort zurück
         }
         catch (Exception ex)
         {
             return $"Fehler: {ex.Message}";
+        }
+    }
+
+    private string EnsureUtf8(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        
+        try
+        {
+            var bytes = Encoding.Default.GetBytes(text);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return text;
         }
     }
 
