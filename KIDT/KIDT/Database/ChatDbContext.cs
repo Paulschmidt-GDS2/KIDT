@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using KIDT.Models;
 
-namespace KIDT.Data;
+namespace KIDT.Database;
 
 public class ChatDbContext : DbContext // Datenbank-Context
 {

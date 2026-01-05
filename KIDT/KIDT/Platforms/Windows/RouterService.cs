@@ -63,7 +63,7 @@ public class RouterService // Klasse für Routing-Entscheidungen
             };
 
             ChatCompletion response = await this.router.CompleteChatAsync(messages); // API-Call an OpenAI durchführen
-            string jsonResponse = response.Content[0].Text!; // JSON-Antwort aus Response extrahieren (nicht null)
+            string jsonResponse = response.Content[0].Text!; // JSON-Antwort aus Response extrahieren (nicht null deshalb !)
 
             return ParseRoutingDecision(jsonResponse); // JSON parsen und RoutingDecision zurückgeben
         }
@@ -83,35 +83,36 @@ public class RouterService // Klasse für Routing-Entscheidungen
 
         return $@"Analysiere diese User-Nachricht und entscheide: // Prompt-Text mit Anweisungen
 
-**SERVICES:** // Welche Services verfügbar sind
-- ""conversation"": Für Small Talk, Fragen, Danke/Bitte, allgemeine Konversation, Erklärungen // Conversation Service
-- ""toolSpecialist"": Für Analysen, Berechnungen, Datei-Verarbeitung, technische Aufgaben // Tool Specialist Service
+**SERVICES:**
+- ""conversation"": Für Small Talk, Fragen, Danke/Bitte, allgemeine Konversation, Erklärungen
+- ""dataAnalysis"": Für Analysen, Berechnungen, Datei-Verarbeitung, technische Aufgaben
 
-**MAXTOKEN-RICHTLINIEN:** // Token-Limits für Antworten
+**MAXTOKEN-RICHTLINIEN:**
 
 Für CONVERSATION:
-- 20-50: Sehr kurze Antworten (Hallo, Danke, Ja/Nein) // Sehr kurze Antworten
-- 80-150: Kurze Erklärungen (1-2 Sätze, max 40 Wörter) // Kurze Erklärungen
-- 200-400: Ausführlichere Antworten (nur wenn User ""ausführlich"" oder ""genauer"" sagt) // Ausführlichere Antworten
+- 40-80: Sehr kurze Antworten (Hallo, Danke, Ja/Nein)
+- 120-200: Kurze Erklärungen (1-2 Sätze, max 40 Wörter)
+- 250-500: Ausführlichere Antworten (nur wenn User ""ausführlich"" oder ""genauer"" sagt)
 
-Für TOOLSPECIALIST:
+Für DATAANALYSIS:
 - 1000-1500: Standard-Analysen
 - 2000-3000: Detaillierte Analysen und komplexe Berechnungen
 
-**KONTEXT:** // Kontext-Informationen
-Nachricht: ""{message}"" // User-Nachricht einsetzen
-Datei angehängt: {fileInfo} // Datei-Status einsetzen
+**KONTEXT:**
+Nachricht: ""{message}""
+Datei angehängt: {fileInfo}
 
-**WICHTIG:**  // Wichtige Hinweise
-- Auch wenn Datei angehängt ist: Nutze ""conversation"" für Small Talk wie Danke/Hallo/Tschüss // Small Talk immer zu Conversation
-- Conversation-Antworten sollen kurz sein (max 40 Wörter) // Standard = kurz
-- ToolSpecialist braucht mehr Tokens für gründliche Analysen // Nur bei explizitem Wunsch mehr Tokens
+**WICHTIG:**
+- Auch wenn Datei angehängt ist: Nutze ""conversation"" für Small Talk wie Danke/Hallo/Tschüss
+- Conversation-Antworten sollen kurz sein (max 40 Wörter)
+- DataAnalysis braucht mehr Tokens für gründliche Analysen
+- Gib phi3:mini genug Tokens für vollständige Sätze (mindestens 40-80)
 
-Antworte NUR mit JSON: // JSON-Format vorgeben
+Antworte NUR mit JSON:
 {{
-  ""service"": ""conversation"" oder ""toolSpecialist"", // Service-Wahl
-  ""maxTokens"": 20-3000, // Token-Limit
-  ""reasoning"": ""1-2 Sätze"" // Begründung
+  ""service"": ""conversation"" oder ""dataAnalysis"",
+  ""maxTokens"": 40-3000,
+  ""reasoning"": ""1-2 Sätze""
 }}";
     }
 
@@ -134,7 +135,7 @@ Antworte NUR mit JSON: // JSON-Format vorgeben
                 PropertyNameCaseInsensitive = true // Groß-/Kleinschreibung ignorieren
             };
 
-            RoutingJson decision = JsonSerializer.Deserialize<RoutingJson>(cleanJson, options)!; // JSON zu Objekt deserialisieren (nicht null)
+            RoutingJson decision = JsonSerializer.Deserialize<RoutingJson>(cleanJson, options)!; // JSON zu Objekt deserialisieren (nicht null deshalb !)
             return new RoutingDecision(decision.service, decision.maxTokens, decision.reasoning); // RoutingDecision Record erstellen und zurückgeben
         }
         catch (Exception ex)
@@ -151,4 +152,4 @@ Antworte NUR mit JSON: // JSON-Format vorgeben
     }
 }
 
-public record RoutingDecision(string Service, int MaxTokens, string Reasoning); // Record für Routing-Entscheidung mit Service, MaxTokens und Reasoning
+public record RoutingDecision(string Service, int MaxTokens, string Reasoning); // Record Methode für Routing-Entscheidung mit Service, MaxTokens und Reasoning

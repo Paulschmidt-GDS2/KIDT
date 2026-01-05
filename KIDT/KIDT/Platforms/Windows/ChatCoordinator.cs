@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using KIDT.Database;
 
 namespace KIDT.Services;
 
@@ -8,7 +9,7 @@ namespace KIDT.Services;
 /// </summary>
 public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner Aufräumung
 {
-    private ToolSpecialistService toolSpecialist; // qwen2.5 für Analysen (wird später initialisiert)
+    private DataAnalysisService dataAnalysis; // qwen2.5 für Analysen (wird später initialisiert)
     private ConversationService conversation; // phi3:mini für Small Talk (wird später initialisiert)
     private FileService fileService; // Service für Datei-Extraktion (wird später initialisiert)
     private RouterService router; // GPT-4o-mini Router-Agent (wird später initialisiert)
@@ -19,7 +20,7 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
 
     public ChatCoordinator() // Konstruktor
     {
-        this.toolSpecialist = null!; // Setze auf null (wird später initialisiert)
+        this.dataAnalysis = null!; // Setze auf null (wird später initialisiert)
         this.conversation = null!; // "
         this.fileService = null!; // "
         this.router = null!; // "
@@ -32,7 +33,7 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
 
         try
         {
-            this.toolSpecialist = new ToolSpecialistService(); // Erstelle ToolSpecialist-Instanz
+            this.dataAnalysis = new DataAnalysisService(); // Erstelle DataAnalysis-Instanz
             this.conversation = new ConversationService(); // Erstelle Conversation-Instanz
             this.fileService = new FileService(); // Erstelle FileService-Instanz
             this.router = new RouterService(); // Erstelle RouterService-Instanz
@@ -68,7 +69,7 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
 
             string result; // Variable für Ergebnis
 
-            if (decision.Service == "toolSpecialist") // Wird ToolSpecialist verwendet?
+            if (decision.Service == "dataAnalysis") // Wird DataAnalysis verwendet?
             {
                 string fullChatHistory = string.Empty; // Chat-Verlauf für Analyse (Standard: leer)
                 
@@ -77,7 +78,7 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
                     fullChatHistory = await this.dbService.GetFullChatHistoryAsync(conversationId); // Hole komplette Chat-History aus DB
                 }
                 
-                result = await this.toolSpecialist.SendAsync( // Leite an qwen2.5 weiter
+                result = await this.dataAnalysis.SendAsync( // Leite an qwen2.5 weiter
                     userMessage, // Aktuelle User-Nachricht
                     this.currentFileContent, // Datei-Inhalt (leer wenn keine Datei)
                     this.currentFileName, // Datei-Name (leer wenn keine Datei)
@@ -87,11 +88,17 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
             }
             else // Nein -> Conversation verwenden
             {
+                string fullChatHistory = string.Empty; // Chat-Verlauf für Conversation (Standard: leer)
+
+                if (conversationId > 0) // Wenn eine gültige Conversation-ID vorhanden ist
+                {
+                    fullChatHistory = await this.dbService.GetFullChatHistoryAsync(conversationId); // Hole komplette Chat-History aus DB
+                }
+                
                 result = await this.conversation.SendAsync( // Leite an phi3:mini weiter
                     userMessage, // Aktuelle User-Nachricht
-                    string.Empty, // KEINE Datei für Conversation
-                    string.Empty, // KEINE Datei für Conversation
-                    decision.MaxTokens // Token-Limit vom Router (20-400)
+                    decision.MaxTokens, // Token-Limit vom Router (500-1500)
+                    fullChatHistory // Komplette Chat-History (leer beim ersten Mal)
                 );
             }
             
@@ -101,10 +108,10 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
         {
             if (ex.Message.StartsWith("Router-Fehler:")) // Ist es ein Router-API-Fehler?
             {
-                return $"KI-Dienste nicht erreichbar. Versuche es später.\n\nDetails: {ex.Message}"; // Benutzerfreundliche Fehlermeldung
+                return $"KI-Dienste nicht erreichbar. Versuche es später.\n\nDetails: {ex.Message}";
             }
             
-            return $"Fehler: {ex.Message}"; // Allgemeine Fehlermeldung
+            return $"Fehler: {ex.Message}";
         }
     }
 
@@ -115,26 +122,26 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
             await InitializeAsync(); // Nein -> Initialisiere jetzt
         }
 
-        try // Fehlerbehandlung starten
+        try
         {
             this.currentFileName = Path.GetFileName(filePath); // Hole nur Dateinamen (ohne Pfad)
             this.currentFileContent = await this.fileService.ExtractTextAsync(filePath); // Extrahiere Text mit FileService
 
-            if (this.currentFileContent.StartsWith("Fehler:")) // War Extraktion erfolgreich?
+            if (this.currentFileContent.StartsWith("Fehler:")) // Wenn Extraktion nicht erfolgreich war
             {
                 string errorMessage = this.currentFileContent; // Speichere Fehlermeldung
                 this.currentFileName = string.Empty; // Setze zurück bei Fehler
                 this.currentFileContent = string.Empty; // Setze zurück bei Fehler
-                return errorMessage; // Gib Fehlermeldung zurück
+                return errorMessage;
             }
 
-            return $"Datei '{this.currentFileName}' geladen. Stelle jetzt deine Frage!"; // Erfolgsmeldung
+            return $"Datei '{this.currentFileName}' geladen. Stelle jetzt deine Frage!";
         }
-        catch (Exception ex) // Wenn Fehler auftritt
+        catch (Exception ex)
         {
             this.currentFileName = string.Empty; // Setze zurück bei Fehler
             this.currentFileContent = string.Empty; // Setze zurück bei Fehler
-            return $"Fehler beim Hochladen: {ex.Message}"; // Fehlermeldung zurückgeben
+            return $"Fehler beim Hochladen: {ex.Message}";
         }
     }
 
@@ -151,9 +158,9 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
 
     public async ValueTask DisposeAsync() // Räumt beide Services auf
     {
-        if (this.toolSpecialist != null) // Wenn ToolSpecialist existiert?
+        if (this.dataAnalysis != null) // Wenn DataAnalysis existiert?
         {
-            await this.toolSpecialist.DisposeAsync(); // Ja -> Räume auf
+            await this.dataAnalysis.DisposeAsync(); // Ja -> Räume auf
         }
         
         if (this.conversation != null) // Wenn Conversation existiert?

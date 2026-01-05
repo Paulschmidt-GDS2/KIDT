@@ -2,7 +2,7 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Web
 @inject KIDT.Services.ChatCoordinator Chat
-@inject KIDT.Services.ChatDbService Db
+@inject KIDT.Database.ChatDbService Db
 
 <div class="chat-container"> @* Hauptcontainer *@
     <div class="messages"> @* Bereich mit Nachrichten und Scroll *@
@@ -156,9 +156,9 @@
 
         var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
         Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
-        StateHasChanged(); // UI aktualisieren um Loading-Bubble zu zeigen
+        StateHasChanged(); // UI aktualisieren für Loading-Anzeige 
 
-        var replyTask = Chat.SendAsync(text); // Starte Modell-Anfrage asynchron
+        var replyTask = Chat.SendAsync(text, currentConversationId); // Sende Nachricht an Chat-Service (asynchron)
         var minDelayTask = Task.Delay(1600); // Mindestens 1600ms (2x Blink-Zyklus)
         await Task.WhenAll(replyTask, minDelayTask); // Warte auf beide: Antwort und Mindestzeit
         var reply = await replyTask; // Hole die Antwort
@@ -171,7 +171,7 @@
             Messages.Add(assistantMessage);
             await Db.SaveMessageAsync(currentConversationId, false, reply); // Datenbank: Speichern
             
-            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt
+            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt und Ausgabe der Antwort
         }
     }
 

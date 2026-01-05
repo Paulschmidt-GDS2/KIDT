@@ -1,7 +1,6 @@
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using System.Diagnostics;
 using System.Text;
 
 namespace KIDT.Services;
@@ -31,22 +30,10 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             );
             this.kernel = builder.Build(); // Baue Kernel aus Builder
 
-            Debug.WriteLine("[Conversation] Kernel erfolgreich erstellt.");
-
             this.chatService = this.kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service aus Kernel
 
-            var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "conversation-instructions.md"); // Erstelle Pfad zur MD-Datei
-            
-            if (File.Exists(instructionsPath)) // Existiert Instructions-Datei?
-            {
-                this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Datei asynchron mit UTF-8
-                Debug.WriteLine("[Conversation] Custom Instructions geladen.");
-            }
-            else // Datei existiert nicht
-            {
-                this.systemInstructions = "Du bist ein freundlicher Chat-Assistent. Sei kurz und natürlich."; // Fallback-Prompt
-                Debug.WriteLine("[Conversation] WARNUNG: Instructions-Datei nicht gefunden. Fallback verwendet.");
-            }
+            var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "conversation-instructions.md"); // Erstelle Pfad zur Instructions-Datei
+            this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus MD-Datei (UTF-8)
 
             this.isInitialized = true; // Setze Flag auf true
         }
@@ -58,22 +45,22 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
     public async Task<string> SendAsync(string userMessage) // Sendet Nachricht ohne Datei
     {
-        return await SendAsync(userMessage, string.Empty, string.Empty, 150); // Aufruf mit leeren Datei-Parametern
+        return await SendAsync(userMessage, 150, string.Empty); // Aufruf mit leeren Datei-Parametern
     }
 
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName) // Sendet Nachricht mit optionalem Datei-Anhang
+    public async Task<string> SendAsync(string userMessage, int maxTokens) // Sendet Nachricht mit MaxTokens
     {
-        return await SendAsync(userMessage, fileContent, fileName, 150);
+        return await SendAsync(userMessage, maxTokens, string.Empty); // Aufruf mit leerem Verlauf
     }
 
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens) // Sendet Nachricht mit optionalem Datei-Anhang und MaxTokens
+    public async Task<string> SendAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit MaxTokens und Verlauf
     {
-        if (!this.isInitialized) // Ist Service initialisiert?
+        if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
         {
-            await InitializeAsync(); // Nein -> Initialisiere jetzt
+            await InitializeAsync(); // Initialisiere jetzt
         }
 
-        if (this.kernel == null || this.chatService == null) // Sind Kernel & Service verfügbar?
+        if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind und nicht initialisiert wurden
         {
             return "Fehler: Konversations-Service nicht initialisiert.";
         }
@@ -82,6 +69,12 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         {
             var chatHistory = new ChatHistory(); // Erstelle frische Chat-History für jeden Call
             chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+            
+            if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
+            {
+                chatHistory.AddSystemMessage($"Bisheriger Gesprächsverlauf:\n{recentContext}"); // Füge Verlauf hinzu
+            }
+            
             chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
@@ -97,7 +90,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             );
 
             string assistantMessage;
-            if (response.Content != null) // Hat Response einen Content?
+            if (response.Content != null) // Wenn Response einen Content hat
             {
                 assistantMessage = EnsureUtf8(response.Content);
             }
@@ -106,7 +99,6 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
                 assistantMessage = "Keine Antwort erhalten."; // Fallback-Nachricht
             }
 
-            Debug.WriteLine($"[Conversation] Antwort generiert: {assistantMessage.Length} Zeichen (MaxTokens: {maxTokens})");
             return assistantMessage; // Gibt Antwort zurück
         }
         catch (Exception ex)
@@ -115,18 +107,18 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         }
     }
 
-    private string EnsureUtf8(string text)
+    private string EnsureUtf8(string text) // Konvertiert Text zu UTF-8 (falls nötig)
     {
-        if (string.IsNullOrEmpty(text)) return text;
+        if (string.IsNullOrEmpty(text)) return text; // Leerer Text -> direkt zurück
         
         try
         {
-            var bytes = Encoding.Default.GetBytes(text);
-            return Encoding.UTF8.GetString(bytes);
+            var bytes = Encoding.Default.GetBytes(text); // Text -> Bytes (System-Encoding)
+            return Encoding.UTF8.GetString(bytes); // Bytes -> UTF-8 String
         }
         catch
         {
-            return text;
+            return text; // Bei Fehler: Original-Text zurückgeben
         }
     }
 

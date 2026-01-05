@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using KIDT.Services;
+using KIDT.Database;
 
 namespace KIDT
 {

@@ -6,14 +6,14 @@ using System.Text;
 namespace KIDT.Services;
 
 /// <summary>
-/// Spezialisierter Service für Dokumenten-Analyse und Tool-Nutzung.
+/// Spezialisierter Service für Daten-Analyse und Tool-Nutzung.
 /// Nutzt qwen2.5:7b für präzise Analysen mit MCP-Tools.
 /// </summary>
-public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzung mit asynchroner Aufräumung
+public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung mit asynchroner Aufräumung
 {
     private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
     private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
-    private string systemInstructions = "Du bist ein Dokumenten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Standard-Systemanweisung
+    private string systemInstructions = "Du bist ein Daten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Standard-Systemanweisung
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
 
     public async Task InitializeAsync() // Lädt qwen2.5, registriert MCP-Tools, lädt Instructions aus MD-Datei
@@ -31,27 +31,17 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
             this.kernel = builder.Build(); // Baue Kernel aus Builder
 
             McpToolsRegistry.RegisterTools(this.kernel); // Registriere alle MCP-Tools im Kernel
-            
+
             this.chatService = this.kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service aus Kernel
 
-            var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "tool-specialist-instructions.md"); // Erstelle Pfad zur MD-Datei
-            string instructions;
-            
-            if (File.Exists(instructionsPath)) // Existiert Instructions-Datei?
-            {
-                instructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Datei asynchron mit UTF-8
-            }
-            else // Datei existiert nicht
-            {
-                instructions = "Du bist ein Dokumenten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Fallback-Prompt
-            }
+            var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "data-analysis-instructions.md"); // Erstelle Pfad zur Instructions-Datei
+            this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus MD-Datei (UTF-8)
 
-            this.systemInstructions = instructions; // Setze Systemanweisung
             this.isInitialized = true; // Setze Flag auf true
         }
         catch (Exception ex)
         {
-            throw new Exception($"Fehler bei der Initialisierung von ToolSpecialistService: {ex.Message}", ex);
+            throw new Exception($"Fehler bei der Initialisierung von DataAnalysisService: {ex.Message}", ex);
         }
     }
 
@@ -72,34 +62,34 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
 
     public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sendet Nachricht mit optionalem Datei-Anhang, benutzerdefiniertem MaxTokens und letztem Gesprächsverlauf
     {
-        if (!this.isInitialized) // Ist Service initialisiert?
+        if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
         {
-            await InitializeAsync(); // Nein -> Initialisiere jetzt
+            await InitializeAsync(); // Initialisiere jetzt
         }
 
-        if (this.kernel == null || this.chatService == null) // Sind Kernel & Service verfügbar?
+        if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind und nicht initialisiert wurden
         {
-            return "Fehler: Tool-Spezialist nicht initialisiert.";
+            return "Fehler: Daten-Analyse-Service nicht initialisiert.";
         }
         
         try
         {
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(this.systemInstructions);
-            
-            if (!string.IsNullOrEmpty(recentContext))
+            var chatHistory = new ChatHistory(); // Erstelle neue Chat-History
+            chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+
+            if (!string.IsNullOrEmpty(recentContext)) // Wenn Gesprächsverlauf vorhanden ist
             {
-                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}");
+                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}"); // Füge Kontext als System-Message hinzu
             }
             
             string finalMessage = userMessage; // Baue finale User-Nachricht (Standard: ohne Datei)
             
-            if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Ist Datei angehängt?
+            if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Wenn Datei-Inhalt und Name vorhanden sind
             {
                 string limitedContent = fileContent; // Standard: Kompletter Inhalt
                 int maxChars = 5000; // Maximum 5000 Zeichen (ca. 1000 Wörter)
                 
-                if (fileContent.Length > maxChars) // Ist Datei zu lang?
+                if (fileContent.Length > maxChars) // Wenn Inhalt zu lang ist
                 {
                     limitedContent = fileContent.Substring(0, maxChars); // Schneide ab
                     limitedContent += "\n\n[... Datei gekürzt, nur erste 5000 Zeichen gezeigt ...]"; // Warnung hinzufügen
@@ -124,7 +114,7 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
             );
 
             string assistantMessage;
-            if (response.Content != null) // Hat Response einen Content?
+            if (response.Content != null) // Wenn Response einen Content hat
             {
                 assistantMessage = EnsureUtf8(response.Content);
             }
@@ -141,18 +131,18 @@ public class ToolSpecialistService : IAsyncDisposable // Service für Tool-Nutzun
         }
     }
 
-    private string EnsureUtf8(string text)
+    private string EnsureUtf8(string text) // Konvertiert Text zu UTF-8 (falls nötig)
     {
-        if (string.IsNullOrEmpty(text)) return text;
-        
+        if (string.IsNullOrEmpty(text)) return text; // Leerer Text -> direkt zurück
+
         try
         {
-            var bytes = Encoding.Default.GetBytes(text);
-            return Encoding.UTF8.GetString(bytes);
+            var bytes = Encoding.Default.GetBytes(text); // Text -> Bytes (System-Encoding)
+            return Encoding.UTF8.GetString(bytes); // Bytes -> UTF-8 String
         }
         catch
         {
-            return text;
+            return text; // Bei Fehler: Original-Text zurückgeben
         }
     }
 

@@ -8,7 +8,7 @@
 
 KIDT kombiniert zwei spezialisierte KI-Modelle mit einem GPT-4o-mini Router-Agent:
 - **phi3:mini** - Natürliche Konversation (Temperature: 0.5, 20-400 Tokens)
-- **qwen2.5:7b** - Präzise Dokumenten-Analyse (Temperature: 0.3, 1000-3000 Tokens)
+- **qwen2.5:7b** - Präzise Daten-Analyse (Temperature: 0.3, 1000-3000 Tokens)
 - **gpt-4o-mini** - Router-Agent über OpenAI API (entscheidet bei jeder Nachricht)
 
 ---
@@ -26,24 +26,20 @@ KIDT/
 |   +-- ChatCoordinator.cs      Koordiniert Router + Modelle + DB + Files
 |   +-- RouterService.cs        GPT-4o-mini Router-Agent (OpenAI API)
 |   +-- ConversationService.cs  phi3:mini Service
-|   +-- ToolSpecialistService.cs qwen2.5 Service
+|   +-- DataAnalysisService.cs  qwen2.5 Service
 |   +-- FileService.cs          Datei-Upload Handler
 |   +-- McpToolsRegistry.cs     Tool-Registrierung
 |
-+-- Services/
-|   +-- ChatDbService.cs        Datenbank-Zugriff
-|
-+-- Data/
++-- Database/
 |   +-- ChatDbContext.cs        EF Core Context
-|
-+-- Models/
+|   +-- ChatDbService.cs        Datenbank-Zugriff
 |   +-- Conversation.cs         Chat-Sitzung
 |   +-- Message.cs              Einzelne Nachricht
 |   +-- UploadedFile.cs         Hochgeladene Datei
 |
 +-- Prompts/
 |   +-- conversation-instructions.md      System-Prompt phi3:mini
-|   +-- tool-specialist-instructions.md   System-Prompt qwen2.5
+|   +-- data-analysis-instructions.md     System-Prompt qwen2.5
 |
 +-- McpServer/
     +-- Program.cs              MCP-Server (aktuell leer)
@@ -76,7 +72,7 @@ KIDT/
          |               |
          v               v
 +-------------------+  +-------------------+
-| Conversation      |  | ToolSpecialist    |
+| Conversation      |  | DataAnalysis      |
 | Service           |  | Service           |
 |                   |  |                   |
 | phi3:mini         |  | qwen2.5:7b        |
@@ -122,7 +118,7 @@ User-Nachricht
       v
 +----------------------------------------+
 | Router-Entscheidung                    |
-| - Service: conversation/toolSpecialist |
+| - Service: conversation/dataAnalysis   |
 | - MaxTokens: 20-3000                   |
 | - Reasoning: Begründung                |
 +----------------------------------------+
@@ -130,7 +126,7 @@ User-Nachricht
       +---------------+
       |               |
       v               v
-  Conversation    ToolSpecialist
+  Conversation    DataAnalysis
   (phi3:mini)     (qwen2.5)
   20-400 Tokens   1000-3000 Tokens
 ```
@@ -140,7 +136,7 @@ User-Nachricht
 - Router bekommt: User-Nachricht + hasFile Flag
 - Router gibt zurück: Service-Name + Token-Limit + Begründung
 - Conversation bekommt: Nur aktuelle User-Nachricht
-- ToolSpecialist bekommt: Komplette Chat-History aus DB + Datei-Inhalt
+- DataAnalysis bekommt: Komplette Chat-History aus DB + Datei-Inhalt
 
 ---
 
@@ -158,13 +154,13 @@ Home.razor
          v
 ChatCoordinator
   - Ruft RouterService auf
-  - Holt Chat-History (nur für ToolSpecialist)
+  - Holt Chat-History (nur für DataAnalysis)
   - Leitet an gewähltes Modell weiter
          |
          v
 RouterService (GPT-4o-mini)
   - Analysiert User-Nachricht
-  - Entscheidet: conversation oder toolSpecialist
+  - Entscheidet: conversation oder dataAnalysis
   - Bestimmt MaxTokens: 20-3000
          |
          v
@@ -193,7 +189,7 @@ Home.razor
 | 80-150      | Kurze Erklärungen (1-2 Sätze, max 40 Wörter)                |
 | 200-400     | Ausführlichere Antworten (nur bei "genauer", "ausführlich") |
 
-**ToolSpecialistService (qwen2.5:7b)**
+**DataAnalysisService (qwen2.5:7b)**
 
 | Token-Range | Verwendung                                      |
 |-------------|-------------------------------------------------|
@@ -216,7 +212,7 @@ Home.razor
 - Statt MCP-Client verwenden wir direkte Tool-Registrierung in Semantic Kernel. 
 - Tools laufen im gleichen Prozess wie die App, wodurch die stdio-Kommunikation entfällt.
 - In `McpServer/Program.cs` liegen die originalen MCP-Tool-Definitionen mit `[McpServerTool]`-Attributen. 
-- Diese werden in `McpToolsRegistry.cs` manuell für Semantic Kernel registriert und vom `ToolSpecialistService` genutzt.
+- Diese werden in `McpToolsRegistry.cs` manuell für Semantic Kernel registriert und vom `DataAnalysisService` genutzt.
 
 
 ```
@@ -230,7 +226,7 @@ McpServer/Program.cs            McpToolsRegistry.cs
         Muss synchron gehalten werden
                        |
                        v
-           ToolSpecialistService.cs
+           DataAnalysisService.cs
            (Nutzt registrierte Tools)
 ```
 
@@ -250,18 +246,20 @@ McpServer/Program.cs            McpToolsRegistry.cs
 
 **RouterService.cs** - GPT-4o-mini Router-Agent über OpenAI API
 - Analysiert User-Nachricht bei jedem Call
-- Entscheidet: conversation oder toolSpecialist
+- Entscheidet: conversation oder dataAnalysis
 - Bestimmt dynamisches Token-Limit (20-3000)
 
 **ConversationService.cs** - Service für natürliche Konversation (phi3:mini, Temp: 0.5, keine Tools, keine History)
 
-**ToolSpecialistService.cs** - Service für Dokumenten-Analyse (qwen2.5:7b, Temp: 0.3, MCP-Tools aktiv, komplette Chat-History)
+**DataAnalysisService.cs** - Service für Daten-Analyse (qwen2.5:7b, Temp: 0.3, MCP-Tools aktiv, komplette Chat-History)
 
 **FileService.cs** - Extrahiert Text aus PDF/TXT/MD/JSON (Max. 4 MB, Warnung bei über 3000 Wörtern)
 
 **Home.razor** - Chat-UI mit Message-Bubbles, Loading-Animation, Typewriter-Effekt, Auto-wachsendes Textarea
 
-**ChatDbService.cs** - Datenbank-Service (PostgreSQL, EF Core)
+**ChatDbService.cs** - Datenbank-Service (PostgreSQL, EF Core) - CRUD-Operationen
+
+**ChatDbContext.cs** - EF Core Context für Datenbank-Verbindung
 
 ---
 
@@ -346,11 +344,11 @@ dotnet run
 KIDT kombiniert zwei KI-Modelle mit einem intelligenten Router-Agent:
 
 1. **GPT-4o-mini Router** - Entscheidet bei jeder Nachricht über OpenAI API
-2. **Zwei spezialisierte Modelle** - phi3:mini (Conversation) + qwen2.5 (Analyse)
+2. **Zwei spezialisierte Modelle** - phi3:mini (Conversation) + qwen2.5 (Daten-Analyse)
 3. **Unterschiedliche Kontexte** - Conversation: nur aktuelle Nachricht, Analyse: komplette History
 4. **Hybrid-MCP** - Nutzt MCP-Standard ohne instabile Client-API
 5. **Optimierte Performance** - GPU-Limits, Pre-warm, Keep-Alive, In-Process Tools
 6. **Benutzerfreundliche UI** - Chat-Bubbles, Typewriter, Datei-Upload
 7. **Persistente Speicherung** - PostgreSQL für Chat-History
 
-**Hauptvorteil:** Intelligente Modell-Auswahl durch GPT-4o-mini Router bei jeder Nachricht, schnelle Konversation (phi3:mini) + präzise Analyse (qwen2.5) mit kompletter History.
+**Hauptvorteil:** Intelligente Modell-Auswahl durch GPT-4o-mini Router bei jeder Nachricht, schnelle Konversation (phi3:mini) + präzise Daten-Analyse (qwen2.5) mit kompletter History.

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using KIDT.Data;
+using KIDT.Database;
 using KIDT.Models;
 
-namespace KIDT.Services;
+namespace KIDT.Database;
 
 public class ChatDbService // Service für Datenbank-Zugriff
 {
@@ -52,7 +52,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 filteredMessages.Add(msg); // Ja -> Füge hinzu
             }
         }
-        
+
         return Task.FromResult(filteredMessages); // Gib gefilterte Liste zurück
     }
 
@@ -74,7 +74,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
             {
                 role = "User"; // Ja -> User
             }
-            
+
             contextLines.Add($"{role}: {msg.Text}"); // Füge formatierte Zeile hinzu
         }
 
