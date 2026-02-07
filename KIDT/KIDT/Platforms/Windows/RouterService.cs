@@ -1,13 +1,15 @@
+using Azure.AI.OpenAI;
 using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
 using System.Text.Json;
 
 namespace KIDT.Services;
 
 public class RouterService // Klasse für Routing-Entscheidungen
 {
-    private OpenAIClient client; // OpenAI Client Instanz
-    private ChatClient router; // Chat Client für GPT-4o-mini
+    private AzureOpenAIClient client; // Azure OpenAI Client Instanz
+    private ChatClient router; // Chat Client für GPT-4.1
     private bool isInitialized = false; // Flag ob Service initialisiert ist
 
     public RouterService() // Konstruktor
@@ -28,8 +30,18 @@ public class RouterService // Klasse für Routing-Entscheidungen
             string keyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "openai-api-key.txt"); // Pfad zur API-Key-Datei
             string apiKey = await File.ReadAllTextAsync(keyPath); // API-Key aus Datei lesen
 
-            this.client = new OpenAIClient(apiKey.Trim()); // OpenAI Client mit API Key erstellen
-            this.router = this.client.GetChatClient("gpt-4o-mini"); // Chat Client für gpt-4o-mini Modell holen
+            //OpenAIClientOptions options = new OpenAIClientOptions(); // Options-Objekt erstellen
+            //options.Endpoint = new Uri("https://api.deepseek.com"); // DeepSeek Endpoint setzen
+            //this.client = new OpenAIClient(new ApiKeyCredential(apiKey.Trim()), options); // DeepSeek Client mit ApiKeyCredential und Options erstellen
+            //this.router = this.client.GetChatClient("deepseek-chat"); // Chat Client für deepseek-chat Modell holen
+
+            // AZURE OPENAI SETUP
+            this.client = new AzureOpenAIClient(
+                new Uri("https://ts-openai-testing.openai.azure.com/"), 
+                new ApiKeyCredential(apiKey.Trim())
+            ); // Azure OpenAI Client mit Endpoint und API-Key erstellen
+            this.router = this.client.GetChatClient("gpt-4.1-deployment"); // Chat Client für gpt-4.1-deployment holen
+
             this.isInitialized = true; // Flag auf true setzen - Initialisierung abgeschlossen
         }
         catch (Exception ex)

@@ -19,6 +19,7 @@ namespace KIDT
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<ChatCoordinator>();
             builder.Services.AddSingleton<ChatDbService>();
+            builder.Services.AddSingleton<ThumbnailGenerator>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

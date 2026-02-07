@@ -1,0 +1,104 @@
+@* Daten-Seite: Zeigt alle Chat-Historien in Grid-Layout *@
+@page "/daten"
+@using KIDT.Models
+@inject KIDT.Database.ChatDbService Db
+@inject NavigationManager Navigation
+
+<div class="data-container"> @* Hauptcontainer *@
+    <div class="data-grid"> @* Grid-Container für Chat-Cards *@
+        @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
+        {
+            <div class="chat-card"> @* Chat-Card *@
+                <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" title="Chat löschen" aria-label="Chat löschen"> @* Lösch-Button (stopPropagation verhindert OpenChat) *@
+                    <img src="images/remove.png" alt="Löschen" />
+                </button>
+                <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich für OpenChat *@
+                    <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
+                    
+                    @if (chat.UploadedFiles.Count > 0) @* Check: Hat dieser Chat ein File? *@
+                    {
+                        <div class="card-file-preview"> @* File-Vorschau (60% der Box) *@
+                            @if (!string.IsNullOrEmpty(chat.UploadedFiles[0].ThumbnailBase64)) @* Check: Hat File ein Thumbnail? *@
+                            {
+                                <img src="@("data:image/png;base64," + chat.UploadedFiles[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
+                            }
+                            else @* Kein Thumbnail -> Zeige großes Icon *@
+                            {
+                                @if (chat.UploadedFiles[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
+                                {
+                                    <img src="images/file.png" alt="PDF" class="preview-icon-large" />
+                                }
+                                else if (chat.UploadedFiles[0].FileName.EndsWith(".txt")) @* TXT-Icon *@
+                                {
+                                    <img src="images/file.png" alt="Text" class="preview-icon-large" />
+                                }
+                                else @* Sonstiges *@
+                                {
+                                    <img src="images/file.png" alt="Datei" class="preview-icon-large" />
+                                }
+                            }
+                        </div>
+                        
+                        <div class="card-filename">@chat.UploadedFiles[0].FileName</div> @* Dateiname darunter *@
+                    }
+                    
+                    <div class="card-date">@chat.CreatedAt.ToString("dd.MM.yyyy HH:mm")</div> @* Datum ganz unten *@
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Conversation> Chats = new List<Conversation>(); // Liste aller Chats
+
+    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
+    {
+        Chats = await Db.LoadAllConversationsAsync(); // Lade alle Conversations aus DB
+        
+        List<Conversation> sortedChats = new List<Conversation>(); // Neue Liste für sortierte Chats
+        
+        foreach (Conversation chat in Chats) // Sortiere Chats nach Datum (neueste zuerst)
+        {
+            sortedChats.Add(chat); // Füge alle Chats hinzu
+        }
+        
+        for (int i = 0; i < sortedChats.Count - 1; i++) // Bubble-Sort: Sortiere nach Datum
+        {
+            for (int j = 0; j < sortedChats.Count - i - 1; j++)
+            {
+                if (sortedChats[j].CreatedAt < sortedChats[j + 1].CreatedAt) // Vergleiche Datum
+                {
+                    Conversation temp = sortedChats[j]; // Tausche Positionen
+                    sortedChats[j] = sortedChats[j + 1];
+                    sortedChats[j + 1] = temp;
+                }
+            }
+        }
+        
+        Chats = sortedChats; // Überschreibe mit sortierter Liste
+    }
+
+    private void OpenChat(int chatId) // Öffnet einen Chat
+    {
+        Navigation.NavigateTo("/chat/" + chatId); // Navigiere zu Chat mit ID
+    }
+
+    private async Task DeleteChat(int chatId) // Löscht einen Chat
+    {
+        await Db.DeleteConversationAsync(chatId); // Datenbank: Chat löschen
+        
+        List<Conversation> updatedChats = new List<Conversation>(); // Neue Liste ohne gelöschten Chat
+        
+        foreach (Conversation chat in Chats) // Durchlaufe alle Chats
+        {
+            if (chat.Id != chatId) // Ist es nicht der gelöschte Chat?
+            {
+                updatedChats.Add(chat); // Ja -> Behalte diesen Chat
+            }
+        }
+        
+        Chats = updatedChats; // Überschreibe mit aktualisierter Liste
+        StateHasChanged(); // UI aktualisieren
+    }
+}

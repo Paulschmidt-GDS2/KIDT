@@ -23,7 +23,7 @@
         <button @onclick="ToggleSidebar" title="Randleiste schließen" class="toggle-btn"> @* Schaltet Sidebar um *@
             <img src="images/sidebar.png" alt="Randleiste schließen" />
         </button>
-        <a href="/Neuer Chat" title="Neuer Chat" class="nav-btn"> @* Link zu neuem Chat *@
+        <a href="/" @onclick="OnNewChatClick" title="Neuer Chat" class="nav-btn"> @* Link zu neuem Chat *@
             <img src="images/new-chat.png" alt="Neuer Chat" />
             <span>Neuer Chat</span> @* Beschriftung der Links (verschwindet bei collapsed) *@
         </a>
@@ -56,5 +56,10 @@
     private void ToggleSidebar() // Methode zum Umschalten der Sidebar
     {
         isCollapsed = !isCollapsed; // Zustand umschalten (kehrt den boolischen Wert um)
+    }
+
+    private void OnNewChatClick() // Wird beim Klick auf "Neuer Chat" aufgerufen
+    {
+        KIDT.Services.ChatEventService.TriggerNewChat(); // Löse Event aus für Home.razor
     }
 }

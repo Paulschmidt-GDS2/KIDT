@@ -2,13 +2,13 @@
 
 /* Alle Elemente erhalten Standard-Farbe und Schriftart */
 * {
-    color: #948f61; /* gelb-grün-graue Textfarbe */
+    color: #0D0E0C; /* Dunkle Textfarbe für guten Kontrast auf hellem Hintergrund */
     font-family: "Courier New", Courier, monospace;
 }
 
 /* Body und HTML ohne Overflow */
 html, body {
-    background-color: #10100f; /* Sehr dunkler Hintergrund */
+    background-color: #848877; /* Sehr dunkler Hintergrund */
     overflow: hidden; /* Kein Scrollen */
     height: 100%; /* Volle Höhe */
     margin: 0; /* Kein Außenabstand */

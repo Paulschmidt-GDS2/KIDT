@@ -1,13 +1,17 @@
 @* Chat-Hauptseite in Main mit Chat-History und Inputbox *@
 @page "/"
+@page "/chat/{ChatId:int}"
 @using Microsoft.AspNetCore.Components.Web
 @inject KIDT.Services.ChatCoordinator Chat
 @inject KIDT.Database.ChatDbService Db
+@inject KIDT.Services.ThumbnailGenerator ThumbGen
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <div class="chat-container"> @* Hauptcontainer *@
-    <div class="messages"> @* Bereich mit Nachrichten und Scroll *@
-        <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
-            @foreach (var msg in Messages) @* Durchlaufe alle Nachrichten *@
+<div class="messages"> @* Bereich mit Nachrichten und Scroll *@
+    <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
+        @foreach (var msg in Messages) @* Durchlaufe alle Nachrichten *@
             {
                 string bubbleClass; // Variable für CSS-Klasse der Bubble
                 if (msg.IsUser) // Check: Ist es User-Nachricht?
@@ -58,17 +62,20 @@
 </div>
 
 @code {
-    // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
-    private class ChatMessage // Klasse für eine Chat-Nachricht
-    {
-        public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
-        public bool IsUser { get; set; } // true = Benutzer, false = Assistent
-        public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
-        public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
-    }
+[Parameter]
+public int ChatId { get; set; } // Parameter: Chat-ID aus URL
 
-    private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
-    private int currentConversationId; // Datenbank: Aktuelle Chat-ID
+// Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
+private class ChatMessage // Klasse für eine Chat-Nachricht
+{
+    public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
+    public bool IsUser { get; set; } // true = Benutzer, false = Assistent
+    public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
+    public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
+}
+
+private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
+private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
     // Eingabe: wächst stufenweise pro Zeile
     private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
@@ -93,23 +100,55 @@
     {
         var backgroundTask = Task.Run(Chat.InitializeAsync); // Starte Modell-Laden im Hintergrund (UI blockiert nicht)
 
-        currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Datenbank: Chat erstellen
-        List<KIDT.Models.Message> dbMessages = await Db.LoadMessagesAsync(currentConversationId); // Datenbank: Nachrichten laden
+        KIDT.Services.ChatEventService.OnNewChatRequested += HandleNewChatRequest; // Registriere Event-Listener
 
-        foreach (KIDT.Models.Message dbMsg in dbMessages) // Datenbank: DB-Messages in UI konvertieren
+        if (ChatId > 0) // Check: Soll bestehender Chat geladen werden?
         {
-            var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser };
-            if (dbMsg.IsUser) // User-Nachrichten direkt anzeigen
+            currentConversationId = ChatId; // Nutze übergebene Chat-ID
+            List<KIDT.Models.Message> dbMessages = await Db.LoadMessagesAsync(currentConversationId); // Datenbank: Nachrichten laden
+
+            foreach (KIDT.Models.Message dbMsg in dbMessages) // Datenbank: DB-Messages in UI konvertieren
             {
-                chatMsg.DisplayText = dbMsg.Text;
-                Messages.Add(chatMsg);
+                var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser };
+                if (dbMsg.IsUser) // User-Nachrichten direkt anzeigen
+                {
+                    chatMsg.DisplayText = dbMsg.Text;
+                    Messages.Add(chatMsg);
+                }
+                else // Assistent-Nachrichten mit Typewriter
+                {
+                    Messages.Add(chatMsg);
+                    var typewriterTask = TypewriterEffect(chatMsg, dbMsg.Text); // Starte Typewriter im Hintergrund
+                }
             }
-            else // Assistent-Nachrichten mit Typewriter
+
+            List<KIDT.Models.UploadedFile> files = await Db.LoadFilesForConversationAsync(currentConversationId); // Lade Files für diesen Chat
+            
+            if (files.Count > 0) // Gibt es ein File?
             {
-                Messages.Add(chatMsg);
-                var typewriterTask = TypewriterEffect(chatMsg, dbMsg.Text); // Starte Typewriter im Hintergrund
+                UploadedFileName = files[0].FileName; // Zeige erstes File im Badge
             }
         }
+        else // Neuer Chat
+        {
+            currentConversationId = 0; // Noch keine Conversation (wird bei erster Nachricht erstellt)
+        }
+    }
+
+    private async void HandleNewChatRequest() // Wird aufgerufen wenn Event von MainLayout ausgelöst wird
+    {
+        bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Check: Hat aktueller Chat Content?
+        
+        if (hasContent) // Nur wenn aktueller Chat nicht leer ist
+        {
+            await ResetChat(); // Chat zurücksetzen
+        }
+        // Sonst: Nichts tun (User ist schon in leerem Chat)
+    }
+
+    public void Dispose() // Wird beim Entfernen der Komponente aufgerufen
+    {
+        KIDT.Services.ChatEventService.OnNewChatRequested -= HandleNewChatRequest; // Event-Listener entfernen
     }
 
     private void UpdateRows() // Methode die aus inputText die sichtbaren Zeilen berechnet und rows begrenzt
@@ -133,7 +172,7 @@
         {
             message.DisplayText += fullText[i]; // Füge nächsten Buchstaben hinzu
             StateHasChanged(); // UI aktualisieren
-            await Task.Delay(50); // 50ms Pause zwischen Buchstaben
+            await Task.Delay(20); // 50ms Pause zwischen Buchstaben
         }
         message.Text = fullText; // Setze vollständigen Text
         StateHasChanged(); // Final UI update
@@ -149,8 +188,14 @@
         text = text.Trim(); // Trimme Whitespace
         if (text.Length == 0) return; // leere Nachrichten nicht senden
         
+        if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
+        {
+            currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Ja -> Erstelle jetzt Conversation
+        }
+        
         Messages.Add(new ChatMessage { Text = text, DisplayText = text, IsUser = true }); // Benutzer-Nachricht hinzufügen
         await Db.SaveMessageAsync(currentConversationId, true, text); // Datenbank: Speichern
+        await Db.UpdateConversationTitleAsync(currentConversationId); // Datenbank: Titel aktualisieren (falls erste Nachricht)
         InputText = string.Empty; // Eingabe zurücksetzen
         rows = 1; // Eingabefeld auf 1 Zeile setzen
 
@@ -198,6 +243,11 @@
 
             if (result != null) // Check: Hat User eine Datei ausgewählt?
             {
+                if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
+                {
+                    currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Ja -> Erstelle jetzt Conversation
+                }
+                
                 UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
                 StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
 
@@ -217,6 +267,12 @@
                 {
                     UploadedFileName = string.Empty; // Entferne Badge bei Fehler
                     StateHasChanged(); // UI aktualisieren
+                }
+                else // Upload erfolgreich
+                {
+                    string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath); // Generiere Thumbnail
+                    await Db.SaveUploadedFileAsync(currentConversationId, result.FileName, uploadResult, thumbnail); // Datenbank: File speichern mit Thumbnail
+                    await Db.UpdateConversationTitleAsync(currentConversationId); // Datenbank: Titel aktualisieren
                 }
             }
         }
@@ -238,5 +294,21 @@
         Messages.Add(confirmMessage);
         var confirmTask = TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Bestätigung mit Typewriter
         StateHasChanged(); // UI aktualisieren
+    }
+
+    private async Task ResetChat() // Neuer Chat: Löscht UI (keine DB-Eintrag bis erste Nachricht)
+    {
+        Messages.Clear(); // Lösche alle Nachrichten aus UI
+        InputText = string.Empty; // Lösche Eingabefeld
+        rows = 1; // Setze Zeilen zurück
+        UploadedFileName = string.Empty; // Entferne angehängte Datei
+        Chat.ClearFile(); // Entferne Datei aus Service
+        
+        currentConversationId = 0; // Keine Conversation (wird bei erster Nachricht erstellt)
+        
+        Navigation.NavigateTo("/", forceLoad: true); // Force Reload der Komponente
+        StateHasChanged(); // UI aktualisieren
+        
+        await Task.CompletedTask; // Async abschließen
     }
 }

@@ -1,0 +1,293 @@
+/* Daten.razor Component Styles */
+
+/* Hauptcontainer */
+.data-container {
+    height: 100%; /* Füllt gesamte Höhe */
+    overflow-y: auto; /* Vertikaler Scroll wenn nötig */
+    padding: 32px; /* Außenabstand */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    display: flex; /* Flexbox für Zentrierung */
+    justify-content: center; /* Horizontal zentrieren */
+    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+}
+
+/* Scrollbar-Breite */
+.data-container::-webkit-scrollbar {
+    width: 8px; /* Breite der Scrollbar */
+    height: 8px; /* Höhe für horizontale Scrollbar */
+}
+
+/* Scrollbar-Hintergrund */
+.data-container::-webkit-scrollbar-track {
+    background: transparent; /* Transparenter Hintergrund */
+    border-radius: 8px; /* Abgerundete Ecken */
+}
+
+/* Scrollbar-Griff */
+.data-container::-webkit-scrollbar-thumb {
+    background: #0D0E0C; /* Dunkler Griff */
+    border-radius: 8px; /* Abgerundete Ecken */
+    border: 2px solid transparent; /* Transparenter Rahmen */
+}
+
+    /* Scrollbar-Griff beim Hover */
+    .data-container::-webkit-scrollbar-thumb:hover {
+        background: #0E0F0D; /* Extrem subtil heller beim Hover */
+    }
+
+/* Grid-Container */
+.data-grid {
+    display: grid; /* CSS Grid aktivieren */
+    grid-template-columns: repeat(4, 1fr); /* 4 Spalten */
+    gap: 24px; /* Abstand zwischen Cards */
+    width: 100%; /* Volle Breite */
+    max-width: 1400px; /* Maximale Breite */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .data-grid {
+        max-width: 1820px; /* 1400px * 1.3 = 1820px */
+        gap: 31px; /* 24px * 1.3 = 31.2px ? 31px */
+    }
+}
+
+/* Responsive: 3 Spalten bei mittlerer Breite */
+@media (max-width: 1200px) {
+    .data-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 Spalten */
+    }
+}
+
+/* Responsive: 2 Spalten bei kleiner Breite */
+@media (max-width: 800px) {
+    .data-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 Spalten */
+    }
+}
+
+/* Responsive: 1 Spalte bei sehr kleiner Breite */
+@media (max-width: 500px) {
+    .data-grid {
+        grid-template-columns: 1fr; /* 1 Spalte */
+    }
+}
+
+/* === CHAT-CARD === */
+
+/* Einzelne Chat-Card */
+.chat-card {
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 6px; /* Abgerundete Ecken */
+    padding: 16px; /* Innenabstand */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 12px; /* Abstand zwischen Elementen */
+    min-height: 280px; /* Größere Mindesthöhe für Preview */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    position: relative; /* Für absoluten Delete-Button */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .chat-card {
+        padding: 21px; /* 16px * 1.3 = 20.8px ? 21px */
+        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        min-height: 364px; /* 280px * 1.3 = 364px */
+    }
+}
+
+/* Chat-Card beim Hover */
+.chat-card:hover {
+    background: #848877; /* Heller Hintergrund beim Hover */
+}
+
+/* === DELETE-BUTTON === */
+
+/* Lösch-Button */
+.delete-btn {
+    position: absolute; /* Absolut positioniert */
+    top: 8px; /* Abstand von oben */
+    right: 8px; /* Abstand von rechts */
+    background: none; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    cursor: pointer; /* Zeiger-Cursor */
+    padding: 4px; /* Kleiner Innenabstand */
+    opacity: 0; /* Standardmäßig unsichtbar */
+    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
+    z-index: 10; /* Über anderen Elementen */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .delete-btn {
+        top: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+        right: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+        padding: 5px; /* 4px * 1.3 = 5.2px ? 5px */
+    }
+}
+
+/* Delete-Button sichtbar beim Hover auf Card */
+.chat-card:hover .delete-btn {
+    opacity: 0.7; /* Sichtbar beim Hover */
+}
+
+/* Delete-Button beim Hover */
+.delete-btn:hover {
+    opacity: 1; /* Voll sichtbar beim direkten Hover */
+}
+
+/* Icon im Delete-Button */
+.delete-btn img {
+    width: 16px; /* Icon-Breite */
+    height: 16px; /* Icon-Höhe */
+    display: block; /* Verhindert Inline-Spacing */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .delete-btn img {
+        width: 21px; /* 16px * 1.3 = 20.8px ? 21px */
+        height: 21px; /* 16px * 1.3 = 20.8px ? 21px */
+    }
+}
+
+/* === CARD-CONTENT === */
+
+/* Klickbarer Bereich für Chat öffnen */
+.card-content {
+    cursor: pointer; /* Zeiger-Cursor */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 12px; /* Abstand zwischen Elementen */
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-content {
+        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+    }
+}
+
+/* Card-Content beim Klick */
+.card-content:active {
+    transform: scale(0.98); /* Leicht verkleinern */
+}
+
+/* === FILE-VORSCHAU === */
+
+/* Container für File-Vorschau (60% der Box) */
+.card-file-preview {
+    display: flex; /* Flexbox aktivieren */
+    align-items: flex-start; /* Oben ausrichten (nicht zentrieren) */
+    justify-content: center; /* Horizontal zentrieren */
+    flex: 1; /* Nimmt den Hauptteil der Box ein */
+    min-height: 150px; /* Mindesthöhe für Preview-Bereich */
+    max-height: 150px; /* Maximale Höhe (schneidet unteren Teil ab) */
+    background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
+    border-radius: 4px; /* Leicht abgerundete Ecken */
+    margin: 8px 0; /* Abstand oben und unten */
+    overflow: hidden; /* Schneidet überflüssigen Teil ab */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-file-preview {
+        min-height: 195px; /* 150px * 1.3 = 195px */
+        max-height: 195px; /* 150px * 1.3 = 195px */
+        margin: 10px 0; /* 8px * 1.3 = 10.4px ? 10px */
+    }
+}
+
+/* Großes File-Icon (Fallback wenn kein Thumbnail) */
+.preview-icon-large {
+    width: 80px; /* Icon-Breite */
+    height: 80px; /* Icon-Höhe */
+    opacity: 0.3; /* Leicht transparent */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .preview-icon-large {
+        width: 104px; /* 80px * 1.3 = 104px */
+        height: 104px; /* 80px * 1.3 = 104px */
+    }
+}
+
+/* PDF-Thumbnail (echtes Vorschaubild) */
+.preview-thumbnail {
+    width: 100%; /* Volle Breite des Containers */
+    height: auto; /* Automatische Höhe basierend auf Breite */
+    object-fit: cover; /* Bild zuschneiden (zeigt nur oberen Teil) */
+    object-position: top; /* Von oben beginnen */
+    border-radius: 4px; /* Leicht abgerundete Ecken */
+}
+
+/* === CARD-FILENAME === */
+
+/* Dateiname unter Vorschau */
+.card-filename {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 14px; /* Schriftgröße */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    text-align: center; /* Zentriert */
+    opacity: 0.8; /* Leicht transparent */
+    padding: 0 8px; /* Seitlicher Abstand */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-filename {
+        font-size: 18px; /* 14px * 1.3 = 18.2px ? 18px */
+        padding: 0 10px; /* 8px * 1.3 = 10.4px ? 10px */
+    }
+}
+
+/* === CARD-TITEL === */
+
+/* Chat-Titel */
+.card-title {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 16px; /* Schriftgröße */
+    font-weight: bold; /* Fettgedruckt */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    padding-bottom: 8px; /* Abstand nach unten */
+    border-bottom: 1px solid rgba(13, 14, 12, 0.1); /* Dünne Trennlinie */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-title {
+        font-size: 21px; /* 16px * 1.3 = 20.8px ? 21px */
+        padding-bottom: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+    }
+}
+
+/* === CARD-DATUM === */
+
+/* Datum */
+.card-date {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 12px; /* Schriftgröße */
+    opacity: 0.6; /* Leicht transparent */
+    text-align: center; /* Zentriert */
+    padding-top: 8px; /* Abstand nach oben */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-date {
+        font-size: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        padding-top: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+    }
+}
+    }
+}
