@@ -7,15 +7,8 @@ public class Conversation // Klasse für einen Chat
 {
     public int Id { get; set; } // Primärschlüssel (wird automatisch hochgezählt)
     public DateTime CreatedAt { get; set; } // Wann wurde Chat erstellt?
-    public string Title { get; set; } // Chat-Titel
+    public string Title { get; set; } = string.Empty; // Chat-Titel (nie null)
     
-    public List<Message> Messages { get; set; } // Alle Nachrichten in diesem Chat
-    public List<UploadedFile> UploadedFiles { get; set; } // Alle hochgeladenen Dateien in diesem Chat
-
-    public Conversation() // Konstruktor: Wird beim Erstellen aufgerufen
-    {
-        Title = "Neuer Chat"; // Standard-Titel setzen
-        Messages = new List<Message>(); // Leere Liste erstellen
-        UploadedFiles = new List<UploadedFile>(); // Leere Liste erstellen
-    }
+    public List<Message> Messages { get; set; } = new(); // Alle Nachrichten in diesem Chat (nie null)
+    public List<UploadedFile> UploadedFiles { get; set; } = new(); // Alle hochgeladenen Dateien in diesem Chat (nie null)
 }

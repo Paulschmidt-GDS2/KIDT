@@ -1,112 +1,142 @@
 using System.Diagnostics;
 using KIDT.Database;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace KIDT.Services;
 
-/// <summary>
-/// ChatCoordinator: Koordiniert Router, Modelle (qwen2.5 + phi3:mini), Datei-Service und Datenbank.
-/// Router-Modell entscheidet bei jeder User-Nachricht welches Modell verwendet wird.
-/// </summary>
-public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner Aufräumung
+public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, Conversation, DataAnalysis und File-Upload (wird von Home.razor verwendet)
 {
-    private DataAnalysisService dataAnalysis; // qwen2.5 für Analysen (wird später initialisiert)
-    private ConversationService conversation; // phi3:mini für Small Talk (wird später initialisiert)
-    private FileService fileService; // Service für Datei-Extraktion (wird später initialisiert)
-    private RouterService router; // GPT-4o-mini Router-Agent (wird später initialisiert)
-    private ChatDbService dbService; // Datenbank-Service (wird später initialisiert)
-    private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
-    private string currentFileName = string.Empty; // Aktuell angehängte Datei (leer = keine Datei)
-    private string currentFileContent = string.Empty; // Extrahierter Text der Datei (leer = kein Inhalt)
+    private DataAnalysisService dataAnalysis; // Service für Datenanalyse (komplexe Anfragen mit mehr Token)
+    private ConversationService conversation; // Service für Konversation (normale Chat-Anfragen)
+    private FileService fileService; // Service für File-Upload und Text-Extraktion (PDF, TXT etc.)
+    private RouterService router; // Router: Entscheidet ob Conversation oder DataAnalysis + handhabt MCP-Tools
+    private readonly IServiceProvider serviceProvider; // Service Provider für DB-Services (Dependency Injection)
+    private bool isInitialized = false; // Flag: Wurden Services initialisiert? (verhindert doppelte Initialisierung)
+    private string currentFileName = string.Empty; // Aktuell angehängte Datei (Dateiname)
+    private string currentFileContent = string.Empty; // Aktuell angehängte Datei (extrahierter Text-Content)
 
-    public ChatCoordinator() // Konstruktor
+    public ChatCoordinator(IServiceProvider serviceProvider) // Konstruktor: Wird beim App-Start aufgerufen (Dependency Injection)
     {
-        this.dataAnalysis = null!; // Setze auf null (wird später initialisiert)
-        this.conversation = null!; // "
-        this.fileService = null!; // "
-        this.router = null!; // "
-        this.dbService = null!; // "
+        this.serviceProvider = serviceProvider; // Service Provider speichern für DB-Zugriff
+        this.dataAnalysis = null!; // Wird in InitializeAsync erstellt (null! = compiler-beruhigend)
+        this.conversation = null!; // Wird in InitializeAsync erstellt
+        this.fileService = null!; // Wird in InitializeAsync erstellt
+        this.router = null!; // Wird in InitializeAsync erstellt
     }
 
-    public async Task InitializeAsync() // Initialisiert alle Services
+    public async Task InitializeAsync() // Initialisiert alle Services (wird beim App-Start im Hintergrund aufgerufen von Home.razor)
     {
-        if (this.isInitialized) return; // Wenn schon initialisiert -> raus
+        if (this.isInitialized) return; // Bereits initialisiert? ? Abbruch (verhindert doppelte Initialisierung)
 
         try
         {
-            this.dataAnalysis = new DataAnalysisService(); // Erstelle DataAnalysis-Instanz
-            this.conversation = new ConversationService(); // Erstelle Conversation-Instanz
-            this.fileService = new FileService(); // Erstelle FileService-Instanz
-            this.router = new RouterService(); // Erstelle RouterService-Instanz
-            this.dbService = new ChatDbService(); // Erstelle ChatDbService-Instanz
+            this.dataAnalysis = new DataAnalysisService(); // Erstelle DataAnalysis-Service (für komplexe Anfragen)
+            this.conversation = new ConversationService(); // Erstelle Conversation-Service (für normale Chats)
+            this.fileService = new FileService(); // Erstelle File-Service (für PDF/TXT-Upload)
+            this.router = new RouterService(this.serviceProvider); // Erstelle Router (bekommt ServiceProvider für DocumentDbService)
             
-            await this.router.InitializeAsync(); // Initialisiere Router mit OpenAI API
+            await this.router.InitializeAsync(); // Router lädt API-Key aus Datei
 
-            this.isInitialized = true; // Setze Flag auf true
+            this.isInitialized = true; // Markiere als initialisiert
         }
-        catch (Exception ex)
+        catch (Exception ex) // Initialisierung fehlgeschlagen?
         {
             throw new Exception($"Fehler bei Initialisierung: {ex.Message}", ex);
         }
     }
 
-    public async Task<string> SendAsync(string userMessage) // Sendet User-Nachricht ohne Conversation-ID
+    public async Task<string> SendAsync(string userMessage) // Überladung: SendAsync ohne conversationId (für neuen Chat)
     {
-        return await SendAsync(userMessage, 0); // Rufe Überladung mit conversationId = 0
+        return await SendAsync(userMessage, 0); // Rufe Hauptmethode mit conversationId=0 auf
     }
 
-    public async Task<string> SendAsync(string userMessage, int conversationId) // Sendet User-Nachricht mit Conversation-ID
+    public async Task<string> SendAsync(string userMessage, int conversationId) // Hauptmethode: Verarbeitet User-Nachricht und gibt Antwort zurück (Ablauf: Router ? Conversation/DataAnalysis ? Antwort)
     {
-        if (!this.isInitialized) // Ist Coordinator initialisiert?
+        if (!this.isInitialized) // Services noch nicht initialisiert?
         {
-            await InitializeAsync(); // Nein -> Initialisiere jetzt
+            await InitializeAsync(); // Initialisiere jetzt
         }
 
         try
         {
-            bool hasFile = !string.IsNullOrEmpty(this.currentFileName); // Ist Datei angehängt?
+            using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für DB-Zugriff (wird am Ende disposed)
+            var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Hole ChatDbService für Chat-History
+            var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService für Dokument-Operationen (wird aktuell nicht direkt verwendet)
+
+            bool hasFile = !string.IsNullOrEmpty(this.currentFileName); // Hat User eine Datei angehängt?
             
-            RoutingDecision decision = await this.router.RouteAsync(userMessage, hasFile); // Hole Routing-Entscheidung vom Router
+            // SCHRITT 1: Router verarbeitet Nachricht (entscheidet: Conversation/DataAnalysis ODER nutzt MCP-Tools für Dokument-Suche)
+            RouterResponse routerResponse = await this.router.ProcessAsync(userMessage, hasFile, conversationId); // Router erstellt intern eigenen Scope für DocumentDbService
 
-            string result; // Variable für Ergebnis
-
-            if (decision.Service == "dataAnalysis") // Wird DataAnalysis verwendet?
+            // SCHRITT 2: Check ob Router direkt antworten soll (z.B. nach search_documents oder add_document_to_chat)
+            if (!routerResponse.ShouldRoute) // Router gibt direkte Antwort zurück (kein Routing nötig)?
             {
-                string fullChatHistory = string.Empty; // Chat-Verlauf für Analyse (Standard: leer)
+                // Router hat Dokument-Suche durchgeführt oder Dokument hinzugefügt
+                // routerResponse.FoundDocuments enthält gefundene Dokumente für UI-Anzeige
+                // TODO: Diese müssen an die UI weitergegeben werden (später implementieren - aktuell nur Nachricht)
+                return routerResponse.DirectResponse ?? "Dokument wurde verarbeitet.";
+            }
+
+            // SCHRITT 3: Router hat entschieden zu routen ? Sende an Conversation oder DataAnalysis
+            // HINWEIS: routerResponse.FoundDocuments enthält Dokumente für UI-Anzeige
+            // TODO: Diese müssen an die UI weitergegeben werden (später implementieren)
+
+            string result; // Antwort vom Service (Conversation oder DataAnalysis)
+
+            if (routerResponse.TargetService == "dataAnalysis") // Router hat DataAnalysis gewählt? (komplexe Anfragen)
+            {
+                await this.dataAnalysis.InitializeAsync(docDbService, conversationId); // Initialisiere DataAnalysis mit DocumentDbService und conversationId
                 
-                if (conversationId > 0) // Ist eine gültige Conversation-ID vorhanden?
+                string fullChatHistory = string.Empty; // Chat-History (leer für neuen Chat)
+                
+                if (conversationId > 0) // Bestehender Chat? (conversationId > 0)
                 {
-                    fullChatHistory = await this.dbService.GetFullChatHistoryAsync(conversationId); // Hole komplette Chat-History aus DB
+                    fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus DB
                 }
                 
-                result = await this.dataAnalysis.SendAsync( // Leite an qwen2.5 weiter
-                    userMessage, // Aktuelle User-Nachricht
-                    this.currentFileContent, // Datei-Inhalt (leer wenn keine Datei)
-                    this.currentFileName, // Datei-Name (leer wenn keine Datei)
-                    decision.MaxTokens, // Token-Limit vom Router (1000-3000)
-                    fullChatHistory // Komplette Chat-History (leer beim ersten Mal)
-                );
-            }
-            else // Nein -> Conversation verwenden
-            {
-                string fullChatHistory = string.Empty; // Chat-Verlauf für Conversation (Standard: leer)
-
-                if (conversationId > 0) // Wenn eine gültige Conversation-ID vorhanden ist
+                // Bei Tool-Nutzung: Füge Info zu gefundenen Dokumenten hinzu (für Kontext)
+                string enhancedMessage = userMessage; // Start mit Original-Nachricht
+                if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet UND Dokumente gefunden?
                 {
-                    fullChatHistory = await this.dbService.GetFullChatHistoryAsync(conversationId); // Hole komplette Chat-History aus DB
+                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
                 }
                 
-                result = await this.conversation.SendAsync( // Leite an phi3:mini weiter
-                    userMessage, // Aktuelle User-Nachricht
-                    decision.MaxTokens, // Token-Limit vom Router (500-1500)
-                    fullChatHistory // Komplette Chat-History (leer beim ersten Mal)
+                result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis
+                    enhancedMessage, // User-Nachricht (evtl. mit System-Info)
+                    this.currentFileContent, // Angehängte Datei (Content)
+                    this.currentFileName, // Angehängte Datei (Name)
+                    routerResponse.MaxTokens, // Token-Limit (2000 für DataAnalysis)
+                    fullChatHistory // Chat-History
+                );
+            }
+            else // Router hat Conversation gewählt (normale Chats)
+            {
+                string fullChatHistory = string.Empty; // Chat-History (leer für neuen Chat)
+
+                if (conversationId > 0) // Bestehender Chat? (conversationId > 0)
+                {
+                    fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus DB
+                }
+                
+                // Bei Tool-Nutzung: Füge Info zu gefundenen Dokumenten hinzu (für Kontext)
+                string enhancedMessage = userMessage; // Start mit Original-Nachricht
+                if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet UND Dokumente gefunden?
+                {
+                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
+                }
+                
+                result = await this.conversation.SendAsync( // Sende an Conversation
+                    enhancedMessage, // User-Nachricht (evtl. mit System-Info)
+                    routerResponse.MaxTokens, // Token-Limit (300 für Conversation)
+                    fullChatHistory // Chat-History
                 );
             }
             
-            return result; // Gib Ergebnis zurück
+            return result;
         }
         catch (Exception ex)
         {
-            if (ex.Message.StartsWith("Router-Fehler:")) // Ist es ein Router-API-Fehler?
+            if (ex.Message.StartsWith("Router-Fehler:")) // Router-Fehler? (API-Key fehlt oder OpenAI nicht erreichbar)
             {
                 return $"KI-Dienste nicht erreichbar. Versuche es später.\n\nDetails: {ex.Message}";
             }
@@ -115,57 +145,58 @@ public class ChatCoordinator : IAsyncDisposable // Koordinator mit asynchroner A
         }
     }
 
-    public async Task<string> UploadFileAsync(string filePath) // Lädt Datei und extrahiert Text
+
+    public async Task<string> UploadFileAsync(string filePath) // Lädt Datei (PDF/TXT/MD/JSON) und extrahiert Text (wird von Home.razor aufgerufen wenn User Upload-Button klickt)
     {
-        if (!this.isInitialized) // Ist Coordinator initialisiert?
+        if (!this.isInitialized) // Services noch nicht initialisiert?
         {
-            await InitializeAsync(); // Nein -> Initialisiere jetzt
+            await InitializeAsync(); // Initialisiere jetzt
         }
 
         try
         {
-            this.currentFileName = Path.GetFileName(filePath); // Hole nur Dateinamen (ohne Pfad)
-            this.currentFileContent = await this.fileService.ExtractTextAsync(filePath); // Extrahiere Text mit FileService
+            this.currentFileName = Path.GetFileName(filePath); // Hole nur Dateinamen ohne Pfad (z.B. "Document.pdf")
+            this.currentFileContent = await this.fileService.ExtractTextAsync(filePath); // Extrahiere Text mit FileService (PDF ? Text via PDFtoText)
 
-            if (this.currentFileContent.StartsWith("Fehler:")) // Wenn Extraktion nicht erfolgreich war
+            if (this.currentFileContent.StartsWith("Fehler:")) // Text-Extraktion fehlgeschlagen?
             {
                 string errorMessage = this.currentFileContent; // Speichere Fehlermeldung
-                this.currentFileName = string.Empty; // Setze zurück bei Fehler
-                this.currentFileContent = string.Empty; // Setze zurück bei Fehler
-                return errorMessage;
+                this.currentFileName = string.Empty; // Reset: Dateiname löschen
+                this.currentFileContent = string.Empty; // Reset: Content löschen
+                return errorMessage; // Gib Fehlermeldung zurück
             }
 
             return $"Datei '{this.currentFileName}' geladen. Stelle jetzt deine Frage!";
         }
         catch (Exception ex)
         {
-            this.currentFileName = string.Empty; // Setze zurück bei Fehler
-            this.currentFileContent = string.Empty; // Setze zurück bei Fehler
+            this.currentFileName = string.Empty; // Reset: Dateiname löschen
+            this.currentFileContent = string.Empty; // Reset: Content löschen
             return $"Fehler beim Hochladen: {ex.Message}";
         }
     }
 
-    public void ClearFile() // Entfernt angehängte Datei
+    public void ClearFile() // Entfernt angehängte Datei (wird von Home.razor aufgerufen wenn User X-Button im Badge klickt)
     {
-        this.currentFileName = string.Empty; // Dateiname löschen
-        this.currentFileContent = string.Empty; // Datei-Inhalt löschen
+        this.currentFileName = string.Empty; // Dateiname löschen (Badge wird ausgeblendet)
+        this.currentFileContent = string.Empty; // Datei-Content löschen (wird nicht mehr an Services übergeben)
     }
 
-    public string GetCurrentFileName() // Gibt Dateinamen zurück
+    public string GetCurrentFileName() // Gibt Dateinamen zurück (für UI-Anzeige im Badge)
     {
-        return this.currentFileName; // Gib aktuellen Dateinamen zurück (oder leer)
+        return this.currentFileName; // Gib aktuellen Dateinamen zurück (oder leer wenn keine Datei)
     }
 
-    public async ValueTask DisposeAsync() // Räumt beide Services auf
+    public async ValueTask DisposeAsync() // Räumt alle Services auf (wird beim App-Shutdown aufgerufen)
     {
-        if (this.dataAnalysis != null) // Wenn DataAnalysis existiert?
+        if (this.dataAnalysis != null) // DataAnalysis-Service existiert?
         {
-            await this.dataAnalysis.DisposeAsync(); // Ja -> Räume auf
+            await this.dataAnalysis.DisposeAsync(); // Räume auf (disposes AI-Model)
         }
         
-        if (this.conversation != null) // Wenn Conversation existiert?
+        if (this.conversation != null) // Conversation-Service existiert?
         {
-            await this.conversation.DisposeAsync(); // Ja -> Räume auf
+            await this.conversation.DisposeAsync(); // Räume auf (disposes AI-Model)
         }
     }
 }

@@ -2,10 +2,14 @@
 @page "/"
 @page "/chat/{ChatId:int}"
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using Microsoft.Extensions.DependencyInjection
 @inject KIDT.Services.ChatCoordinator Chat
 @inject KIDT.Database.ChatDbService Db
 @inject KIDT.Services.ThumbnailGenerator ThumbGen
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IServiceProvider ServiceProvider
 @implements IDisposable
 
 <div class="chat-container"> @* Hauptcontainer *@
@@ -55,7 +59,7 @@
         }
 
         <div class="chat-input" role="search" aria-label="Chat Eingabe"> @* Input-Box *@
-            <textarea class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" @onkeydown="HandleKeyDown" rows="@rows" cols="@Cols"></textarea> @* Textfeld, gebunden an Property InputText *@
+            <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" @onkeydown="HandleKeyDown" rows="@rows" cols="@Cols"></textarea> @* Textfeld mit Referenz für direkten Zugriff *@
             <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Upload-Button *@
         </div>
     </div>
@@ -76,6 +80,8 @@ private class ChatMessage // Klasse für eine Chat-Nachricht
 
 private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
 private int currentConversationId; // Datenbank: Aktuelle Chat-ID
+private bool isSaving = false; // Flag: Verhindert Neuer-Chat während Speicherung läuft
+private ElementReference textareaRef; // Referenz zum textarea-Element für direkten DOM-Zugriff
 
     // Eingabe: wächst stufenweise pro Zeile
     private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
@@ -105,9 +111,31 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
         if (ChatId > 0) // Check: Soll bestehender Chat geladen werden?
         {
             currentConversationId = ChatId; // Nutze übergebene Chat-ID
-            List<KIDT.Models.Message> dbMessages = await Db.LoadMessagesAsync(currentConversationId); // Datenbank: Nachrichten laden
-
-            foreach (KIDT.Models.Message dbMsg in dbMessages) // Datenbank: DB-Messages in UI konvertieren
+            
+            // UI-Thread freigeben, dann laden
+            await Task.Yield();
+            
+            // PARALLEL mit SEPARATEN DbContext-Instanzen (verhindert Concurrency-Konflikt!)
+            List<KIDT.Models.Message> dbMessages;
+            List<KIDT.Models.UploadedFile> files;
+            
+            using (var scope1 = ServiceProvider.CreateScope())
+            using (var scope2 = ServiceProvider.CreateScope())
+            {
+                var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>();
+                var dbService2 = scope2.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>();
+                
+                var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Separate Instanz
+                var filesTask = dbService2.LoadFilesForConversationAsync(currentConversationId); // Separate Instanz
+                
+                await Task.WhenAll(messagesTask, filesTask); // Beide parallel, kein Konflikt!
+                
+                dbMessages = await messagesTask;
+                files = await filesTask;
+            }
+            
+            // Messages verarbeiten
+            foreach (KIDT.Models.Message dbMsg in dbMessages)
             {
                 var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser };
                 if (dbMsg.IsUser) // User-Nachrichten direkt anzeigen
@@ -115,19 +143,20 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
                     chatMsg.DisplayText = dbMsg.Text;
                     Messages.Add(chatMsg);
                 }
-                else // Assistent-Nachrichten mit Typewriter
+                else // Assistent-Nachrichten OHNE Typewriter (direkt vollständig anzeigen)
                 {
+                    chatMsg.DisplayText = dbMsg.Text; // Setze direkt den kompletten Text
                     Messages.Add(chatMsg);
-                    var typewriterTask = TypewriterEffect(chatMsg, dbMsg.Text); // Starte Typewriter im Hintergrund
                 }
             }
-
-            List<KIDT.Models.UploadedFile> files = await Db.LoadFilesForConversationAsync(currentConversationId); // Lade Files für diesen Chat
             
-            if (files.Count > 0) // Gibt es ein File?
+            // Files verarbeiten
+            if (files.Count > 0)
             {
                 UploadedFileName = files[0].FileName; // Zeige erstes File im Badge
             }
+            
+            StateHasChanged(); // UI einmal aktualisieren (mit Messages UND Badge!)
         }
         else // Neuer Chat
         {
@@ -137,6 +166,8 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
     private async void HandleNewChatRequest() // Wird aufgerufen wenn Event von MainLayout ausgelöst wird
     {
+        if (isSaving) return; // Warte bis Speicherung abgeschlossen ist
+        
         bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Check: Hat aktueller Chat Content?
         
         if (hasContent) // Nur wenn aktueller Chat nicht leer ist
@@ -153,6 +184,12 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
     private void UpdateRows() // Methode die aus inputText die sichtbaren Zeilen berechnet und rows begrenzt
     {
+        if (string.IsNullOrEmpty(inputText)) // Wenn leer, setze auf 1 Zeile
+        {
+            rows = 1;
+            return;
+        }
+        
         var lines = inputText.Split('\n'); // Splitte bei Newlines
         int total = 0; // Zähler für sichtbare Zeilen
         foreach (var line in lines) // Durchlaufe alle Zeilen
@@ -180,7 +217,8 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
     private async Task SendMessage() // Methode zum Senden der Nachricht aus inputText
     {
-        string text = InputText; // Hole InputText
+        // Text wurde schon per JavaScript aus textarea geleert, aber inputText hat noch den Wert
+        string text = inputText; // Hole Text aus inputText (wird von JavaScript nicht berührt)
         if (text == null) // Check: Ist null?
         {
             text = string.Empty; // Setze auf leer
@@ -188,25 +226,47 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
         text = text.Trim(); // Trimme Whitespace
         if (text.Length == 0) return; // leere Nachrichten nicht senden
         
-        if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
-        {
-            currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Ja -> Erstelle jetzt Conversation
-        }
+        isSaving = true; // Setze Flag: Speicherung läuft
         
+        // InputText für Blazor-Binding zurücksetzen
+        inputText = string.Empty; // Leere für Blazor
+        rows = 1; // Setze Zeilen zurück
+        
+        // 2. SOFORT: Nachricht in UI anzeigen
         Messages.Add(new ChatMessage { Text = text, DisplayText = text, IsUser = true }); // Benutzer-Nachricht hinzufügen
-        await Db.SaveMessageAsync(currentConversationId, true, text); // Datenbank: Speichern
-        await Db.UpdateConversationTitleAsync(currentConversationId); // Datenbank: Titel aktualisieren (falls erste Nachricht)
-        InputText = string.Empty; // Eingabe zurücksetzen
-        rows = 1; // Eingabefeld auf 1 Zeile setzen
-
+        StateHasChanged(); // UI sofort aktualisieren (User sieht Nachricht sofort!)
+        
+        // 3. SOFORT: Loading-Nachricht anzeigen
         var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
         Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
-        StateHasChanged(); // UI aktualisieren für Loading-Anzeige 
+        StateHasChanged(); // UI aktualisieren für Loading-Anzeige
+        
+        // 4. PARALLEL: DB-Speicherung + AI-Anfrage (kein await = blockiert nicht!)
+        int conversationIdForSave = currentConversationId; // Kopiere ID für async Task
+        
+        if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
+        {
+            currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Erstelle Conversation (muss sync sein)
+            conversationIdForSave = currentConversationId;
+        }
+        
+        // DB-Speicherung im Hintergrund (Fire-and-Forget während AI läuft)
+        var saveUserMessageTask = Task.Run(async () =>
+        {
+            await Db.SaveMessageAsync(conversationIdForSave, true, text); // Speichere User-Nachricht
+            await Db.UpdateConversationTitleAsync(conversationIdForSave); // Titel aktualisieren
+        });
 
-        var replyTask = Chat.SendAsync(text, currentConversationId); // Sende Nachricht an Chat-Service (asynchron)
+        // AI-Anfrage starten
+        var replyTask = Chat.SendAsync(text, conversationIdForSave); // Sende Nachricht an Chat-Service (asynchron)
         var minDelayTask = Task.Delay(1600); // Mindestens 1600ms (2x Blink-Zyklus)
+        
+        // Warte auf AI-Antwort + Mindestzeit (saveUserMessageTask läuft parallel!)
         await Task.WhenAll(replyTask, minDelayTask); // Warte auf beide: Antwort und Mindestzeit
         var reply = await replyTask; // Hole die Antwort
+        
+        // Warte bis User-Nachricht gespeichert ist (sollte schon fertig sein)
+        await saveUserMessageTask;
 
         Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
 
@@ -214,17 +274,30 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
         {
             var assistantMessage = new ChatMessage { Text = "", IsUser = false, IsLoading = false }; // Assistent-Nachricht hinzufügen
             Messages.Add(assistantMessage);
-            await Db.SaveMessageAsync(currentConversationId, false, reply); // Datenbank: Speichern
+            StateHasChanged(); // UI aktualisieren
             
-            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt und Ausgabe der Antwort
+            // Speichere Assistant-Antwort im Hintergrund während Typewriter läuft
+            var saveAssistantTask = Task.Run(async () =>
+            {
+                await Db.SaveMessageAsync(conversationIdForSave, false, reply); // Speichere Assistant-Nachricht
+            });
+            
+            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt (UI-Blockierend)
+            
+            await saveAssistantTask; // Warte bis Speicherung fertig (sollte schon sein)
         }
+        
+        isSaving = false; // Speicherung abgeschlossen
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e) // Enter = senden, Shift+Enter = neue Zeile
     {
         if (e.Key == "Enter" && !e.ShiftKey) // Check: Enter ohne Shift gedrückt?
         {
-            await SendMessage(); // Wenn ja, Sende Nachricht
+            // SOFORT: Leere textarea per JavaScript (verhindert zweite Zeile komplett!)
+            await JSRuntime.InvokeVoidAsync("textareaHelper.clearAndReset", "chatTextarea");
+            
+            await SendMessage(); // Dann Nachricht senden
         }
     }
 
@@ -243,36 +316,78 @@ private int currentConversationId; // Datenbank: Aktuelle Chat-ID
 
             if (result != null) // Check: Hat User eine Datei ausgewählt?
             {
-                if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
-                {
-                    currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Ja -> Erstelle jetzt Conversation
-                }
-                
+                // 1. SOFORT: Badge anzeigen
                 UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
                 StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
 
-                Messages.Add(new ChatMessage { Text = "Datei wird geladen...", IsUser = false, IsLoading = true }); // Zeige Loading-Nachricht (Loading-Bubble anzeigen)
+                // 2. SOFORT: Loading-Nachricht anzeigen
+                Messages.Add(new ChatMessage { Text = "Datei wird geladen...", IsUser = false, IsLoading = true }); // Zeige Loading-Nachricht
                 StateHasChanged(); // UI aktualisieren
 
-                string uploadResult = await Chat.UploadFileAsync(result.FullPath); // Lade Datei über ChatMcpService (Extrahiere Text aus Datei)
-
-                Messages.RemoveAt(Messages.Count - 1); // Entferne Loading-Nachricht (Lösche letzte Nachricht)
-
-                var uploadMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Zeige Ergebnis-Nachricht
-                Messages.Add(uploadMessage);
+                // 3. Datei hochladen und Text extrahieren
+                string uploadResult = await Chat.UploadFileAsync(result.FullPath); // Lade Datei über ChatMcpService
                 
-                await TypewriterEffect(uploadMessage, uploadResult); // Typewriter-Effekt für Upload-Ergebnis
+                Messages.RemoveAt(Messages.Count - 1); // Entferne Loading-Nachricht
+
+                // 4. SOFORT: Ergebnis-Nachricht anzeigen
+                var uploadMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
+                Messages.Add(uploadMessage);
+                StateHasChanged(); // UI sofort aktualisieren
 
                 if (uploadResult.StartsWith("Fehler")) // Check: War Upload fehlgeschlagen?
                 {
                     UploadedFileName = string.Empty; // Entferne Badge bei Fehler
-                    StateHasChanged(); // UI aktualisieren
+                    await TypewriterEffect(uploadMessage, uploadResult); // Fehler mit Typewriter
+                    StateHasChanged();
                 }
                 else // Upload erfolgreich
                 {
-                    string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath); // Generiere Thumbnail
-                    await Db.SaveUploadedFileAsync(currentConversationId, result.FileName, uploadResult, thumbnail); // Datenbank: File speichern mit Thumbnail
-                    await Db.UpdateConversationTitleAsync(currentConversationId); // Datenbank: Titel aktualisieren
+                    // 5. PARALLEL: Typewriter + DB-Speicherung
+                    int conversationIdForSave = currentConversationId;
+                    
+                    if (currentConversationId == 0) // Conversation erstellen falls nötig
+                    {
+                        currentConversationId = await Db.CreateConversationAsync("Neuer Chat");
+                        conversationIdForSave = currentConversationId;
+                    }
+                    
+                    // Speicherung im Hintergrund während Typewriter läuft
+                    var saveFileTask = Task.Run(async () =>
+                    {
+                        // 1. Generiere Thumbnail
+                        string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath);
+                        
+                        // 2. Speichere in UploadedFiles (pro Conversation)
+                        await Db.SaveUploadedFileAsync(conversationIdForSave, result.FileName, uploadResult, thumbnail);
+                        
+                        // 3. Speichere auch in Documents (global, für Dokumente-Seite)
+                        using (var scope = ServiceProvider.CreateScope())
+                        {
+                            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>();
+                            string fileExtension = System.IO.Path.GetExtension(result.FileName).ToLower();
+                            string fileType = fileExtension switch
+                            {
+                                ".pdf" => "pdf",
+                                ".txt" => "txt",
+                                ".md" => "md",
+                                ".json" => "json",
+                                _ => "unknown"
+                            };
+                            
+                            // SaveDocumentAsync speichert nur wenn nicht bereits vorhanden (Duplikat-Check via Hash)
+                            await docDbService.SaveDocumentAsync(result.FileName, uploadResult, fileType, uploadResult, thumbnail);
+                        }
+                        
+                        // 4. Speichere Upload-Nachricht als Message
+                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult);
+                        
+                        // 5. Titel aktualisieren
+                        await Db.UpdateConversationTitleAsync(conversationIdForSave);
+                    });
+                    
+                    await TypewriterEffect(uploadMessage, uploadResult); // Typewriter läuft parallel
+                    
+                    await saveFileTask; // Warte bis Speicherung fertig (sollte schon sein)
                 }
             }
         }

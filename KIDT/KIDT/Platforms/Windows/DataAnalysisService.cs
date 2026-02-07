@@ -2,6 +2,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text;
+using KIDT.Database;
 
 namespace KIDT.Services;
 
@@ -15,13 +16,18 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
     private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
     private string systemInstructions = "Du bist ein Daten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Standard-Systemanweisung
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
+    private DocumentDbService? docDbService; // Service für Dokumenten-Zugriff
+    private int currentConversationId = 0; // Aktuelle Conversation-ID
 
-    public async Task InitializeAsync() // Lädt qwen2.5, registriert MCP-Tools, lädt Instructions aus MD-Datei
+    public async Task InitializeAsync(DocumentDbService documentDbService, int conversationId) // Lädt qwen2.5, lädt Instructions aus MD-Datei
     {
         if (this.isInitialized) return; // Wenn schon initialisiert -> raus
 
         try
         {
+            this.docDbService = documentDbService; // Speichere DocumentDbService
+            this.currentConversationId = conversationId; // Speichere Conversation-ID
+            
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
             builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
                 modelId: "qwen2.5:7b",
@@ -30,7 +36,8 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             );
             this.kernel = builder.Build(); // Baue Kernel aus Builder
 
-            McpToolsRegistry.RegisterTools(this.kernel); // Registriere alle MCP-Tools im Kernel
+            // KEINE MCP-Tools - nur Router nutzt search_documents() und add_document_to_chat()
+            // DataAnalysis fokussiert sich auf die Analyse vorhandener Daten
 
             this.chatService = this.kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service aus Kernel
 
@@ -62,11 +69,6 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
 
     public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sendet Nachricht mit optionalem Datei-Anhang, benutzerdefiniertem MaxTokens und letztem Gesprächsverlauf
     {
-        if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
-        {
-            await InitializeAsync(); // Initialisiere jetzt
-        }
-
         if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind und nicht initialisiert wurden
         {
             return "Fehler: Daten-Analyse-Service nicht initialisiert.";
@@ -102,7 +104,6 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
-                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions, // Aktiviere automatische Tool-Aufrufe
                 Temperature = 0.3, // Niedrige Temperatur = präzise, weniger Kreativität
                 MaxTokens = maxTokens // Setze dynamisches MaxTokens-Limit
             };

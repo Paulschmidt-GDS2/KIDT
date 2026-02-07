@@ -1,104 +1,220 @@
-@* Daten-Seite: Zeigt alle Chat-Historien in Grid-Layout *@
+@* Daten-Seite: Zeigt Chats und Dokumente in Tabs *@
 @page "/daten"
 @using KIDT.Models
-@inject KIDT.Database.ChatDbService Db
+@inject KIDT.Database.ChatDbService ChatDb
+@inject KIDT.Database.DocumentDbService DocDb
 @inject NavigationManager Navigation
 
-<div class="data-container"> @* Hauptcontainer *@
-    <div class="data-grid"> @* Grid-Container für Chat-Cards *@
-        @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
+<div class="page-container"> @* Hauptcontainer für gesamte Seite *@
+    <div class="tab-navigation"> @* Tab-Navigation oben *@
+        <button class="tab-button @(currentTab == "Chats" ? "active" : "")" @onclick='() => currentTab = "Chats"'>Chats</button>
+        <button class="tab-button @(currentTab == "Dokumente" ? "active" : "")" @onclick='() => currentTab = "Dokumente"'>Dokumente</button>
+    </div>
+
+    @if (currentTab == "Chats") @* Chats-Tab *@
+    {
+        <div class="data-container"> @* Hauptcontainer *@
+        @if (isLoadingChats) @* Zeige Loading-Indikator *@
         {
-            <div class="chat-card"> @* Chat-Card *@
-                <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" title="Chat löschen" aria-label="Chat löschen"> @* Lösch-Button (stopPropagation verhindert OpenChat) *@
-                    <img src="images/remove.png" alt="Löschen" />
-                </button>
-                <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich für OpenChat *@
-                    <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
-                    
-                    @if (chat.UploadedFiles.Count > 0) @* Check: Hat dieser Chat ein File? *@
-                    {
-                        <div class="card-file-preview"> @* File-Vorschau (60% der Box) *@
-                            @if (!string.IsNullOrEmpty(chat.UploadedFiles[0].ThumbnailBase64)) @* Check: Hat File ein Thumbnail? *@
-                            {
-                                <img src="@("data:image/png;base64," + chat.UploadedFiles[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
-                            }
-                            else @* Kein Thumbnail -> Zeige großes Icon *@
-                            {
-                                @if (chat.UploadedFiles[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
-                                {
-                                    <img src="images/file.png" alt="PDF" class="preview-icon-large" />
-                                }
-                                else if (chat.UploadedFiles[0].FileName.EndsWith(".txt")) @* TXT-Icon *@
-                                {
-                                    <img src="images/file.png" alt="Text" class="preview-icon-large" />
-                                }
-                                else @* Sonstiges *@
-                                {
-                                    <img src="images/file.png" alt="Datei" class="preview-icon-large" />
-                                }
-                            }
-                        </div>
-                        
-                        <div class="card-filename">@chat.UploadedFiles[0].FileName</div> @* Dateiname darunter *@
-                    }
-                    
-                    <div class="card-date">@chat.CreatedAt.ToString("dd.MM.yyyy HH:mm")</div> @* Datum ganz unten *@
-                </div>
+            <div class="loading-container">
+                <p>Chats werden geladen...</p>
             </div>
         }
-    </div>
+        else
+        {
+            <div class="data-grid"> @* Grid-Container für Chat-Cards *@
+                @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
+                {
+                    <div class="chat-card"> @* Chat-Card *@
+                        <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" disabled="@isDeleting" title="Chat löschen" aria-label="Chat löschen"> @* Lösch-Button (disabled während Löschvorgang) *@
+                            <img src="images/remove.png" alt="Löschen" />
+                        </button>
+                        <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich für OpenChat *@
+                            <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
+                            
+                            @if (chat.UploadedFiles.Count > 0) @* Check: Hat dieser Chat ein File? *@
+                            {
+                                <div class="card-file-preview"> @* File-Vorschau mit Thumbnail *@
+                                    @if (!string.IsNullOrEmpty(chat.UploadedFiles[0].ThumbnailBase64)) @* Check: Hat File ein Thumbnail? *@
+                                    {
+                                        <img src="@("data:image/png;base64," + chat.UploadedFiles[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
+                                    }
+                                    else @* Kein Thumbnail -> Zeige Icon *@
+                                    {
+                                        @if (chat.UploadedFiles[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
+                                        {
+                                            <img src="images/file.png" alt="PDF" class="preview-icon-large" />
+                                        }
+                                        else if (chat.UploadedFiles[0].FileName.EndsWith(".txt")) @* TXT-Icon *@
+                                        {
+                                            <img src="images/file.png" alt="Text" class="preview-icon-large" />
+                                        }
+                                        else @* Sonstiges *@
+                                        {
+                                            <img src="images/file.png" alt="Datei" class="preview-icon-large" />
+                                        }
+                                    }
+                                </div>
+                                
+                                <div class="card-filename">@chat.UploadedFiles[0].FileName</div> @* Dateiname darunter *@
+                            }
+                            
+                            <div class="card-date">@GetFormattedDate(chat.CreatedAt)</div> @* Datum ganz unten (konvertiert zu Lokalzeit) *@
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        </div>
+    }
+    else if (currentTab == "Dokumente") @* Dokumente-Tab *@
+    {
+        <div class="data-container-documents"> @* Hauptcontainer für Explorer-Ansicht *@
+        @if (isLoadingDocuments) @* Zeige Loading-Indikator *@
+        {
+            <div class="loading-container">
+                <p>Dokumente werden geladen...</p>
+            </div>
+        }
+        else
+        {
+            <div class="documents-explorer"> @* Explorer-Container *@
+                @if (Documents.Count == 0) @* Keine Dokumente vorhanden *@
+                {
+                    <div class="empty-state">
+                        <p>Keine Dokumente vorhanden</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var doc in Documents) @* Durchlaufe alle Dokumente *@
+                    {
+                        <div class="document-row"> @* Explorer-Style Row *@
+                            <div class="document-thumbnail"> @* Thumbnail/Icon Bereich *@
+                                @if (!string.IsNullOrEmpty(doc.ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
+                                {
+                                    <img src="@("data:image/png;base64," + doc.ThumbnailBase64)" alt="Vorschau" class="doc-thumb-img" />
+                                }
+                                else @* Kein Thumbnail -> Zeige Icon *@
+                                {
+                                    <img src="images/file.png" alt="@doc.FileType" class="doc-icon-img" />
+                                }
+                            </div>
+                            <div class="document-info"> @* Info-Bereich *@
+                                <div class="document-name">@doc.FileName</div> @* Dateiname *@
+                                <div class="document-meta">@doc.FileType.ToUpper() • @GetFormattedDate(doc.UploadedAt)</div> @* Typ und Datum *@
+                            </div>
+                            <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" disabled="@isDeletingDocument" title="Dokument löschen" aria-label="Dokument löschen"> @* Lösch-Button *@
+                                <img src="images/remove.png" alt="Löschen" />
+                            </button>
+                        </div>
+                    }
+                }
+            </div>
+        }
+        </div>
+    }
 </div>
 
 @code {
-    private List<Conversation> Chats = new List<Conversation>(); // Liste aller Chats
+private string currentTab = "Chats"; // Aktueller Tab (Chats oder Dokumente)
+private List<Conversation> Chats = new List<Conversation>(); // Liste aller Chats
+private List<Document> Documents = new List<Document>(); // Liste aller Dokumente
+private bool isDeleting = false; // Flag: Verhindert mehrfaches Löschen gleichzeitig (Chats)
+private bool isDeletingDocument = false; // Flag: Verhindert mehrfaches Löschen gleichzeitig (Dokumente)
+private bool isLoadingChats = true; // Flag: Zeigt Loading-State für Chats an
+private bool isLoadingDocuments = true; // Flag: Zeigt Loading-State für Dokumente an
 
-    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
-    {
-        Chats = await Db.LoadAllConversationsAsync(); // Lade alle Conversations aus DB
-        
-        List<Conversation> sortedChats = new List<Conversation>(); // Neue Liste für sortierte Chats
-        
-        foreach (Conversation chat in Chats) // Sortiere Chats nach Datum (neueste zuerst)
-        {
-            sortedChats.Add(chat); // Füge alle Chats hinzu
-        }
-        
-        for (int i = 0; i < sortedChats.Count - 1; i++) // Bubble-Sort: Sortiere nach Datum
-        {
-            for (int j = 0; j < sortedChats.Count - i - 1; j++)
-            {
-                if (sortedChats[j].CreatedAt < sortedChats[j + 1].CreatedAt) // Vergleiche Datum
-                {
-                    Conversation temp = sortedChats[j]; // Tausche Positionen
-                    sortedChats[j] = sortedChats[j + 1];
-                    sortedChats[j + 1] = temp;
-                }
-            }
-        }
-        
-        Chats = sortedChats; // Überschreibe mit sortierter Liste
-    }
+protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
+{
+    await Task.Yield(); // Gibt UI-Thread frei
+    
+    Chats = await ChatDb.LoadAllConversationsAsync(); // Lade alle Conversations aus DB (bereits sortiert!)
+    isLoadingChats = false; // Loading für Chats beendet
+    StateHasChanged(); // UI aktualisieren
+    
+    Documents = await DocDb.GetAllDocumentsAsync(); // Lade alle Dokumente aus DB (bereits sortiert!)
+    isLoadingDocuments = false; // Loading für Dokumente beendet
+    StateHasChanged(); // UI aktualisieren
+}
 
-    private void OpenChat(int chatId) // Öffnet einen Chat
-    {
-        Navigation.NavigateTo("/chat/" + chatId); // Navigiere zu Chat mit ID
-    }
+private void OpenChat(int chatId) // Öffnet einen Chat
+{
+    Navigation.NavigateTo("/chat/" + chatId); // Navigiere zu Chat mit ID
+}
 
-    private async Task DeleteChat(int chatId) // Löscht einen Chat
+private async Task DeleteChat(int chatId) // Löscht einen Chat
+{
+    if (isDeleting) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+    
+    isDeleting = true; // Setze Flag
+    
+    // 1. SOFORT: Entferne aus UI (User sieht sofort dass Chat weg ist!)
+    Chats = Chats.Where(c => c.Id != chatId).ToList();
+    StateHasChanged(); // UI sofort aktualisieren
+    
+    // 2. DANN: Lösche aus DB im Hintergrund
+    try
     {
-        await Db.DeleteConversationAsync(chatId); // Datenbank: Chat löschen
-        
-        List<Conversation> updatedChats = new List<Conversation>(); // Neue Liste ohne gelöschten Chat
-        
-        foreach (Conversation chat in Chats) // Durchlaufe alle Chats
+        await Task.Run(async () =>
         {
-            if (chat.Id != chatId) // Ist es nicht der gelöschte Chat?
-            {
-                updatedChats.Add(chat); // Ja -> Behalte diesen Chat
-            }
-        }
-        
-        Chats = updatedChats; // Überschreibe mit aktualisierter Liste
-        StateHasChanged(); // UI aktualisieren
+            await ChatDb.DeleteConversationAsync(chatId); // DB-Löschung im Hintergrund
+        });
     }
+    catch (Exception ex)
+    {
+        // Bei Fehler: Chat wieder hinzufügen (Rollback)
+        System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}");
+        // Chat ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint er wieder
+    }
+    finally
+    {
+        isDeleting = false; // Flag zurücksetzen
+    }
+}
+
+private async Task DeleteDocument(int documentId) // Löscht ein Dokument
+{
+    if (isDeletingDocument) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+    
+    isDeletingDocument = true; // Setze Flag
+    
+    // 1. SOFORT: Entferne aus UI (User sieht sofort dass Dokument weg ist!)
+    Documents = Documents.Where(d => d.Id != documentId).ToList();
+    StateHasChanged(); // UI sofort aktualisieren
+    
+    // 2. DANN: Lösche aus DB im Hintergrund
+    try
+    {
+        await Task.Run(async () =>
+        {
+            await DocDb.DeleteDocumentAsync(documentId); // DB-Löschung im Hintergrund
+        });
+    }
+    catch (Exception ex)
+    {
+        // Bei Fehler: Dokument wieder hinzufügen (Rollback)
+        System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Dokuments: {ex.Message}");
+        // Dokument ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint es wieder
+    }
+    finally
+    {
+        isDeletingDocument = false; // Flag zurücksetzen
+    }
+}
+
+private string GetFormattedDate(DateTime createdAt) // Formatiert Datum korrekt
+{
+    if (createdAt.Year < 2000) // Check: Ist Datum ungültig (0001 oder ähnlich)?
+    {
+        return "Unbekanntes Datum"; // Zeige Fallback
+    }
+    
+    // Behandle als UTC und konvertiere zu Lokalzeit
+    DateTime localTime = createdAt.Kind == DateTimeKind.Unspecified 
+        ? DateTime.SpecifyKind(createdAt, DateTimeKind.Utc).ToLocalTime() 
+        : createdAt.ToLocalTime();
+    
+    return localTime.ToString("dd.MM.yyyy HH:mm"); // Formatiere lokal
+}
 }

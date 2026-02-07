@@ -1,5 +1,49 @@
 /* Daten.razor Component Styles */
 
+/* === PAGE-CONTAINER === */
+
+/* Container für gesamte Seite mit Tabs */
+.page-container {
+    height: 100%; /* Füllt gesamte Höhe */
+    display: flex; /* Flexbox für vertikales Layout */
+    flex-direction: column; /* Kinder vertikal stapeln */
+}
+
+/* === TAB-NAVIGATION === */
+
+/* Container für Tab-Buttons */
+.tab-navigation {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    gap: 75px; /* 2cm Abstand zwischen Buttons (~75px) */
+    padding: 16px 32px 0 32px; /* Oben und seitlich Abstand, unten keiner */
+    background: transparent; /* Kein Hintergrund */
+    justify-content: center; /* Horizontal zentrieren */
+}
+
+/* Einzelner Tab-Button */
+.tab-button {
+    padding: 12px 24px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen rundum */
+    border-radius: 6px; /* Alle Ecken abgerundet */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 16px; /* Schriftgröße */
+    font-weight: 500; /* Mittleres Gewicht */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: background 0.2s ease; /* Smooth Hintergrund-Übergang */
+}
+
+/* Tab-Button beim Hover */
+.tab-button:hover {
+    background: rgba(132, 136, 119, 0.2); /* Leicht heller Hintergrund */
+}
+
+/* Aktiver Tab-Button */
+.tab-button.active {
+    background: #848877; /* Heller Hintergrund */
+    font-weight: 600; /* Fettgedruckt */
+}
+
 /* Hauptcontainer */
 .data-container {
     height: 100%; /* Füllt gesamte Höhe */
@@ -42,14 +86,15 @@
     grid-template-columns: repeat(4, 1fr); /* 4 Spalten */
     gap: 24px; /* Abstand zwischen Cards */
     width: 100%; /* Volle Breite */
-    max-width: 1400px; /* Maximale Breite */
+    max-width: calc(320px * 4 + 24px * 3); /* Max: 4 Boxen à 320px + 3 Gaps = 1352px */
+    margin: 0 auto; /* Horizontal zentrieren */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
-@media (min-width: 1400px) {
+@media (min-width: 1600px) {
     .data-grid {
-        max-width: 1820px; /* 1400px * 1.3 = 1820px */
-        gap: 31px; /* 24px * 1.3 = 31.2px ? 31px */
+        max-width: calc(416px * 4 + 31px * 3); /* 320px*1.3 = 416px, 24px*1.3 = 31px ? 1757px */
+        gap: 31px; /* 24px * 1.3 = 31px */
     }
 }
 
@@ -87,16 +132,22 @@
     flex-direction: column; /* Kinder vertikal stapeln */
     gap: 12px; /* Abstand zwischen Elementen */
     min-height: 280px; /* Größere Mindesthöhe für Preview */
+    max-height: 400px; /* Maximale Höhe (verhindert zu große Boxen) */
+    max-width: 320px; /* Maximale Breite pro Box (verhindert zu breite Boxen) */
+    width: 100%; /* Nutzt verfügbaren Platz im Grid */
     box-sizing: border-box; /* Padding in Breite einrechnen */
     position: relative; /* Für absoluten Delete-Button */
+    overflow: hidden; /* Verhindert Content-Overflow */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
-@media (min-width: 1400px) {
+@media (min-width: 1600px) {
     .chat-card {
-        padding: 21px; /* 16px * 1.3 = 20.8px ? 21px */
-        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        padding: 21px; /* 16px * 1.3 = 21px */
+        gap: 16px; /* 12px * 1.3 = 16px */
         min-height: 364px; /* 280px * 1.3 = 364px */
+        max-height: 520px; /* 400px * 1.3 = 520px */
+        max-width: 416px; /* 320px * 1.3 = 416px */
     }
 }
 
@@ -255,6 +306,12 @@
 .card-title {
     color: #0D0E0C; /* Textfarbe */
     font-size: 16px; /* Schriftgröße */
+    font-weight: 500; /* Mittleres Gewicht */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    max-width: 100%; /* Maximale Breite */
+}
     font-weight: bold; /* Fettgedruckt */
     overflow: hidden; /* Überfluss verstecken */
     text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
@@ -289,5 +346,259 @@
         padding-top: 10px; /* 8px * 1.3 = 10.4px ? 10px */
     }
 }
+
+/* === DOKUMENT-CARD === */
+
+/* Einzelne Dokument-Card (keine Klick-Funktion, nur Anzeige) */
+.document-card {
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 6px; /* Abgerundete Ecken */
+    padding: 16px; /* Innenabstand */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 12px; /* Abstand zwischen Elementen */
+    min-height: 280px; /* Größere Mindesthöhe für Preview */
+    max-height: 400px; /* Maximale Höhe (verhindert zu große Boxen) */
+    max-width: 320px; /* Maximale Breite pro Box (verhindert zu breite Boxen) */
+    width: 100%; /* Nutzt verfügbaren Platz im Grid */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    overflow: hidden; /* Verhindert Content-Overflow */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1600px) {
+    .document-card {
+        padding: 21px; /* 16px * 1.3 = 21px */
+        gap: 16px; /* 12px * 1.3 = 16px */
+        min-height: 364px; /* 280px * 1.3 = 364px */
+        max-height: 520px; /* 400px * 1.3 = 520px */
+        max-width: 416px; /* 320px * 1.3 = 416px */
     }
+}
+
+/* Card-Content für Dokumente (nicht klickbar) */
+.card-content-doc {
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 12px; /* Abstand zwischen Elementen */
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .card-content-doc {
+        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+    }
+}
+
+/* === DOKUMENTE EXPLORER-ANSICHT === */
+
+/* Container für Explorer-Ansicht der Dokumente */
+.data-container-documents {
+    height: 100%; /* Füllt gesamte Höhe */
+    overflow-y: auto; /* Vertikaler Scroll wenn nötig */
+    padding: 32px; /* Außenabstand */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+}
+
+/* Scrollbar-Breite */
+.data-container-documents::-webkit-scrollbar {
+    width: 8px; /* Breite der Scrollbar */
+    height: 8px; /* Höhe für horizontale Scrollbar */
+}
+
+/* Scrollbar-Hintergrund */
+.data-container-documents::-webkit-scrollbar-track {
+    background: transparent; /* Transparenter Hintergrund */
+    border-radius: 8px; /* Abgerundete Ecken */
+}
+
+/* Scrollbar-Griff */
+.data-container-documents::-webkit-scrollbar-thumb {
+    background: #0D0E0C; /* Dunkler Griff */
+    border-radius: 8px; /* Abgerundete Ecken */
+    border: 2px solid transparent; /* Transparenter Rahmen */
+}
+
+    /* Scrollbar-Griff beim Hover */
+    .data-container-documents::-webkit-scrollbar-thumb:hover {
+        background: #0E0F0D; /* Extrem subtil heller beim Hover */
+    }
+
+/* Explorer-Container */
+.documents-explorer {
+    max-width: 900px; /* Maximale Breite */
+    margin: 0 auto; /* Zentrieren */
+}
+
+/* Einzelne Dokument-Zeile (Explorer-Style) */
+.document-row {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    align-items: center; /* Vertikal zentrieren */
+    padding: 12px 16px; /* Innenabstand */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 6px; /* Abgerundete Ecken */
+    margin-bottom: 8px; /* Abstand zwischen Zeilen */
+    background: transparent; /* Transparenter Hintergrund */
+    transition: background 0.2s ease; /* Smooth Übergang */
+    cursor: default; /* Standard-Cursor (nicht klickbar) */
+    position: relative; /* Für absoluten Delete-Button */
+}
+
+/* Dokument-Zeile beim Hover */
+.document-row:hover {
+    background: rgba(132, 136, 119, 0.3); /* Leicht heller Hintergrund */
+}
+
+/* Lösch-Button für Dokumente */
+.document-delete-btn {
+    background: none; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    cursor: pointer; /* Zeiger-Cursor */
+    padding: 8px; /* Innenabstand */
+    opacity: 0; /* Standardmäßig unsichtbar */
+    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
+    margin-left: 16px; /* Abstand zum Info-Bereich */
+    flex-shrink: 0; /* Nicht schrumpfen */
+}
+
+/* Delete-Button sichtbar beim Hover auf Row */
+.document-row:hover .document-delete-btn {
+    opacity: 0.7; /* Sichtbar beim Hover */
+}
+
+/* Delete-Button beim Hover */
+.document-delete-btn:hover {
+    opacity: 1; /* Voll sichtbar beim direkten Hover */
+}
+
+/* Icon im Delete-Button */
+.document-delete-btn img {
+    width: 18px; /* Icon-Breite */
+    height: 18px; /* Icon-Höhe */
+    display: block; /* Verhindert Inline-Spacing */
+}
+
+/* Fullscreen-Modus */
+@media (min-width: 1600px) {
+    .document-delete-btn {
+        padding: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+        margin-left: 21px; /* 16px * 1.3 = 21px */
+    }
+
+    .document-delete-btn img {
+        width: 23px; /* 18px * 1.3 = 23.4px ? 23px */
+        height: 23px; /* 18px * 1.3 = 23.4px ? 23px */
+    }
+}
+
+/* Thumbnail/Icon Bereich */
+.document-thumbnail {
+    width: 48px; /* Feste Breite */
+    height: 48px; /* Feste Höhe */
+    flex-shrink: 0; /* Nicht schrumpfen */
+    display: flex; /* Flexbox für Zentrierung */
+    align-items: center; /* Vertikal zentrieren */
+    justify-content: center; /* Horizontal zentrieren */
+    margin-right: 16px; /* Abstand zum Text */
+    background: rgba(13, 14, 12, 0.05); /* Leicht dunkler Hintergrund */
+    border-radius: 4px; /* Abgerundete Ecken */
+    overflow: hidden; /* Schneidet überflüssige Teile ab */
+}
+
+/* Thumbnail-Bild */
+.doc-thumb-img {
+    width: 100%; /* Volle Breite */
+    height: 100%; /* Volle Höhe */
+    object-fit: cover; /* Bild zuschneiden */
+}
+
+/* Icon-Bild */
+.doc-icon-img {
+    width: 32px; /* Icon-Breite */
+    height: 32px; /* Icon-Höhe */
+    opacity: 0.4; /* Leicht transparent */
+}
+
+/* Info-Bereich */
+.document-info {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    overflow: hidden; /* Überfluss verstecken */
+}
+
+/* Dokumenten-Name */
+.document-name {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 15px; /* Schriftgröße */
+    font-weight: 500; /* Mittleres Gewicht */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    margin-bottom: 4px; /* Abstand nach unten */
+}
+
+/* Dokumenten-Metadaten (Typ + Datum) */
+.document-meta {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 13px; /* Kleinere Schriftgröße */
+    opacity: 0.6; /* Leicht transparent */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+/* Empty State (keine Dokumente) */
+.empty-state {
+    text-align: center; /* Zentrieren */
+    padding: 60px 20px; /* Innenabstand */
+    color: #0D0E0C; /* Textfarbe */
+    opacity: 0.5; /* Leicht transparent */
+}
+
+    .empty-state p {
+        font-size: 16px; /* Schriftgröße */
+    }
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1600px) {
+    .documents-explorer {
+        max-width: 1170px; /* 900px * 1.3 = 1170px */
+    }
+
+    .document-row {
+        padding: 16px 21px; /* 12px*1.3=16px, 16px*1.3=21px */
+        margin-bottom: 10px; /* 8px * 1.3 = 10px */
+    }
+
+    .document-thumbnail {
+        width: 62px; /* 48px * 1.3 = 62px */
+        height: 62px; /* 48px * 1.3 = 62px */
+        margin-right: 21px; /* 16px * 1.3 = 21px */
+    }
+
+    .doc-icon-img {
+        width: 42px; /* 32px * 1.3 = 42px */
+        height: 42px; /* 32px * 1.3 = 42px */
+    }
+
+    .document-name {
+        font-size: 20px; /* 15px * 1.3 = 19.5px ? 20px */
+        margin-bottom: 5px; /* 4px * 1.3 = 5.2px ? 5px */
+    }
+
+    .document-meta {
+        font-size: 17px; /* 13px * 1.3 = 16.9px ? 17px */
+    }
+
+    .empty-state {
+        padding: 78px 26px; /* 60px*1.3=78px, 20px*1.3=26px */
+    }
+
+        .empty-state p {
+            font-size: 21px; /* 16px * 1.3 = 20.8px ? 21px */
+        }
+}
 }

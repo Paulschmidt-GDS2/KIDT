@@ -23,6 +23,20 @@
         <a class="dismiss">🗙</a>
     </div>
 
+    <script>
+        // Textarea-Helper direkt inline
+        window.textareaHelper = {
+            clearAndReset: function(elementId) {
+                const textarea = document.getElementById(elementId);
+                if (textarea) {
+                    textarea.value = '';
+                    textarea.rows = 1;
+                    textarea.style.height = 'auto';
+                }
+            }
+        };
+    </script>
+    
     <script src="_framework/blazor.webview.js" autostart="false"></script>
 
 </body>

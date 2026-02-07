@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using KIDT.Services;
 using KIDT.Database;
+using Microsoft.EntityFrameworkCore;
 
 namespace KIDT
 {
@@ -17,8 +18,14 @@ namespace KIDT
                 });
 
             builder.Services.AddMauiBlazorWebView();
+            
+            // DbContext als Transient (jede Operation bekommt eigene Instanz - wichtig für MAUI!)
+            builder.Services.AddDbContext<ChatDbContext>(ServiceLifetime.Transient);
+            
+            // Services registrieren
             builder.Services.AddSingleton<ChatCoordinator>();
-            builder.Services.AddSingleton<ChatDbService>();
+            builder.Services.AddTransient<ChatDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
+            builder.Services.AddTransient<DocumentDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
             builder.Services.AddSingleton<ThumbnailGenerator>();
 
 #if DEBUG
@@ -26,7 +33,16 @@ namespace KIDT
     		builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
+            var app = builder.Build();
+            
+            // Einmalige DB-Initialisierung beim App-Start
+            using (var scope = app.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+                dbContext.Database.EnsureCreated(); // Erstelle Tabellen wenn nicht vorhanden
+            }
+
+            return app;
         }
     }
 }
