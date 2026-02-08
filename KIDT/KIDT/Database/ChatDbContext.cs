@@ -13,14 +13,15 @@ public class ChatDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
-        // MySQL LOKAL statt Cloud
+        // MySQL Connection String
+        // WICHTIG: Für Multi-User einfach "localhost" durch Server-IP ersetzen!
         string connectionString =
-            "Server=localhost;" +           // Lokal auf diesem PC
-            "Port=3306;" +                  // Standard MySQL Port
-            "Database=kidt_chat;" +         // Deine Datenbank-Name
-            "User=root;" +                  // MySQL User (oder kidt_user)
-            "Password=kidt123;" +           // Dein Root-Passwort
-            "AllowUserVariables=true;";     // Für EF Core
+            "Server=localhost;" +           // Teamkollege: Ändere zu Server-IP (192.168.178.7)
+            "Port=3306;" +                  
+            "Database=kidt_chat;" +         
+            "User=root;" +                  // Teamkollege: Ändere zu "kidt_user"
+            "Password=kidt123;" +           
+            "AllowUserVariables=true;";     
         
         options.UseMySQL(connectionString);
     }

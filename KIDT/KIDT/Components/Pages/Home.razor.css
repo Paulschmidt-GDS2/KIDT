@@ -400,3 +400,182 @@ body {
     .new-chat-btn:active {
         transform: scale(0.98); /* Leicht verkleinern */
     }
+
+/* === GEFUNDENE DOKUMENTE IM CHAT === */
+
+/* Grid für gefundene Dokumente (horizontal scrollbar) */
+.found-documents-grid {
+    display: flex; /* Flexbox für horizontales Layout */
+    gap: 12px; /* Abstand zwischen Cards */
+    margin-top: 12px; /* Abstand zur Nachricht */
+    overflow-x: auto; /* Horizontal scrollbar bei vielen Dokumenten */
+    padding-bottom: 8px; /* Platz für Scrollbar */
+    scrollbar-color: #0D0E0C transparent; /* Firefox: Dunkler Griff, transparenter Hintergrund */
+    scrollbar-width: thin; /* Dünne Scrollbar */
+}
+
+/* Scrollbar Webkit */
+.found-documents-grid::-webkit-scrollbar {
+    height: 6px; /* Höhe der Scrollbar */
+}
+
+.found-documents-grid::-webkit-scrollbar-track {
+    background: transparent; /* Transparenter Hintergrund */
+}
+
+.found-documents-grid::-webkit-scrollbar-thumb {
+    background: #0D0E0C; /* Dunkler Griff */
+    border-radius: 4px; /* Abgerundete Ecken */
+}
+
+/* Dokument-Card im Chat */
+.document-card-chat {
+    min-width: 180px; /* Minimale Breite pro Card */
+    max-width: 180px; /* Maximale Breite */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 6px; /* Abgerundete Ecken */
+    padding: 12px; /* Innenabstand */
+    background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    display: flex; /* Flexbox */
+    flex-direction: column; /* Vertikal stapeln */
+    gap: 8px; /* Abstand zwischen Elementen */
+    flex-shrink: 0; /* Verhindert Schrumpfen */
+}
+
+.doc-card-content {
+    cursor: pointer; /* Zeiger-Cursor für Klick */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.document-card-chat:hover {
+    background: rgba(132, 136, 119, 0.2); /* Heller beim Hover */
+}
+
+/* Button zum Hinzufügen - Minimalistisch */
+.add-doc-btn {
+    width: auto; /* Nur so breit wie der Text */
+    padding: 3px 2px; /* Vertikal 3px, horizontal sehr schmal (2px) */
+    background: transparent; /* Transparenter Hintergrund */
+    color: #0D0E0C; /* Gleiche Schriftfarbe wie alles andere */
+    border: 1px solid rgba(13, 14, 12, 0.3); /* Sehr dünner, subtiler Rahmen */
+    border-radius: 3px; /* Passend zum App-Stil */
+    cursor: pointer;
+    font-size: 11px; /* Kompakte Schrift, passt gut in Button */
+    font-weight: 500; /* Medium weight passend zum App-Stil */
+    transition: all 0.15s ease; /* Kurze smooth Transition */
+    line-height: 1; /* Minimale Zeilenhöhe */
+    text-transform: uppercase; /* Großbuchstaben */
+    letter-spacing: 0.4px; /* Leichter Buchstabenabstand für Lesbarkeit */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+.add-doc-btn:hover {
+    background: rgba(13, 14, 12, 0.05); /* Minimaler Hover-Effekt */
+    border-color: rgba(13, 14, 12, 0.5); /* Etwas sichtbarerer Rahmen */
+}
+
+.add-doc-btn:active {
+    transform: scale(0.97); /* Minimaler Scale-Effekt */
+    background: rgba(13, 14, 12, 0.1); /* Etwas dunkler beim Klick */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .add-doc-btn {
+        padding: 4px 3px; /* 3px * 1.3 ? 4px vertikal, 2px * 1.3 ? 3px horizontal */
+        font-size: 14px; /* 11px * 1.3 ? 14px */
+        letter-spacing: 0.5px; /* 0.4px * 1.3 ? 0.5px */
+        border-radius: 4px; /* 3px * 1.3 ? 4px */
+    }
+}
+
+/* Thumbnail im Dokument-Card */
+.doc-thumbnail-chat {
+    width: 100%; /* Volle Breite */
+    height: 120px; /* Feste Höhe */
+    object-fit: cover; /* Bild zuschneiden */
+    object-position: top; /* Von oben beginnen */
+    border-radius: 4px; /* Abgerundete Ecken */
+}
+
+/* Icon-Placeholder (wenn kein Thumbnail) */
+.doc-icon-placeholder {
+    width: 100%; /* Volle Breite */
+    height: 120px; /* Gleiche Höhe wie Thumbnail */
+    display: flex; /* Flexbox */
+    align-items: center; /* Vertikal zentrieren */
+    justify-content: center; /* Horizontal zentrieren */
+    background: rgba(13, 14, 12, 0.05); /* Leicht dunkler Hintergrund */
+    border-radius: 4px; /* Abgerundete Ecken */
+}
+
+.doc-icon-chat {
+    width: 48px; /* Icon-Breite */
+    height: 48px; /* Icon-Höhe */
+    opacity: 0.3; /* Leicht transparent */
+}
+
+/* Dokument-Details im Card */
+.doc-details-chat {
+    display: flex; /* Flexbox */
+    flex-direction: column; /* Vertikal stapeln */
+    gap: 4px; /* Abstand zwischen Elementen */
+}
+
+/* Dokument-Name */
+.doc-name-chat {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 13px; /* Schriftgröße */
+    font-weight: 500; /* Mittleres Gewicht */
+    overflow: hidden; /* Überfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+/* Dokument-Typ */
+.doc-type-chat {
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 11px; /* Kleinere Schriftgröße */
+    opacity: 0.6; /* Leicht transparent */
+    text-transform: uppercase; /* Großbuchstaben */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .found-documents-grid {
+        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        margin-top: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+    }
+
+    .document-card-chat {
+        min-width: 234px; /* 180px * 1.3 = 234px */
+        max-width: 234px;
+        padding: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        gap: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+    }
+
+    .doc-thumbnail-chat {
+        height: 156px; /* 120px * 1.3 = 156px */
+    }
+
+    .doc-icon-placeholder {
+        height: 156px; /* 120px * 1.3 = 156px */
+    }
+
+    .doc-icon-chat {
+        width: 62px; /* 48px * 1.3 = 62.4px ? 62px */
+        height: 62px;
+    }
+
+    .doc-name-chat {
+        font-size: 17px; /* 13px * 1.3 = 16.9px ? 17px */
+    }
+
+    .doc-type-chat {
+        font-size: 14px; /* 11px * 1.3 = 14.3px ? 14px */
+    }
+}
+

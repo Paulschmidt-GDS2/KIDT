@@ -56,6 +56,7 @@
 	    <PrivateAssets>all</PrivateAssets>
 	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 	  </PackageReference>
+	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.2" />
 	  <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
 	  <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.31" />
 	  <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.31" />
@@ -73,7 +74,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Database\Migrations\" />
     <Folder Include="Data\" />
+    <Folder Include="Docs\" />
     <Folder Include="Migrations\" />
     <Folder Include="wwwroot\js\" />
   </ItemGroup>

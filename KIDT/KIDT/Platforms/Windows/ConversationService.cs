@@ -25,8 +25,8 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
             builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
                 modelId: "phi3:mini",
-                apiKey: null, // Kein API-Key nötig (Ollama lokal)
-                endpoint: new Uri("http://localhost:11434/v1") // Ollama-Endpunkt (OpenAI-kompatibel)
+                apiKey: null,
+                endpoint: new Uri("http://localhost:11434/v1") 
             );
             this.kernel = builder.Build(); // Baue Kernel aus Builder
 
@@ -35,22 +35,12 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "conversation-instructions.md"); // Erstelle Pfad zur Instructions-Datei
             this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus MD-Datei (UTF-8)
 
-            this.isInitialized = true; // Setze Flag auf true
+            this.isInitialized = true;
         }
         catch (Exception ex)
         {
             throw new Exception($"Fehler bei der Initialisierung von ConversationService: {ex.Message}", ex);
         }
-    }
-
-    public async Task<string> SendAsync(string userMessage) // Sendet Nachricht ohne Datei
-    {
-        return await SendAsync(userMessage, 150, string.Empty); // Aufruf mit leeren Datei-Parametern
-    }
-
-    public async Task<string> SendAsync(string userMessage, int maxTokens) // Sendet Nachricht mit MaxTokens
-    {
-        return await SendAsync(userMessage, maxTokens, string.Empty); // Aufruf mit leerem Verlauf
     }
 
     public async Task<string> SendAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit MaxTokens und Verlauf
@@ -72,10 +62,10 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             
             if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
             {
-                chatHistory.AddSystemMessage($"Bisheriger Gesprächsverlauf:\n{recentContext}"); // Füge Verlauf hinzu
+                chatHistory.AddSystemMessage($"Bisheriger Gesprächsverlauf:\n{recentContext}");
             }
             
-            chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
+            chatHistory.AddUserMessage(userMessage);
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
@@ -96,10 +86,10 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             }
             else // Kein Content
             {
-                assistantMessage = "Keine Antwort erhalten."; // Fallback-Nachricht
+                assistantMessage = "Keine Antwort erhalten.";
             }
 
-            return assistantMessage; // Gibt Antwort zurück
+            return assistantMessage;
         }
         catch (Exception ex)
         {
@@ -118,7 +108,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         }
         catch
         {
-            return text; // Bei Fehler: Original-Text zurückgeben
+            return text;
         }
     }
 

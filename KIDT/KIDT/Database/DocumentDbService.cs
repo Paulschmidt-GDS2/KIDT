@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
-using KIDT.Database;
 using KIDT.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,124 +9,220 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
 {
     private readonly ChatDbContext db; // EF Core Datenbank-Context (Dependency Injection)
 
-    public DocumentDbService(ChatDbContext dbContext) // Konstruktor: Wird beim App-Start aufgerufen (Dependency Injection)
+    public DocumentDbService(ChatDbContext dbContext)
     {
-        this.db = dbContext; // Context speichern für alle DB-Operationen
+        this.db = dbContext;
     }
 
-    public async Task<int> SaveDocumentAsync(string fileName, string fileContent, string fileType, string extractedText, string thumbnailBase64) // Speichert Dokument in DB (mit Duplikat-Check via Hash - Dokument wird NICHT doppelt gespeichert!)
+    public async Task<int> SaveDocumentAsync(string fileName, string fileContent, string fileType, string extractedText, string thumbnailBase64) // Speichere Dokument in Datenbank
     {
-        string fileHash = ComputeFileHash(fileContent); // Berechne SHA256-Hash vom File-Content (für Duplikat-Erkennung)
+        string fileHash = ComputeFileHash(fileContent); // Berechne Hash vom Datei-Inhalt
 
-        Document? existingDoc = await this.db.Documents // Suche in DB nach existierendem Dokument
-            .FirstOrDefaultAsync(d => d.FileHash == fileHash); // Gleicher Hash? ? Datei ist identisch
-
-        if (existingDoc != null) // Dokument existiert bereits in DB?
+        var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
+        
+        Document? existingDoc = null; // Variable für existierendes Dokument
+        foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
-            return existingDoc.Id; // Gib existierende ID zurück (speichere NICHT neu - verhindert Duplikate!)
+            if (d.FileHash == fileHash) // Gleicher Hash gefunden?
+            {
+                existingDoc = d; // Dokument existiert bereits
+                break;
+            }
         }
 
-        Document newDoc = new Document // Erstelle neues Dokument-Objekt
+        if (existingDoc != null) // Dokument existiert bereits?
         {
-            FileName = fileName, // Dateiname (z.B. "Document.pdf")
-            FileHash = fileHash, // SHA256-Hash (für Duplikat-Check)
-            FileContent = fileContent, // Roher File-Content (Base64 bei PDF)
-            FileType = fileType, // Dateityp (z.B. "pdf", "txt")
-            ExtractedText = extractedText, // Extrahierter Text (von PDFtoText etc.)
-            ThumbnailBase64 = thumbnailBase64, // Thumbnail als Base64-String
-            UploadedAt = DateTime.UtcNow // UTC-Timestamp (wird später zu Local konvertiert)
-        };
+            return existingDoc.Id; // Gib existierende ID zurück (verhindert Duplikate)
+        }
 
-        this.db.Documents.Add(newDoc); // Füge Dokument zur DB hinzu
-        await this.db.SaveChangesAsync(); // Speichere Änderungen in DB (generiert ID)
+        Document newDoc = new Document(); // Erstelle neues Dokument-Objekt
+        newDoc.FileName = fileName;
+        newDoc.FileHash = fileHash;
+        newDoc.FileContent = fileContent;
+        newDoc.FileType = fileType;
+        newDoc.ExtractedText = extractedText;
+        newDoc.ThumbnailBase64 = thumbnailBase64;
+        newDoc.UploadedAt = DateTime.UtcNow;
 
-        return newDoc.Id; // Gib neue Dokument-ID zurück
+        this.db.Documents.Add(newDoc); // Füge Dokument zur Datenbank hinzu
+        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
+
+        return newDoc.Id;
     }
 
-    public async Task<List<Document>> GetAllDocumentsAsync() // Lädt alle Dokumente aus DB (für Dokumente-Seite)
+    public async Task<List<Document>> GetAllDocumentsAsync() // Lade alle Dokumente
     {
-        return await this.db.Documents // Query: Alle Dokumente
-            .AsNoTracking() // Keine Change-Tracking (Performance-Optimierung - read-only)
-            .OrderByDescending(d => d.UploadedAt) // Sortiere nach Upload-Datum (neueste zuerst)
-            .ToListAsync(); // Führe Query aus und gib Liste zurück
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
+        
+        allDocuments.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        return allDocuments; // Gib sortierte Liste zurück
     }
 
-    public async Task<Document?> GetDocumentByIdAsync(int documentId) // Lädt einzelnes Dokument anhand ID
+    public async Task<Document?> GetDocumentByIdAsync(int documentId) // Lade einzelnes Dokument
     {
-        return await this.db.Documents // Query: Dokument mit ID
-            .AsNoTracking() // Keine Change-Tracking (Performance-Optimierung)
-            .FirstOrDefaultAsync(d => d.Id == documentId); // Finde anhand ID (oder null wenn nicht gefunden)
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
+        
+        foreach (Document d in allDocuments) // Gehe durch alle Dokumente
+        {
+            if (d.Id == documentId) // Ist das die gesuchte ID?
+            {
+                return d;
+            }
+        }
+        
+        return null;
     }
 
-    public async Task<List<Document>> SearchDocumentsAsync(string searchTerm) // Sucht Dokumente nach Suchbegriff (case-insensitive in Filename ODER ExtractedText)
+    public async Task<List<Document>> SearchDocumentsAsync(string searchTerm) // Suche Dokumente nach Suchbegriff
     {
-        string lowerSearchTerm = searchTerm.ToLower(); // Konvertiere Suchbegriff zu Kleinbuchstaben (case-insensitive)
+        string lowerSearchTerm = searchTerm.ToLower(); // Konvertiere Suchbegriff zu Kleinbuchstaben
 
-        return await this.db.Documents // Query: Alle Dokumente
-            .AsNoTracking() // Keine Change-Tracking (Performance-Optimierung)
-            .Where(d => d.FileName.ToLower().Contains(lowerSearchTerm) || d.ExtractedText.ToLower().Contains(lowerSearchTerm)) // Suche in Filename ODER ExtractedText
-            .OrderByDescending(d => d.UploadedAt) // Sortiere nach Upload-Datum (neueste zuerst)
-            .ToListAsync(); // Führe Query aus und gib Liste zurück
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
+        
+        var filtered = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        foreach (Document d in allDocuments) // Gehe durch alle Dokumente
+        {
+            string lowerFileName = d.FileName.ToLower(); // Dateiname in Kleinbuchstaben
+            string lowerText = d.ExtractedText.ToLower(); // Text in Kleinbuchstaben
+            
+            if (lowerFileName.Contains(lowerSearchTerm) || lowerText.Contains(lowerSearchTerm)) // Suchbegriff gefunden?
+            {
+                filtered.Add(d);
+            }
+        }
+        
+        filtered.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        return filtered;
     }
 
-    public async Task<bool> LinkDocumentToConversationAsync(int documentId, int conversationId) // Verknüpft Dokument mit Conversation (erstellt Eintrag in ConversationDocuments-Junction-Tabelle)
+    public async Task<bool> LinkDocumentToConversationAsync(int documentId, int conversationId) // Verknüpfe Dokument mit Chat
     {
-        bool alreadyLinked = await this.db.ConversationDocuments // Prüfe ob Link bereits existiert
-            .AnyAsync(cd => cd.ConversationId == conversationId && cd.DocumentId == documentId); // Gleiche Conversation UND gleiches Document?
-
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        
+        bool alreadyLinked = false; // Standardmäßig: Noch nicht verknüpft
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        {
+            if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
+            {
+                alreadyLinked = true; // Link existiert bereits
+                break;
+            }
+        }
 
         if (alreadyLinked) // Link existiert bereits?
         {
-            return false; // Gib false zurück (nichts getan - Duplikat-Schutz)
+            return false;
         }
 
-        ConversationDocument link = new ConversationDocument // Erstelle neue Verknüpfung (Junction-Tabelle: Many-to-Many)
-        {
-            ConversationId = conversationId, // Chat-ID setzen
-            DocumentId = documentId, // Dokument-ID setzen
-            AddedAt = DateTime.UtcNow // UTC-Timestamp
-        };
+        ConversationDocument link = new ConversationDocument(); // Erstelle neue Verknüpfung
+        link.ConversationId = conversationId; // Setze Chat-ID
+        link.DocumentId = documentId; // Setze Dokument-ID
+        link.AddedAt = DateTime.UtcNow; // Setze aktuelles Datum (UTC)
 
-        this.db.ConversationDocuments.Add(link); // Füge Verknüpfung zur DB hinzu
-        await this.db.SaveChangesAsync(); // Speichere Änderungen
+        this.db.ConversationDocuments.Add(link); // Füge Verknüpfung zur Datenbank hinzu
+        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
 
-        return true; // Gib true zurück (erfolgreich hinzugefügt)
+        return true;
     }
 
-    public async Task<bool> IsDocumentLinkedAsync(int documentId, int conversationId) // Prüft ob Dokument bereits zum Chat hinzugefügt wurde (wird von add_document_to_chat-Tool verwendet)
+    public async Task<bool> UnlinkDocumentFromConversationAsync(int documentId, int conversationId) // Entferne Verknüpfung zwischen Dokument und Chat
     {
-        return await this.db.ConversationDocuments // Query: ConversationDocuments-Junction-Tabelle
-            .AnyAsync(cd => cd.ConversationId == conversationId && cd.DocumentId == documentId); // Existiert Link?
-    }
-
-    public async Task<List<Document>> GetDocumentsForConversationAsync(int conversationId) // Lädt alle Dokumente die zu einem Chat hinzugefügt wurden (über Junction-Tabelle)
-    {
-        return await this.db.ConversationDocuments // Starte mit Junction-Tabelle
-            .AsNoTracking() // Keine Change-Tracking (Performance-Optimierung)
-            .Where(cd => cd.ConversationId == conversationId) // Filtere nach Chat-ID
-            .Include(cd => cd.Document) // EF Core: Lade verknüpfte Document-Objekte mit (JOIN)
-            .Select(cd => cd.Document!) // Extrahiere nur Document-Objekte (! = garantiert nicht null)
-            .OrderByDescending(d => d.UploadedAt) // Sortiere nach Upload-Datum (neueste zuerst)
-            .ToListAsync(); // Führe Query aus und gib Liste zurück
-    }
-
-    public async Task DeleteDocumentAsync(int documentId) // Löscht Dokument aus DB (inkl. aller Verknüpfungen zu Conversations)
-    {
-        // SCHRITT 1: Lösche alle Verknüpfungen zu Conversations (verhindert Foreign-Key-Fehler)
-        var links = await this.db.ConversationDocuments // Query: Alle Verknüpfungen zu diesem Dokument
-            .Where(cd => cd.DocumentId == documentId) // Filtere nach Dokument-ID
-            .ToListAsync(); // Führe Query aus
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
         
-        this.db.ConversationDocuments.RemoveRange(links); // Entferne alle Verknüpfungen aus DB
-        
-        // SCHRITT 2: Lösche das Dokument selbst
-        Document? doc = await this.db.Documents.FindAsync(documentId); // Finde Dokument anhand ID
-        if (doc != null) // Dokument existiert?
+        ConversationDocument? link = null; // Variable für gefundene Verknüpfung
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
-            this.db.Documents.Remove(doc); // Entferne Dokument aus DB
+            if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
+            {
+                link = cd; // Verknüpfung gefunden
+                break;
+            }
+        }
+
+        if (link == null) // Keine Verknüpfung gefunden?
+        {
+            return false;
+        }
+
+        this.db.ConversationDocuments.Remove(link); // Entferne Verknüpfung aus Datenbank
+        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
+
+        return true;
+    }
+
+    public async Task<bool> IsDocumentLinkedAsync(int documentId, int conversationId) // Prüfe ob Dokument mit Chat verknüpft ist
+    {
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        {
+            if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
+            {
+                return true;
+            }
         }
         
-        await this.db.SaveChangesAsync(); // Speichere Änderungen (beide Löschungen atomar)
+        return false;
+    }
+
+    public async Task<List<Document>> GetDocumentsForConversationAsync(int conversationId) // Lade alle Dokumente für einen Chat
+    {
+        var query = this.db.ConversationDocuments.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var allLinks = await query.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        
+        var documentIds = new List<int>(); // Erstelle leere Liste für Dokument-IDs
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        {
+            if (cd.ConversationId == conversationId) // Gehört zu diesem Chat?
+            {
+                documentIds.Add(cd.DocumentId);
+            }
+        }
+        
+        var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
+        var result = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        
+        foreach (int docId in documentIds) // Gehe durch alle gefundenen Dokument-IDs
+        {
+            foreach (Document d in allDocuments) // Gehe durch alle Dokumente
+            {
+                if (d.Id == docId) // Ist das die gesuchte ID?
+                {
+                    result.Add(d);
+                    break;
+                }
+            }
+        }
+        
+        result.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        return result;
+    }
+
+    public async Task DeleteDocumentAsync(int documentId) // Lösche Dokument aus Datenbank
+    {
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        var links = new List<ConversationDocument>(); // Erstelle leere Liste für zu löschende Verknüpfungen
+        
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        {
+            if (cd.DocumentId == documentId) // Gehört zu diesem Dokument?
+            {
+                links.Add(cd);
+            }
+        }
+        
+        this.db.ConversationDocuments.RemoveRange(links); // Entferne alle Verknüpfungen aus Datenbank
+        
+        Document? doc = await this.db.Documents.FindAsync(documentId); // Suche Dokument
+        if (doc != null) // Dokument gefunden?
+        {
+            this.db.Documents.Remove(doc);
+        }
+        
+        await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
     }
 
     private string ComputeFileHash(string fileContent) // Hilfsmethode: Berechnet SHA256-Hash von File-Content (für Duplikat-Erkennung)

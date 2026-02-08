@@ -14,14 +14,17 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
 {
     private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
     private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
-    private string systemInstructions = "Du bist ein Daten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen."; // Standard-Systemanweisung
+    private string systemInstructions = "Du bist ein Daten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen.";
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
     private DocumentDbService? docDbService; // Service für Dokumenten-Zugriff
     private int currentConversationId = 0; // Aktuelle Conversation-ID
 
-    public async Task InitializeAsync(DocumentDbService documentDbService, int conversationId) // Lädt qwen2.5, lädt Instructions aus MD-Datei
+    public async Task InitializeAsync(DocumentDbService documentDbService, int conversationId) // Initialisiere Service
     {
-        if (this.isInitialized) return; // Wenn schon initialisiert -> raus
+        if (this.isInitialized) // Bereits initialisiert?
+        {
+            return;
+        }
 
         try
         {
@@ -31,20 +34,17 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
             builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
                 modelId: "qwen2.5:7b",
-                apiKey: null, // Kein API-Key nötig (Ollama lokal)
-                endpoint: new Uri("http://localhost:11434/v1") // Ollama-Endpunkt (OpenAI-kompatibel)
+                apiKey: null,
+                endpoint: new Uri("http://localhost:11434/v1")
             );
-            this.kernel = builder.Build(); // Baue Kernel aus Builder
-
-            // KEINE MCP-Tools - nur Router nutzt search_documents() und add_document_to_chat()
-            // DataAnalysis fokussiert sich auf die Analyse vorhandener Daten
+            this.kernel = builder.Build(); // Baue Kernel
 
             this.chatService = this.kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service aus Kernel
 
             var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "data-analysis-instructions.md"); // Erstelle Pfad zur Instructions-Datei
-            this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus MD-Datei (UTF-8)
+            this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus Datei
 
-            this.isInitialized = true; // Setze Flag auf true
+            this.isInitialized = true; // Markiere als initialisiert
         }
         catch (Exception ex)
         {
@@ -52,24 +52,14 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
         }
     }
 
-    public async Task<string> SendAsync(string userMessage) // Sendet Nachricht ohne Datei
-    {
-        return await SendAsync(userMessage, string.Empty, string.Empty, 3000); // Aufruf mit leeren Datei-Parametern und Standard-MaxTokens
-    }
-
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName) // Sendet Nachricht mit optionalem Datei-Anhang
-    {
-        return await SendAsync(userMessage, fileContent, fileName, 3000); // Aufruf mit Standard-MaxTokens
-    }
-
     public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens) // Sendet Nachricht mit optionalem Datei-Anhang und benutzerdefiniertem MaxTokens
     {
         return await SendAsync(userMessage, fileContent, fileName, maxTokens, string.Empty);
     }
 
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sendet Nachricht mit optionalem Datei-Anhang, benutzerdefiniertem MaxTokens und letztem Gesprächsverlauf
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sende Nachricht an KI
     {
-        if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind und nicht initialisiert wurden
+        if (this.kernel == null || this.chatService == null) // Service nicht initialisiert?
         {
             return "Fehler: Daten-Analyse-Service nicht initialisiert.";
         }
@@ -79,52 +69,62 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             var chatHistory = new ChatHistory(); // Erstelle neue Chat-History
             chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
 
-            if (!string.IsNullOrEmpty(recentContext)) // Wenn Gesprächsverlauf vorhanden ist
+            bool hasContext = false; // Variable für Context-Check
+            if (!string.IsNullOrEmpty(recentContext)) // Kontext vorhanden?
             {
-                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}"); // Füge Kontext als System-Message hinzu
+                hasContext = true;
             }
             
-            string finalMessage = userMessage; // Baue finale User-Nachricht (Standard: ohne Datei)
-            
-            if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Wenn Datei-Inhalt und Name vorhanden sind
+            if (hasContext) // Kontext vorhanden?
             {
-                string limitedContent = fileContent; // Standard: Kompletter Inhalt
-                int maxChars = 5000; // Maximum 5000 Zeichen (ca. 1000 Wörter)
+                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}");
+            }
+            
+            string finalMessage = userMessage; // Variable für finale Nachricht
+            
+            bool hasFile = false; // Variable für Datei-Check
+            if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Datei vorhanden?
+            {
+                hasFile = true;
+            }
+            
+            if (hasFile) // Datei vorhanden?
+            {
+                string limitedContent = fileContent; // Variable für Datei-Inhalt
+                int maxChars = 5000; // Maximum 5000 Zeichen
                 
-                if (fileContent.Length > maxChars) // Wenn Inhalt zu lang ist
+                if (fileContent.Length > maxChars) // Inhalt zu lang?
                 {
-                    limitedContent = fileContent.Substring(0, maxChars); // Schneide ab
-                    limitedContent += "\n\n[... Datei gekürzt, nur erste 5000 Zeichen gezeigt ...]"; // Warnung hinzufügen
+                    limitedContent = fileContent.Substring(0, maxChars); // Kürze auf Maximum
+                    limitedContent += "\n\n[... Datei gekürzt, nur erste 5000 Zeichen gezeigt ...]"; // Füge Warnung hinzu
                 }
                 
-                finalMessage = $"[Datei: {fileName}]\n\n{limitedContent}\n\n---\n\n{userMessage}"; // Füge Datei-Kontext vor User-Nachricht hinzu
+                finalMessage = $"[Datei: {fileName}]\n\n{limitedContent}\n\n---\n\n{userMessage}";
             }
 
             chatHistory.AddUserMessage(finalMessage); // Füge User-Nachricht zur History hinzu
 
-            var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
-            {
-                Temperature = 0.3, // Niedrige Temperatur = präzise, weniger Kreativität
-                MaxTokens = maxTokens // Setze dynamisches MaxTokens-Limit
-            };
+            var settings = new OpenAIPromptExecutionSettings(); // Erstelle Settings-Objekt
+            settings.Temperature = 0.3; // Setze Temperatur (niedrig = präzise)
+            settings.MaxTokens = maxTokens; // Setze Token-Limit
             
-            var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an Ollama (async)
-                chatHistory, // Mit bisheriger Konversations-History
-                executionSettings: settings, // Mit dynamischen Settings
-                kernel: this.kernel // Mit MCP-Tools für Analyse
+            var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an KI
+                chatHistory, // Mit Chat-History
+                executionSettings: settings, // Mit Settings
+                kernel: this.kernel // Mit Kernel
             );
 
-            string assistantMessage;
-            if (response.Content != null) // Wenn Response einen Content hat
+            string assistantMessage; // Variable für Antwort
+            if (response.Content != null) // Response hat Content?
             {
-                assistantMessage = EnsureUtf8(response.Content);
+                assistantMessage = EnsureUtf8(response.Content); // Konvertiere zu UTF-8
             }
             else // Kein Content
             {
-                assistantMessage = "Keine Antwort erhalten."; // Fallback-Nachricht
+                assistantMessage = "Keine Antwort erhalten.";
             }
             
-            return assistantMessage; // Gibt Antwort zurück
+            return assistantMessage;
         }
         catch (Exception ex)
         {
@@ -132,18 +132,21 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
         }
     }
 
-    private string EnsureUtf8(string text) // Konvertiert Text zu UTF-8 (falls nötig)
+    private string EnsureUtf8(string text) // Konvertiere Text zu UTF-8
     {
-        if (string.IsNullOrEmpty(text)) return text; // Leerer Text -> direkt zurück
+        if (string.IsNullOrEmpty(text)) // Text ist leer?
+        {
+            return text;
+        }
 
         try
         {
-            var bytes = Encoding.Default.GetBytes(text); // Text -> Bytes (System-Encoding)
-            return Encoding.UTF8.GetString(bytes); // Bytes -> UTF-8 String
+            var bytes = Encoding.Default.GetBytes(text); // Konvertiere Text zu Bytes
+            return Encoding.UTF8.GetString(bytes); // Konvertiere Bytes zu UTF-8 String
         }
         catch
         {
-            return text; // Bei Fehler: Original-Text zurückgeben
+            return text;
         }
     }
 

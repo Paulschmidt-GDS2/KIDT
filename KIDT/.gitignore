@@ -27,3 +27,13 @@ bld/
 !**/packages/build/
 *.nuget.props
 *.nuget.targets
+
+# User-specific config (wichtig für Multi-User!)
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+
+# Database files
+*.db
+*.db-shm
+*.db-wal

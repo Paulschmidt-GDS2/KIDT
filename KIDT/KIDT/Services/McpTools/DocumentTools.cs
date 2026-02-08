@@ -13,8 +13,8 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
     public DocumentTools(DocumentDbService documentDbService, int currentConversationId) // Konstruktor: Wird bei RegisterTools aufgerufen (Dependency Injection)
     {
-        this.docDbService = documentDbService; // DocumentDbService speichern
-        this.conversationId = currentConversationId; // Conversation-ID speichern
+        this.docDbService = documentDbService;
+        this.conversationId = currentConversationId;
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
@@ -28,9 +28,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: 0 gefunden
             { 
-                found = 0, // Anzahl: 0
-                documentIds = new List<int>(), // Leere Liste
-                message = $"Keine Dokumente gefunden für '{searchQuery}'" // Nachricht
+                found = 0, 
+                documentIds = new List<int>(), 
+                message = $"Keine Dokumente gefunden für '{searchQuery}'" 
             });
         }
         
@@ -41,9 +41,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
             documents = documents.Select(d => new // Liste mit Details
             {
                 id = d.Id, // Dokument-ID
-                fileName = d.FileName, // Dateiname
-                fileType = d.FileType, // Typ (z.B. "pdf")
-                uploadedAt = d.UploadedAt.ToString("dd.MM.yyyy HH:mm"), // Upload-Datum formatiert
+                fileName = d.FileName,
+                fileType = d.FileType, 
+                uploadedAt = d.UploadedAt.ToString("dd.MM.yyyy HH:mm"),
                 hasThumbnail = !string.IsNullOrEmpty(d.ThumbnailBase64) // Hat Thumbnail?
             }).ToList()
         };
@@ -62,9 +62,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Bereits hinzugefügt
             { 
-                success = false, // Nicht erfolgreich (bereits vorhanden)
-                message = "Dokument ist bereits hinzugefügt", // Nachricht
-                documentId // Dokument-ID
+                success = false, 
+                message = "Dokument ist bereits hinzugefügt", 
+                documentId
             });
         }
         
@@ -74,9 +74,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Fehler
             { 
-                success = false, // Nicht erfolgreich
-                message = "Hinzufügen fehlgeschlagen", // Nachricht
-                documentId // Dokument-ID
+                success = false, 
+                message = "Hinzufügen fehlgeschlagen",
+                documentId
             });
         }
         
@@ -86,19 +86,19 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Nicht gefunden
             { 
-                success = false, // Nicht erfolgreich
-                message = "Dokument nicht gefunden", // Nachricht
-                documentId // Dokument-ID
+                success = false,
+                message = "Dokument nicht gefunden", 
+                documentId 
             });
         }
         
         var result = new // Erstelle JSON-Result mit Erfolg
         {
-            success = true, // Erfolgreich
-            message = $"Dokument '{document.FileName}' wurde hinzugefügt", // Bestätigungs-Nachricht
-            documentId, // Dokument-ID
-            fileName = document.FileName, // Dateiname
-            fileType = document.FileType, // Dateityp
+            success = true,
+            message = $"Dokument '{document.FileName}' wurde hinzugefügt",
+            documentId, 
+            fileName = document.FileName, 
+            fileType = document.FileType,
             extractedTextLength = document.ExtractedText?.Length ?? 0 // Textlänge (oder 0 wenn null)
         };
         

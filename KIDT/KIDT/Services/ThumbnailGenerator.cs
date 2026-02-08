@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -37,7 +36,7 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
             
             if (pdfDoc.PageCount == 0) // Check: Hat PDF keine Seiten?
             {
-                return string.Empty; // Gib leer zurück
+                return string.Empty;
             }
             
             PdfPage page = pdfDoc.GetPage(0); // Hole erste Seite
@@ -56,7 +55,7 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
             
             string base64 = Convert.ToBase64String(bytes); // Konvertiere zu Base64
             
-            return base64; // Gib Base64-String zurück
+            return base64;
         }
         catch (Exception ex)
         {

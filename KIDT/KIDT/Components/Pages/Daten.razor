@@ -89,7 +89,7 @@
                 {
                     @foreach (var doc in Documents) @* Durchlaufe alle Dokumente *@
                     {
-                        <div class="document-row"> @* Explorer-Style Row *@
+                        <div class="document-row" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true"> @* Klick öffnet Dokument *@
                             <div class="document-thumbnail"> @* Thumbnail/Icon Bereich *@
                                 @if (!string.IsNullOrEmpty(doc.ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
                                 {
@@ -104,7 +104,7 @@
                                 <div class="document-name">@doc.FileName</div> @* Dateiname *@
                                 <div class="document-meta">@doc.FileType.ToUpper() • @GetFormattedDate(doc.UploadedAt)</div> @* Typ und Datum *@
                             </div>
-                            <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" disabled="@isDeletingDocument" title="Dokument löschen" aria-label="Dokument löschen"> @* Lösch-Button *@
+                            <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument löschen" aria-label="Dokument löschen"> @* Lösch-Button (stopPropagation verhindert doppeltes Event) *@
                                 <img src="images/remove.png" alt="Löschen" />
                             </button>
                         </div>
@@ -217,4 +217,39 @@ private string GetFormattedDate(DateTime createdAt) // Formatiert Datum korrekt
     
     return localTime.ToString("dd.MM.yyyy HH:mm"); // Formatiere lokal
 }
+
+
+private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-Anwendung
+{
+    try
+    {
+        var doc = await DocDb.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
+        if (doc == null) // Dokument nicht gefunden
+        {
+            return;
+        }
+        
+        string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName); // Erstelle Pfad in Temp-Ordner
+        
+        if (doc.FileType == "pdf") // PDF muss von Base64 konvertiert werden
+        {
+            try
+            {
+                await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); // Konvertiere Base64 zu Bytes und schreibe
+            }
+            catch (FormatException) // Fallback falls nicht Base64
+            {
+                await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+            }
+        }
+        else // Text-Dateien direkt schreiben
+        {
+            await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+        }
+        
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
+    }
+    catch { } // Fehler ignorieren (silent fail)
+}
+
 }

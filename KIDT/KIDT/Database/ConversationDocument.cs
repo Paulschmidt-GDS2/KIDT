@@ -1,5 +1,3 @@
-using System;
-
 namespace KIDT.Models;
 
 public class ConversationDocument // Junction-Tabelle: Verbindet Conversations mit Documents

@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
 @using Microsoft.Extensions.DependencyInjection
+@using KIDT.Models
 @inject KIDT.Services.ChatCoordinator Chat
 @inject KIDT.Database.ChatDbService Db
 @inject KIDT.Services.ThumbnailGenerator ThumbGen
@@ -39,6 +40,37 @@
                     else @* Wenn Assistent-Nachricht *@
                     {
                         <span class="typewriter">@msg.DisplayText</span>
+                        
+                        @* Zeige gefundene Dokumente als Cards (nur bei Assistent-Nachrichten) *@
+                        @if (msg.FoundDocuments.Count > 0)
+                        {
+                            <div class="found-documents-grid">
+                                @foreach (var doc in msg.FoundDocuments)
+                                {
+                                    <div class="document-card-chat">
+                                        <div class="doc-card-content" @onclick="@(() => OpenDocument(doc.Id))">
+                                            @if (!string.IsNullOrEmpty(doc.ThumbnailBase64))
+                                            {
+                                                <img src="@($"data:image/png;base64,{doc.ThumbnailBase64}")" class="doc-thumbnail-chat" alt="@doc.FileName" />
+                                            }
+                                            else
+                                            {
+                                                <div class="doc-icon-placeholder">
+                                                    <img src="images/file.png" alt="@doc.FileType" class="doc-icon-chat" />
+                                                </div>
+                                            }
+                                            <div class="doc-details-chat">
+                                                <span class="doc-name-chat">@doc.FileName</span>
+                                                <span class="doc-type-chat">@doc.FileType.ToUpper()</span>
+                                            </div>
+                                        </div>
+                                        <button class="add-doc-btn" @onclick="@(() => AddDocumentToChat(doc.Id))" @onclick:stopPropagation="true">
+                                            Zum Chat hinzufügen
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
                 </div>
             }
@@ -76,6 +108,7 @@ private class ChatMessage // Klasse für eine Chat-Nachricht
     public bool IsUser { get; set; } // true = Benutzer, false = Assistent
     public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
     public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
+    public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei search_documents)
 }
 
 private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
@@ -88,12 +121,12 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
     private const int Cols = 60;    // angenommene Zeichenbreite pro Zeile
     private int rows = 1;           // aktuelle Zeilenanzahl des Textareas
 
-    private string inputText = string.Empty; // internes Feld, startet leer
-    private string InputText // Property für gegenseitige Synchronisation (Textfeld und Variable sind gekoppelt und synchron)
+    private string inputText = string.Empty;
+    private string InputText // Property für Textfeld-Synchronisation
     {
         get { return inputText; } // liefert aktuellen Text zurück
         set // Setter: Wird bei jeder Eingabe aufgerufen
-        {
+            {
             if (value == null) value = string.Empty; // null zu leerem String konvertieren (value = neuer Wert der gesetzt wird)
             inputText = value; // Feld setzen
             UpdateRows(); // Zeilenanzahl neu berechnen
@@ -101,80 +134,103 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
     }
 
     private string UploadedFileName = string.Empty; // Aktuell angehängte Datei (leer = keine Datei)
+    private int currentDocumentId = 0; // ID des aktuell verknüpften Dokuments (0 = keins)
 
-    protected override async Task OnInitializedAsync() // Wird beim App-Start aufgerufen
+    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
-        var backgroundTask = Task.Run(Chat.InitializeAsync); // Starte Modell-Laden im Hintergrund (UI blockiert nicht)
+        var backgroundTask = Task.Run(Chat.InitializeAsync); // Starte KI-Modell-Laden im Hintergrund
 
-        KIDT.Services.ChatEventService.OnNewChatRequested += HandleNewChatRequest; // Registriere Event-Listener
+        KIDT.Services.ChatEventService.OnNewChatRequested += HandleNewChatRequest; // Registriere Event für Neuer-Chat-Button
 
-        if (ChatId > 0) // Check: Soll bestehender Chat geladen werden?
+        if (ChatId > 0) // Prüfe ob bestehender Chat geladen werden soll
         {
-            currentConversationId = ChatId; // Nutze übergebene Chat-ID
+            currentConversationId = ChatId; // Übernehme Chat-ID aus URL
             
-            // UI-Thread freigeben, dann laden
-            await Task.Yield();
+            await Task.Yield(); // Gib UI-Thread frei
             
-            // PARALLEL mit SEPARATEN DbContext-Instanzen (verhindert Concurrency-Konflikt!)
             List<KIDT.Models.Message> dbMessages;
             List<KIDT.Models.UploadedFile> files;
             
-            using (var scope1 = ServiceProvider.CreateScope())
-            using (var scope2 = ServiceProvider.CreateScope())
+            using (var scope1 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Messages
+            using (var scope2 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Files
             {
-                var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>();
-                var dbService2 = scope2.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>();
+                var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 1
+                var dbService2 = scope2.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 2
                 
-                var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Separate Instanz
-                var filesTask = dbService2.LoadFilesForConversationAsync(currentConversationId); // Separate Instanz
+                var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Starte Messages-Laden
+                var filesTask = dbService2.LoadFilesForConversationAsync(currentConversationId); // Starte Files-Laden
                 
-                await Task.WhenAll(messagesTask, filesTask); // Beide parallel, kein Konflikt!
+                await Task.WhenAll(messagesTask, filesTask); // Warte bis beide fertig (parallel)
                 
-                dbMessages = await messagesTask;
-                files = await filesTask;
+                dbMessages = await messagesTask; // Hole Ergebnis Messages
+                files = await filesTask; // Hole Ergebnis Files
             }
             
-            // Messages verarbeiten
-            foreach (KIDT.Models.Message dbMsg in dbMessages)
+            foreach (KIDT.Models.Message dbMsg in dbMessages) // Durchlaufe alle geladenen Messages
             {
-                var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser };
-                if (dbMsg.IsUser) // User-Nachrichten direkt anzeigen
+                var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser }; // Erstelle ChatMessage-Objekt
+                
+                if (!string.IsNullOrEmpty(dbMsg.DocumentIdsJson)) // Prüfe ob Dokumente verknüpft sind
                 {
-                    chatMsg.DisplayText = dbMsg.Text;
-                    Messages.Add(chatMsg);
+                    try
+                    {
+                        var docIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.DocumentIdsJson); // Deserialisiere JSON zu Liste
+                        if (docIds != null && docIds.Count > 0) // Prüfe ob Dokument-IDs vorhanden
+                        {
+                            using var docScope = ServiceProvider.CreateScope(); // Erstelle DB-Scope für Dokumente
+                            var docDbService = docScope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+                            
+                            foreach (var docId in docIds) // Durchlaufe alle Dokument-IDs
+                            {
+                                var doc = await docDbService.GetDocumentByIdAsync(docId); // Lade Dokument aus DB
+                                if (doc != null) chatMsg.FoundDocuments.Add(doc); // Füge zur Liste hinzu
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD_DOCS] Fehler beim Laden von Dokumenten: {ex.Message}");
+                    }
                 }
-                else // Assistent-Nachrichten OHNE Typewriter (direkt vollständig anzeigen)
+                
+                if (dbMsg.IsUser) // Prüfe ob User-Nachricht
                 {
-                    chatMsg.DisplayText = dbMsg.Text; // Setze direkt den kompletten Text
-                    Messages.Add(chatMsg);
+                    chatMsg.DisplayText = dbMsg.Text; // Übernehme Text für Anzeige
+                    Messages.Add(chatMsg); // Füge zur Nachrichten-Liste hinzu
+                }
+                else // Assistent-Nachricht
+                {
+                    chatMsg.DisplayText = dbMsg.Text; // Übernehme Text direkt (kein Typewriter beim Laden)
+                    Messages.Add(chatMsg); // Füge zur Nachrichten-Liste hinzu
                 }
             }
             
-            // Files verarbeiten
-            if (files.Count > 0)
+            if (files.Count > 0) // Prüfe ob Dateien vorhanden
             {
-                UploadedFileName = files[0].FileName; // Zeige erstes File im Badge
+                UploadedFileName = files[0].FileName; // Zeige erste Datei im Badge
             }
             
-            StateHasChanged(); // UI einmal aktualisieren (mit Messages UND Badge!)
+            StateHasChanged(); // Aktualisiere UI komplett
         }
-        else // Neuer Chat
+        else // Kein ChatId in URL = Neuer Chat
         {
-            currentConversationId = 0; // Noch keine Conversation (wird bei erster Nachricht erstellt)
+            currentConversationId = 0; // Setze auf 0 (wird bei erster Nachricht erstellt)
         }
     }
 
-    private async void HandleNewChatRequest() // Wird aufgerufen wenn Event von MainLayout ausgelöst wird
+    private async void HandleNewChatRequest() // Event-Handler für Neuer-Chat-Button
     {
-        if (isSaving) return; // Warte bis Speicherung abgeschlossen ist
-        
-        bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Check: Hat aktueller Chat Content?
-        
-        if (hasContent) // Nur wenn aktueller Chat nicht leer ist
+        if (isSaving) // Prüfe ob Speicherung läuft
         {
-            await ResetChat(); // Chat zurücksetzen
+            return; // Warte bis fertig
         }
-        // Sonst: Nichts tun (User ist schon in leerem Chat)
+        
+        bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Prüfe ob Chat Nachrichten oder Datei hat
+        
+        if (hasContent) // Chat hat Content
+        {
+            await ResetChat(); // Setze Chat zurück
+        }
     }
 
     public void Dispose() // Wird beim Entfernen der Komponente aufgerufen
@@ -258,31 +314,39 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         });
 
         // AI-Anfrage starten
-        var replyTask = Chat.SendAsync(text, conversationIdForSave); // Sende Nachricht an Chat-Service (asynchron)
+        var replyTask = Chat.SendAsync(text, conversationIdForSave); // Sende Nachricht an Chat-Service (asynchron) ? gibt ChatResponse zurück
         var minDelayTask = Task.Delay(1600); // Mindestens 1600ms (2x Blink-Zyklus)
         
         // Warte auf AI-Antwort + Mindestzeit (saveUserMessageTask läuft parallel!)
         await Task.WhenAll(replyTask, minDelayTask); // Warte auf beide: Antwort und Mindestzeit
-        var reply = await replyTask; // Hole die Antwort
+        var chatResponse = await replyTask; // Hole die ChatResponse (Message + FoundDocuments)
         
         // Warte bis User-Nachricht gespeichert ist (sollte schon fertig sein)
         await saveUserMessageTask;
 
         Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
 
-        if (!string.IsNullOrWhiteSpace(reply)) // Füge echte Assistent-Nachricht hinzu (wenn nicht leer)
+        if (!string.IsNullOrWhiteSpace(chatResponse.Message)) // Füge echte Assistent-Nachricht hinzu (wenn nicht leer)
         {
-            var assistantMessage = new ChatMessage { Text = "", IsUser = false, IsLoading = false }; // Assistent-Nachricht hinzufügen
+            var assistantMessage = new ChatMessage 
+            { 
+                Text = "", 
+                IsUser = false, 
+                IsLoading = false,
+                FoundDocuments = chatResponse.FoundDocuments // Gefundene Dokumente hinzufügen
+            };
             Messages.Add(assistantMessage);
             StateHasChanged(); // UI aktualisieren
             
             // Speichere Assistant-Antwort im Hintergrund während Typewriter läuft
             var saveAssistantTask = Task.Run(async () =>
             {
-                await Db.SaveMessageAsync(conversationIdForSave, false, reply); // Speichere Assistant-Nachricht
+                // Extrahiere Dokument-IDs für DB-Speicherung
+                var docIds = chatResponse.FoundDocuments.Select(d => d.Id).ToList();
+                await Db.SaveMessageAsync(conversationIdForSave, false, chatResponse.Message, docIds.Count > 0 ? docIds : null); // Speichere mit DocumentIds
             });
             
-            await TypewriterEffect(assistantMessage, reply); // Starte Typewriter-Effekt (UI-Blockierend)
+            await TypewriterEffect(assistantMessage, chatResponse.Message); // Starte Typewriter-Effekt (UI-Blockierend)
             
             await saveAssistantTask; // Warte bis Speicherung fertig (sollte schon sein)
         }
@@ -316,6 +380,8 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
 
             if (result != null) // Check: Hat User eine Datei ausgewählt?
             {
+                System.Diagnostics.Debug.WriteLine($"[UPLOAD] START - Datei ausgewählt: {result.FileName}");
+                
                 // 1. SOFORT: Badge anzeigen
                 UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
                 StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
@@ -361,11 +427,12 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                         await Db.SaveUploadedFileAsync(conversationIdForSave, result.FileName, uploadResult, thumbnail);
                         
                         // 3. Speichere auch in Documents (global, für Dokumente-Seite)
-                        using (var scope = ServiceProvider.CreateScope())
+                        int documentId = 0; // ID des gespeicherten Dokuments
+                        using (var scope = ServiceProvider.CreateScope()) // Erstelle DB-Scope für Document-Speicherung
                         {
-                            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>();
-                            string fileExtension = System.IO.Path.GetExtension(result.FileName).ToLower();
-                            string fileType = fileExtension switch
+                            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+                            string fileExtension = System.IO.Path.GetExtension(result.FileName).ToLower(); // Hole Datei-Endung (z.B. ".pdf")
+                            string fileType = fileExtension switch // Bestimme Dateityp
                             {
                                 ".pdf" => "pdf",
                                 ".txt" => "txt",
@@ -374,56 +441,181 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                                 _ => "unknown"
                             };
                             
-                            // SaveDocumentAsync speichert nur wenn nicht bereits vorhanden (Duplikat-Check via Hash)
-                            await docDbService.SaveDocumentAsync(result.FileName, uploadResult, fileType, uploadResult, thumbnail);
+                            string fileContent;
+                            if (fileType == "pdf") // PDF muss als Base64 gespeichert werden
+                            {
+                                byte[] pdfBytes = await File.ReadAllBytesAsync(result.FullPath); // Lese PDF als Bytes
+                                fileContent = Convert.ToBase64String(pdfBytes); // Konvertiere zu Base64
+                            }
+                            else // Text-Dateien können direkt gelesen werden
+                            {
+                                fileContent = await File.ReadAllTextAsync(result.FullPath); // Lese als Text
+                            }
+                            
+                            documentId = await docDbService.SaveDocumentAsync(result.FileName, fileContent, fileType, uploadResult, thumbnail); // Speichere Dokument in DB
+                            
+                            await docDbService.LinkDocumentToConversationAsync(documentId, conversationIdForSave); // Verknüpfe Dokument mit Chat
                         }
                         
-                        // 4. Speichere Upload-Nachricht als Message
-                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult);
+                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult); // Speichere Upload-Nachricht in DB
                         
-                        // 5. Titel aktualisieren
-                        await Db.UpdateConversationTitleAsync(conversationIdForSave);
+                        await Db.UpdateConversationTitleAsync(conversationIdForSave); // Aktualisiere Chat-Titel
+                        
+                        return documentId; // Gib Dokument-ID zurück (wichtig für currentDocumentId!)
                     });
                     
-                    await TypewriterEffect(uploadMessage, uploadResult); // Typewriter läuft parallel
+                    await TypewriterEffect(uploadMessage, uploadResult); // Zeige Upload-Nachricht mit Typewriter
                     
-                    await saveFileTask; // Warte bis Speicherung fertig (sollte schon sein)
+                    int uploadedDocId = await saveFileTask; // Warte bis DB-Speicherung fertig
+                    currentDocumentId = uploadedDocId; // Speichere Dokument-ID für späteres Entfernen
+                    System.Diagnostics.Debug.WriteLine($"[UPLOAD] currentDocumentId gesetzt: {currentDocumentId}");
                 }
             }
         }
         catch (Exception ex)
         {
-            UploadedFileName = string.Empty; // Entferne Badge bei Fehler
-            var errorMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Fehler-Nachricht
+            UploadedFileName = string.Empty;
+            var errorMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
             Messages.Add(errorMessage);
-            await TypewriterEffect(errorMessage, $"Fehler beim Datei-Upload: {ex.Message}"); // Fehlerausgabe mit Typewriter
-            StateHasChanged(); // UI aktualisieren
+            await TypewriterEffect(errorMessage, $"Fehler beim Datei-Upload: {ex.Message}");
+            StateHasChanged();
         }
     }
 
-    private void RemoveFile() // Datei entfernen: Löscht Badge und Datei aus Service
+    private async Task RemoveFile() // Entferne angehängte Datei
     {
-        UploadedFileName = string.Empty; // Entferne Dateiname aus UI
-        Chat.ClearFile(); // Entferne Datei aus Service
-        var confirmMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false }; // Bestätigungs-Nachricht
+        UploadedFileName = string.Empty; // Lösche Dateiname aus Badge
+        Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
+        
+        if (currentDocumentId > 0 && currentConversationId > 0) // Prüfe ob Dokument verknüpft ist
+        {
+            try
+            {
+                using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+                var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+                bool removed = await docDbService.UnlinkDocumentFromConversationAsync(currentDocumentId, currentConversationId); // Lösche Verknüpfung in DB
+                System.Diagnostics.Debug.WriteLine($"[REMOVE] Verknüpfung entfernt: {removed}, DocId: {currentDocumentId}, ConvId: {currentConversationId}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[REMOVE] Fehler beim Entfernen der Verknüpfung: {ex.Message}");
+            }
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[REMOVE] Keine Verknüpfung zu entfernen: DocId={currentDocumentId}, ConvId={currentConversationId}");
+        }
+        
+        currentDocumentId = 0; // Setze ID zurück
+        
+        var confirmMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
         Messages.Add(confirmMessage);
-        var confirmTask = TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Bestätigung mit Typewriter
-        StateHasChanged(); // UI aktualisieren
+        await TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Zeige Bestätigung mit Typewriter
+        StateHasChanged();
     }
 
-    private async Task ResetChat() // Neuer Chat: Löscht UI (keine DB-Eintrag bis erste Nachricht)
+    private async Task ResetChat() // Setze Chat komplett zurück
     {
-        Messages.Clear(); // Lösche alle Nachrichten aus UI
-        InputText = string.Empty; // Lösche Eingabefeld
-        rows = 1; // Setze Zeilen zurück
-        UploadedFileName = string.Empty; // Entferne angehängte Datei
-        Chat.ClearFile(); // Entferne Datei aus Service
+        Messages.Clear(); // Lösche alle Nachrichten
+        InputText = string.Empty; // Leere Eingabefeld
+        rows = 1; // Setze Textarea auf 1 Zeile
+        UploadedFileName = string.Empty; // Entferne Datei-Badge
+        Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
         
-        currentConversationId = 0; // Keine Conversation (wird bei erster Nachricht erstellt)
+        currentConversationId = 0; // Setze Conversation-ID zurück
         
-        Navigation.NavigateTo("/", forceLoad: true); // Force Reload der Komponente
-        StateHasChanged(); // UI aktualisieren
+        Navigation.NavigateTo("/", forceLoad: true); // Navigiere zu Start (force reload)
+        StateHasChanged();
         
-        await Task.CompletedTask; // Async abschließen
+        await Task.CompletedTask;
+    }
+
+    private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-Anwendung
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+            var doc = await docDbService.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
+            if (doc == null) // Dokument nicht gefunden
+            {
+                return;
+            }
+            
+            string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName); // Erstelle Pfad in Temp-Ordner
+            
+            if (doc.FileType == "pdf") // PDF muss von Base64 konvertiert werden
+            {
+                try
+                {
+                    await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); // Konvertiere Base64 zu Bytes und schreibe
+                }
+                catch (FormatException) // Fallback falls nicht Base64
+                {
+                    await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+                }
+            }
+            else // Text-Dateien direkt schreiben
+            {
+                await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+            }
+            
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
+        }
+        catch (Exception ex)
+        {
+            Messages.Add(new ChatMessage { Text = $"Fehler: {ex.Message}", DisplayText = $"Fehler: {ex.Message}", IsUser = false });
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddDocumentToChat(int documentId) // Füge Dokument zum Chat hinzu
+    {
+        try
+        {
+            if (currentConversationId == 0) // Prüfe ob Conversation existiert
+            {
+                currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Erstelle neue Conversation
+            }
+
+            using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+            
+            var doc = await docDbService.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
+            
+            if (doc != null) // Dokument gefunden
+            {
+                UploadedFileName = doc.FileName; // Zeige Dateiname im Badge
+                currentDocumentId = doc.Id; // Speichere ID für späteres Entfernen
+                StateHasChanged();
+            }
+            
+            bool success = await docDbService.LinkDocumentToConversationAsync(documentId, currentConversationId); // Verknüpfe Dokument mit Chat
+            
+            var confirmMsg = new ChatMessage 
+            { 
+                Text = string.Empty,
+                DisplayText = string.Empty,
+                IsUser = false 
+            };
+            Messages.Add(confirmMsg);
+            StateHasChanged();
+            
+            if (success) // Verknüpfung erfolgreich
+            {
+                await TypewriterEffect(confirmMsg, $"Dokument '{doc?.FileName}' wurde zum Chat hinzugefügt."); // Zeige Erfolgs-Nachricht
+            }
+            else // Dokument war bereits verknüpft
+            {
+                await TypewriterEffect(confirmMsg, $"Dokument '{doc?.FileName}' ist bereits im Chat verknüpft."); // Zeige Info-Nachricht
+            }
+        }
+        catch (Exception ex)
+        {
+            var errorMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(errorMsg);
+            StateHasChanged();
+            await TypewriterEffect(errorMsg, $"Fehler: {ex.Message}");
+        }
     }
 }

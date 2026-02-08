@@ -9,6 +9,7 @@ public class Message // Klasse für eine Nachricht
     public bool IsUser { get; set; } // true = User, false = Assistant
     public string Text { get; set; } = string.Empty; // Nachrichtentext (nie null)
     public DateTime Timestamp { get; set; } // Wann wurde Nachricht gesendet?
+    public string? DocumentIdsJson { get; set; } // JSON-String mit Dokument-IDs (z.B. "[1,2,3]") - für search_documents-Results
     
     public Conversation? Conversation { get; set; } // Navigation: Zugehöriger Chat (nullable!)
 }

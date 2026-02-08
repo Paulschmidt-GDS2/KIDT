@@ -48,12 +48,12 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 foreach (var method in toolMethods) // Durchlaufe alle Tool-Methoden (z.B. SearchDocuments, AddDocumentToChat)
                 {
                     var function = KernelFunctionFactory.CreateFromMethod( // Erstelle Kernel-Funktion aus Methode
-                        method, // Methode (z.B. SearchDocuments)
-                        toolInstance, // Instanz der Tool-Klasse
+                        method,
+                        toolInstance,
                         functionName: ConvertToPythonCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments ? search_documents)
                     );
                     
-                    functions.Add(function); // Füge zu Liste hinzu
+                    functions.Add(function);
                 }
 
                 if (functions.Count > 0) // Mindestens eine Funktion gefunden?
@@ -64,7 +64,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                     );
                 }
             }
-            catch (Exception ex) // Registrierung fehlgeschlagen?
+            catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Fehler beim Registrieren von {toolType.Name}: {ex.Message}");
             }
