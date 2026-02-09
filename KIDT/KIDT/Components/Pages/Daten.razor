@@ -32,20 +32,20 @@
                         <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich für OpenChat *@
                             <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
                             
-                            @if (chat.UploadedFiles.Count > 0) @* Check: Hat dieser Chat ein File? *@
+                            @if (chat.LinkedDocuments.Count > 0) @* Check: Hat dieser Chat verknüpfte Dokumente? *@
                             {
                                 <div class="card-file-preview"> @* File-Vorschau mit Thumbnail *@
-                                    @if (!string.IsNullOrEmpty(chat.UploadedFiles[0].ThumbnailBase64)) @* Check: Hat File ein Thumbnail? *@
+                                    @if (!string.IsNullOrEmpty(chat.LinkedDocuments[0].ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
                                     {
-                                        <img src="@("data:image/png;base64," + chat.UploadedFiles[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
+                                        <img src="@("data:image/png;base64," + chat.LinkedDocuments[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
                                     }
                                     else @* Kein Thumbnail -> Zeige Icon *@
                                     {
-                                        @if (chat.UploadedFiles[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
+                                        @if (chat.LinkedDocuments[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
                                         {
                                             <img src="images/file.png" alt="PDF" class="preview-icon-large" />
                                         }
-                                        else if (chat.UploadedFiles[0].FileName.EndsWith(".txt")) @* TXT-Icon *@
+                                        else if (chat.LinkedDocuments[0].FileName.EndsWith(".txt")) @* TXT-Icon *@
                                         {
                                             <img src="images/file.png" alt="Text" class="preview-icon-large" />
                                         }
@@ -56,7 +56,7 @@
                                     }
                                 </div>
                                 
-                                <div class="card-filename">@chat.UploadedFiles[0].FileName</div> @* Dateiname darunter *@
+                                <div class="card-filename">@chat.LinkedDocuments[0].FileName</div> @* Dateiname darunter *@
                             }
                             
                             <div class="card-date">@GetFormattedDate(chat.CreatedAt)</div> @* Datum ganz unten (konvertiert zu Lokalzeit) *@

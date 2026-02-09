@@ -7,7 +7,6 @@ public class ChatDbContext : DbContext
 {
     public DbSet<Conversation> Conversations { get; set; }
     public DbSet<Message> Messages { get; set; }
-    public DbSet<UploadedFile> UploadedFiles { get; set; }
     public DbSet<Document> Documents { get; set; }
     public DbSet<ConversationDocument> ConversationDocuments { get; set; }
 
@@ -16,7 +15,7 @@ public class ChatDbContext : DbContext
         // MySQL Connection String
         // WICHTIG: Für Multi-User einfach "localhost" durch Server-IP ersetzen!
         string connectionString =
-            "Server=localhost;" +           // Teamkollege: Ändere zu Server-IP (192.168.178.7)
+            "Server=localhost;" +           // Teamkollege: Ändere zu Server-IP (192.168.178.71)
             "Port=3306;" +                  
             "Database=kidt_chat;" +         
             "User=root;" +                  // Teamkollege: Ändere zu "kidt_user"
@@ -39,11 +38,6 @@ public class ChatDbContext : DbContext
             .HasColumnType("datetime(6)")
             .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
             
-        modelBuilder.Entity<UploadedFile>()
-            .Property(u => u.UploadedAt)
-            .HasColumnType("datetime(6)")
-            .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-            
         modelBuilder.Entity<Document>()
             .Property(d => d.UploadedAt)
             .HasColumnType("datetime(6)")
@@ -60,12 +54,6 @@ public class ChatDbContext : DbContext
             .WithMany(c => c.Messages) // Conversation hat viele Messages
             .HasForeignKey(m => m.ConversationId) // Foreign Key
             .OnDelete(DeleteBehavior.Cascade); // Bei Conversation-Löschung auch Messages löschen
-            
-        modelBuilder.Entity<UploadedFile>()
-            .HasOne(f => f.Conversation) // UploadedFile hat eine Conversation
-            .WithMany(c => c.UploadedFiles) // Conversation hat viele UploadedFiles
-            .HasForeignKey(f => f.ConversationId) // Foreign Key
-            .OnDelete(DeleteBehavior.Cascade); // Bei Conversation-Löschung auch Files löschen
             
         // ConversationDocument: Junction-Tabelle mit Composite Key
         modelBuilder.Entity<ConversationDocument>()

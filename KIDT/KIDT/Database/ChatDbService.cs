@@ -98,43 +98,33 @@ public class ChatDbService // Service für Datenbank-Zugriff
         return string.Join("\n", contextLines); // Verbinde alle Zeilen mit Zeilenumbruch
     }
 
-    public async Task SaveUploadedFileAsync(int conversationId, string fileName, string extractedText, string thumbnailBase64) // Speichere hochgeladene Datei
-    {
-        var allFiles = await this.db.UploadedFiles.ToListAsync(); // Lade alle hochgeladenen Dateien
-        
-        bool fileExists = false; // Standardmäßig: Datei existiert nicht
-        foreach (UploadedFile f in allFiles) // Gehe durch alle Dateien
-        {
-            if (f.ConversationId == conversationId && f.FileName == fileName) // Gleiche Conversation und gleicher Name?
-            {
-                fileExists = true; // Datei existiert bereits
-                break;
-            }
-        }
-        
-        if (!fileExists) // Datei existiert noch nicht?
-        {
-            UploadedFile newFile = new UploadedFile(); // Erstelle neues UploadedFile-Objekt
-            newFile.ConversationId = conversationId; // Setze Conversation-ID
-            newFile.FileName = fileName; // Setze Dateiname
-            newFile.ExtractedText = extractedText; // Setze extrahierten Text
-            newFile.ThumbnailBase64 = thumbnailBase64; // Setze Thumbnail
-            newFile.UploadedAt = DateTime.UtcNow; // Setze aktuelles Datum (UTC)
-            
-            this.db.UploadedFiles.Add(newFile); // Füge Datei zur Datenbank hinzu
-            await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
-        }
-    }
-
     public async Task<List<Conversation>> LoadAllConversationsAsync() // Lade alle Conversations
     {
-        var query = this.db.Conversations.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
-        var allConversations = await query.ToListAsync(); // Lade alle Conversations aus Datenbank
+        var allConversations = await this.db.Conversations
+            .AsNoTracking()
+            .ToListAsync(); // Lade alle Conversations aus Datenbank (OHNE Include!)
         
         foreach (Conversation c in allConversations) // Gehe durch alle Conversations
         {
-            var files = await this.db.UploadedFiles.Where(f => f.ConversationId == c.Id).ToListAsync(); // Lade Dateien für diese Conversation
-            c.UploadedFiles = files; // Setze verknüpfte Dateien
+            // Lade verknüpfte Dokumente via ConversationDocuments (getrennte Query!)
+            var conversationDocs = await this.db.ConversationDocuments
+                .AsNoTracking()
+                .Where(cd => cd.ConversationId == c.Id)
+                .ToListAsync(); // Lade alle Verknüpfungen für diese Conversation
+            
+            c.LinkedDocuments = new List<Document>(); // Initialisiere Liste
+            
+            foreach (var cd in conversationDocs) // Gehe durch alle Verknüpfungen
+            {
+                var doc = await this.db.Documents
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.Id == cd.DocumentId); // Lade Dokument per expliziter Query
+                    
+                if (doc != null) // Dokument gefunden?
+                {
+                    c.LinkedDocuments.Add(doc); // Füge zur Liste hinzu
+                }
+            }
         }
         
         allConversations.Sort((a, b) => b.CreatedAt.CompareTo(a.CreatedAt)); // Sortiere nach Datum (neueste zuerst)
@@ -181,23 +171,6 @@ public class ChatDbService // Service für Datenbank-Zugriff
         }
     }
 
-    public async Task<List<UploadedFile>> LoadFilesForConversationAsync(int conversationId) // Lade Dateien für einen Chat
-    {
-        var query = this.db.UploadedFiles.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
-        var allFiles = await query.ToListAsync(); // Lade alle Dateien aus Datenbank
-        
-        var filtered = new List<UploadedFile>(); // Erstelle leere Liste für Ergebnis
-        foreach (UploadedFile f in allFiles) // Gehe durch alle Dateien
-        {
-            if (f.ConversationId == conversationId) // Gehört Datei zu diesem Chat?
-            {
-                filtered.Add(f);
-            }
-        }
-        
-        return filtered;
-    }
-
     public async Task DeleteConversationAsync(int conversationId) // Lösche Conversation mit allen Daten
     {
         var allMessages = await this.db.Messages.ToListAsync(); // Lade alle Nachrichten aus Datenbank
@@ -212,17 +185,12 @@ public class ChatDbService // Service für Datenbank-Zugriff
         
         this.db.Messages.RemoveRange(messages); // Lösche alle Nachrichten
         
-        var allFiles = await this.db.UploadedFiles.ToListAsync(); // Lade alle Dateien aus Datenbank
-        var files = new List<UploadedFile>(); // Erstelle leere Liste für zu löschende Dateien
-        foreach (UploadedFile f in allFiles) // Gehe durch alle Dateien
-        {
-            if (f.ConversationId == conversationId) // Gehört Datei zu diesem Chat?
-            {
-                files.Add(f);
-            }
-        }
+        // Lösche ConversationDocuments-Verknüpfungen (Documents selbst bleiben erhalten!)
+        var conversationDocs = await this.db.ConversationDocuments
+            .Where(cd => cd.ConversationId == conversationId)
+            .ToListAsync(); // Lade alle Verknüpfungen
         
-        this.db.UploadedFiles.RemoveRange(files); // Lösche alle Dateien
+        this.db.ConversationDocuments.RemoveRange(conversationDocs); // Lösche Verknüpfungen
         
         Conversation? conv = await this.db.Conversations.FindAsync(conversationId); // Suche Conversation
         

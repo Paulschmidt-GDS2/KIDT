@@ -149,21 +149,21 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             await Task.Yield(); // Gib UI-Thread frei
             
             List<KIDT.Models.Message> dbMessages;
-            List<KIDT.Models.UploadedFile> files;
+            List<KIDT.Models.Document> files;
             
             using (var scope1 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Messages
             using (var scope2 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Files
             {
                 var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 1
-                var dbService2 = scope2.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 2
+                var docDbService = scope2.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
                 
                 var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Starte Messages-Laden
-                var filesTask = dbService2.LoadFilesForConversationAsync(currentConversationId); // Starte Files-Laden
+                var filesTask = docDbService.GetDocumentsForConversationAsync(currentConversationId); // Starte Dokumente-Laden
                 
                 await Task.WhenAll(messagesTask, filesTask); // Warte bis beide fertig (parallel)
                 
                 dbMessages = await messagesTask; // Hole Ergebnis Messages
-                files = await filesTask; // Hole Ergebnis Files
+                files = await filesTask; // Hole Ergebnis Documents
             }
             
             foreach (KIDT.Models.Message dbMsg in dbMessages) // Durchlaufe alle geladenen Messages
@@ -423,10 +423,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                         // 1. Generiere Thumbnail
                         string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath);
                         
-                        // 2. Speichere in UploadedFiles (pro Conversation)
-                        await Db.SaveUploadedFileAsync(conversationIdForSave, result.FileName, uploadResult, thumbnail);
-                        
-                        // 3. Speichere auch in Documents (global, für Dokumente-Seite)
+                        // 2. Speichere in Documents (global, für Dokumente-Seite)
                         int documentId = 0; // ID des gespeicherten Dokuments
                         using (var scope = ServiceProvider.CreateScope()) // Erstelle DB-Scope für Document-Speicherung
                         {
