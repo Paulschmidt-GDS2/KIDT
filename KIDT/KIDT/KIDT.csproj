@@ -51,27 +51,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- MAUI / Blazor Packages -->
+	<!-- MAUI / Blazor Packages -->
 	  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.5">
-	    <PrivateAssets>all</PrivateAssets>
-	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		<PrivateAssets>all</PrivateAssets>
+		<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 	  </PackageReference>
-<<<<<<< HEAD
 	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
 	  <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.50" />
 	  <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.50" />
 	  <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.50" />
+	  <PackageReference Include="Radzen.Blazor" Version="10.0.2" />
 	  <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.5" />
 	  <PackageReference Include="ModelContextProtocol.Core" Version="1.1.0" />
-=======
-	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.2" />
-	  <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
-	  <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.31" />
-	  <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.31" />
-	  <PackageReference Include="Radzen.Blazor" Version="10.0.2" />
-	  <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
-	  <PackageReference Include="ModelContextProtocol.Core" Version="0.8.0-preview.1" />
->>>>>>> origin/main
 	  <PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.1" />
     
     <!-- MCP + Semantic Kernel for Ollama -->
