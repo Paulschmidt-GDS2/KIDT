@@ -1,0 +1,249 @@
+﻿@page "/kalender"
+
+@* Grafischer Kalender mit Monats-/Wochen-/Tagesansicht, Navigation und Klick-zum-Hinzufügen von Terminen *@
+<div class="page-container calendar-page">
+    @* Toolbar: Navigation und View-Auswahl *@
+    <div class="calendar-toolbar">
+        <div class="left">
+            <button @onclick="Prev">&lt;</button> @* Zur vorherigen Periode springen *@
+            <button @onclick="Today">Heute</button> @* Heute als Fokusdatum setzen *@
+            <button @onclick="Next">&gt;</button> @* Zur nächsten Periode springen *@
+        </div>
+        <div class="center">
+            <strong>@ViewTitle</strong> @* Anzeige: z.B. "März 2026" oder "Woche von ..." *@
+        </div>
+        <div class="right">
+            <select @bind="currentView"> @* Wahl: Monat / Woche / Tag *@
+                <option value="Month">Monat</option>
+                <option value="Week">Woche</option>
+                <option value="Day">Tag</option>
+            </select>
+        </div>
+    </div>
+
+    @* Monatsansicht: 7 Spalten (Mo-So), 6 Reihen -> 42 Zellen *@
+    @if (currentView == "Month")
+    {
+        <div class="month-grid">
+            @foreach (var dow in DayNames)
+            {
+                <div class="weekday-header">@dow</div>
+            }
+
+            @foreach (var cell in MonthCells)
+            {
+                var isCurrentMonth = cell.Month == DisplayMonth.Month && cell.Year == DisplayMonth.Year;
+                <div class="day-cell @(isCurrentMonth ? "current-month" : "other-month")" @onclick="() => OnDayClick(cell)">
+                    <div class="day-number">@cell.Day</div>
+                    <div class="events-preview">
+                        @foreach (var ev in GetEventsForDate(cell).Take(3)) @* Zeige maximal 3 Events als Vorschau *@
+                        {
+                            <div class="event-item">@ev.Title</div>
+                        }
+                        @if (GetEventsForDate(cell).Count > 3)
+                        {
+                            <div class="more">+@((GetEventsForDate(cell).Count) - 3)</div> @* Anzahl zusätzlicher Events *@
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (currentView == "Week")
+    {
+        @* Wochenansicht: Kopf mit Tagen, Körper mit Tagesbereichen *@
+        <div class="week-view">
+            <div class="week-header">
+                @foreach (var d in WeekDays)
+                {
+                    <div class="week-day-header">@d.ToString("ddd dd.MM")</div>
+                }
+            </div>
+            <div class="week-body">
+                @foreach (var d in WeekDays)
+                {
+                    <div class="week-day" @onclick="() => OnDayClick(d)">
+                        <div class="day-number">@d.Day</div>
+                        @foreach (var ev in GetEventsForDate(d))
+                        {
+                            <div class="event-item">@ev.Title</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else if (currentView == "Day")
+    {
+        @* Tagesansicht mit kompletter Eventliste und Eingabefeld *@
+        <div class="day-view">
+            <h4>@DisplayDay.ToString("dddd, dd.MM.yyyy")</h4>
+            <div class="day-events">
+                @foreach (var ev in GetEventsForDate(DisplayDay))
+                {
+                    <div class="event-item">@ev.Title</div>
+                }
+            </div>
+            <div class="add-event-inline">
+                <input placeholder="Neuer Termin" @bind="newEventText" />
+                <button @onclick="() => AddEventForDate(DisplayDay)">Hinzufügen</button>
+            </div>
+        </div>
+    }
+
+    @* Overlay-Dialog zum Hinzufügen eines Termins (einfach, ohne externe Dialog-Komponente) *@
+    @if (showAddDialog)
+    {
+        <div class="dialog-backdrop" @onclick="CloseDialog">
+            <div class="dialog" @onclick:stopPropagation="true">
+                <h4>Neuen Termin hinzufügen</h4>
+                <div>
+                    <label>Datum: </label> @dialogDate.ToString("dd.MM.yyyy")
+                </div>
+                <div>
+                    <input placeholder="Titel" @bind="newEventText" />
+                </div>
+                <div class="dialog-actions">
+                    <button @onclick="ConfirmAdd">Speichern</button>
+                    <button @onclick="CloseDialog">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // Aktuelle Ansicht: "Month" | "Week" | "Day"
+    private string currentView = "Month";
+    // Fokussiertes Datum (zentral für Navigation und Anzeige)
+    private DateTime selectedDate = DateTime.Today;
+    // Erster Tag des angezeigten Monats
+    private DateTime DisplayMonth => new DateTime(selectedDate.Year, selectedDate.Month, 1);
+    // Anzeige-Datum für Tagesansicht
+    private DateTime DisplayDay => selectedDate.Date;
+    // Zellen für Monats-Grid (42 Einträge: 6 Wochen x 7 Tage)
+    private List<DateTime> MonthCells = new();
+    // Tage der aktuellen Woche
+    private List<DateTime> WeekDays = new();
+    // Kürzel für Wochentage (Mo-So)
+    private string[] DayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
+
+    // Interne Event-Repräsentation
+    private class CalendarEvent { public DateTime Start; public string Title = string.Empty; }
+    private Dictionary<DateTime, List<CalendarEvent>> events = new();
+
+    // Dialog-Zustand für Terminerstellung
+    private bool showAddDialog = false;
+    private DateTime dialogDate = DateTime.Today;
+    private string newEventText = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        // Beispieltermine hinzufügen (kann später durch DB ersetzt werden)
+        AddSampleEvent(DateTime.Today, "Meeting mit Team");
+        AddSampleEvent(DateTime.Today.AddDays(2), "Projekt-Review");
+        BuildMonthCells();
+        BuildWeekDays();
+    }
+
+    // Baut die 42 Zellen für die Monatsansicht (beginnt montags)
+    private void BuildMonthCells()
+    {
+        MonthCells.Clear();
+        var first = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1);
+        int offset = ((int)first.DayOfWeek + 6) % 7; // Tagesindex so, dass Montag=0
+        var start = first.AddDays(-offset);
+        for (int i = 0; i < 42; i++) MonthCells.Add(start.AddDays(i));
+    }
+
+    // Baut die 7 Tage für die Wochenansicht (Montag - Sonntag)
+    private void BuildWeekDays()
+    {
+        WeekDays.Clear();
+        int offset = ((int)selectedDate.DayOfWeek + 6) % 7;
+        var start = selectedDate.AddDays(-offset).Date;
+        for (int i = 0; i < 7; i++) WeekDays.Add(start.AddDays(i));
+    }
+
+    // Navigation: vorherige Periode
+    private void Prev()
+    {
+        if (currentView == "Month") selectedDate = selectedDate.AddMonths(-1);
+        else if (currentView == "Week") selectedDate = selectedDate.AddDays(-7);
+        else selectedDate = selectedDate.AddDays(-1);
+        BuildMonthCells();
+        BuildWeekDays();
+    }
+
+    // Navigation: nächste Periode
+    private void Next()
+    {
+        if (currentView == "Month") selectedDate = selectedDate.AddMonths(1);
+        else if (currentView == "Week") selectedDate = selectedDate.AddDays(7);
+        else selectedDate = selectedDate.AddDays(1);
+        BuildMonthCells();
+        BuildWeekDays();
+    }
+
+    // Navigation: zur heutigen Ansicht
+    private void Today()
+    {
+        selectedDate = DateTime.Today;
+        BuildMonthCells();
+        BuildWeekDays();
+    }
+
+    // Öffnet den Dialog zum Hinzufügen eines Termins für das angeklickte Datum
+    private void OnDayClick(DateTime day)
+    {
+        dialogDate = day.Date;
+        newEventText = string.Empty;
+        showAddDialog = true;
+    }
+
+    private void CloseDialog() => showAddDialog = false;
+
+    private void ConfirmAdd()
+    {
+        AddEventForDate(dialogDate);
+        showAddDialog = false;
+    }
+
+    // Fügt einen Termin für das gegebene Datum hinzu (in-memory)
+    private void AddEventForDate(DateTime date)
+    {
+        if (string.IsNullOrWhiteSpace(newEventText)) return;
+        var d = date.Date;
+        if (!events.ContainsKey(d)) events[d] = new List<CalendarEvent>();
+        events[d].Add(new CalendarEvent { Start = d, Title = newEventText.Trim() });
+        newEventText = string.Empty;
+        BuildMonthCells();
+        BuildWeekDays();
+    }
+
+    private void AddSampleEvent(DateTime date, string title)
+    {
+        var d = date.Date;
+        if (!events.ContainsKey(d)) events[d] = new List<CalendarEvent>();
+        events[d].Add(new CalendarEvent { Start = d, Title = title });
+    }
+
+    // Liefert alle Termine f�r ein Datum (oder leer)
+    private List<CalendarEvent> GetEventsForDate(DateTime date)
+    {
+        var d = date.Date;
+        if (events.TryGetValue(d, out var list)) return list;
+        return new List<CalendarEvent>();
+    }
+
+    // Titelanzeige je nach Sicht (Monat/Woche/Tag)
+    private string ViewTitle
+    {
+        get
+        {
+            if (currentView == "Month") return DisplayMonth.ToString("MMMM yyyy");
+            if (currentView == "Week") return $"Woche von {WeekDays.First().ToString("dd.MM.yyyy")}";
+            return DisplayDay.ToString("dddd, dd.MM.yyyy");
+        }
+    }
+}

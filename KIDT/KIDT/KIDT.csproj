@@ -60,6 +60,7 @@
 	  <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.31" />
 	  <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.31" />
 	  <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.31" />
+	  <PackageReference Include="Radzen.Blazor" Version="10.0.2" />
 	  <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
 	  <PackageReference Include="ModelContextProtocol.Core" Version="0.8.0-preview.1" />
 	  <PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.1" />

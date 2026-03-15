@@ -6,6 +6,49 @@
     font-family: "Courier New", Courier, monospace;
 }
 
+/* === KALENDER STYLES === */
+/* Gesamt-Container für die Kalenderseite */
+.calendar-page { padding: 1rem; }
+
+/* Toolbar: Navigation (vor/naechst/Heute) und View-Auswahl */
+.calendar-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+.calendar-toolbar .left button, .calendar-toolbar .right select, .calendar-toolbar .left button { margin-right:0.25rem; padding:0.3rem 0.6rem; }
+
+/* Monats-Grid: 7 Spalten (Mo-So) mit gleich großen Zellen */
+.month-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+.weekday-header { font-weight:600; padding:6px 8px; text-align:center; background:#f1f1f1; }
+
+/* Einzelne Tageszelle im Monats-Grid */
+.day-cell { min-height:90px; border:1px solid #ddd; padding:6px; background:white; cursor:pointer; position:relative; overflow:hidden; }
+.day-cell.other-month { background:#fafafa; color:#999; } /* Tage außerhalb des Monats leicht ausgegraut */
+.day-number { font-size:0.9rem; font-weight:600; }
+
+/* Vorschau der Termine in einer Zelle; begrenzt auf Zeilen mit Ellipsis */
+.events-preview { margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+.event-item { background:#1b6ec2; color:white; padding:2px 4px; border-radius:4px; font-size:0.75rem; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.more { font-size:0.75rem; color:#666; }
+
+/* Wochen-Ansicht: Kopfzeile mit Tagen und Körper mit Tagesbereichen */
+.week-view { display:flex; flex-direction:column; }
+.week-header { display:grid; grid-template-columns: repeat(7, 1fr); }
+.week-day-header { padding:6px; background:#f7f7f7; text-align:center; }
+.week-body { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+.week-day { min-height:200px; border:1px solid #eee; padding:6px; background:white; }
+
+/* Tages-Detailansicht */
+.day-view { padding:8px; background:white; border:1px solid #eee; }
+.add-event-inline { margin-top:8px; }
+
+/* Einfaches Dialog-Overlay zum Hinzufügen eines Termins */
+.dialog-backdrop { position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.dialog { background:white; padding:12px; border-radius:6px; width:320px; box-shadow:0 8px 24px rgba(0,0,0,0.25); }
+.dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
+
+/* Seiten-Layout: Kalender links, Event-Liste rechts (bei Bedarf) */
+.calendar-layout { display:flex; gap:12px; }
+.calendar-column { flex:1; }
+.events-column { width:320px; }
+
 /* Body und HTML ohne Overflow */
 html, body {
     background-color: #848877; /* Sehr dunkler Hintergrund */
