@@ -143,7 +143,7 @@ public class RouterService
                             if (functionCall.FunctionName == "search_documents") // War Tool search_documents?
                             {
                                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Parsing JSON...");
-                                var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // Parse JSON-Result
+                var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // Parse JSON-Result
                                 System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON geparsed: found={toolResult?.found}, documentIds={toolResult?.documentIds?.Count}");
                                 
                                 if (toolResult != null && toolResult.documentIds != null) // Erfolgreiche Suche?
@@ -251,7 +251,7 @@ public class RouterService
                     var routingJson = JsonSerializer.Deserialize<RoutingResponseJson>(responseText, // Parse JSON-Response
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitive
                     
-                    if (routingJson?.needsRouting == true) // Routing nötig?
+                    if (routingJson != null && routingJson.needsRouting == true) // Routing nötig?
                     {
                         string targetService = "conversation"; // Standardmäßig Conversation
                         if (routingJson.intent == "dataAnalysis") // Intent ist DataAnalysis?
@@ -259,10 +259,10 @@ public class RouterService
                             targetService = "dataAnalysis";
                         }
                         
-                        int maxTokens = 300; // Standard Token-Limit
+                        int maxTokens = 500; // Standard Token-Limit für Conversation (reicht für kurze UND lange Antworten)
                         if (targetService == "dataAnalysis") // DataAnalysis gewählt?
                         {
-                            maxTokens = 2000; // Setze höheres Token-Limit
+                            maxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
                         }
                         
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
@@ -335,10 +335,10 @@ public class RouterService
                 finalTargetService = "dataAnalysis";
             }
             
-            int finalMaxTokens = 300; // Standard Token-Limit
+            int finalMaxTokens = 500; // Standard Token-Limit für Conversation
             if (finalTargetService == "dataAnalysis") // DataAnalysis gewählt?
             {
-                finalMaxTokens = 2000; // Setze höheres Token-Limit
+                finalMaxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
             }
             
             RouterResponse finalResponse = new RouterResponse(); // Erstelle neue RouterResponse
@@ -416,7 +416,10 @@ public class RouterService
             result.Intent = "conversation";
         }
         
-        result.SearchQuery = intent?.searchQuery;
+        if (intent != null)
+        {
+            result.SearchQuery = intent.searchQuery;
+        }
         
         if (intent != null && intent.documentId != null) // Dokument-ID vorhanden?
         {

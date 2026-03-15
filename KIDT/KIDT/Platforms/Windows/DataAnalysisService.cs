@@ -117,7 +117,7 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             string assistantMessage; // Variable für Antwort
             if (response.Content != null) // Response hat Content?
             {
-                assistantMessage = EnsureUtf8(response.Content); // Konvertiere zu UTF-8
+                assistantMessage = response.Content; // DIREKT verwenden (kein EnsureUtf8 mehr!)
             }
             else // Kein Content
             {
@@ -132,22 +132,16 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
         }
     }
 
-    private string EnsureUtf8(string text) // Konvertiere Text zu UTF-8
+    private string EnsureUtf8(string text) // Stellt sicher dass Text korrekt als UTF-8 behandelt wird
     {
         if (string.IsNullOrEmpty(text)) // Text ist leer?
         {
             return text;
         }
 
-        try
-        {
-            var bytes = Encoding.Default.GetBytes(text); // Konvertiere Text zu Bytes
-            return Encoding.UTF8.GetString(bytes); // Konvertiere Bytes zu UTF-8 String
-        }
-        catch
-        {
-            return text;
-        }
+        // Da Ollama API bereits UTF-8 zurückgibt, einfach den Text direkt zurückgeben
+        // Frühere Konvertierung hatte Encoding-Probleme verursacht
+        return text;
     }
 
     public ValueTask DisposeAsync() // Räumt Ressourcen auf (aktuell leer)

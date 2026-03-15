@@ -18,9 +18,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
-    [Description("Durchsucht alle gespeicherten Dokumente nach einem Suchbegriff. Gibt JSON mit IDs und Details zurück.")] // Tool-Beschreibung für LLM
-    public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff (Dateiname ODER Textinhalt)
-        [Description("Der Suchbegriff (wird in Dateiname und Textinhalt gesucht)")] string searchQuery) // Parameter-Beschreibung für LLM
+    [Description("Durchsucht alle gespeicherten Dokumente nach einem Suchbegriff. Gibt JSON mit IDs und Details zurück.")]
+    public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff
+        [Description("Der Suchbegriff (wird in Dateiname und Textinhalt gesucht)")] string searchQuery)
     {
         var documents = await this.docDbService.SearchDocumentsAsync(searchQuery); // Suche in DB (case-insensitive)
         
@@ -52,9 +52,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
-    [Description("Fügt ein Dokument zum aktuellen Chat hinzu. Gibt JSON mit Erfolg und Details zurück.")] // Tool-Beschreibung für LLM
+    [Description("Fügt ein Dokument zum aktuellen Chat hinzu. Gibt JSON mit Erfolg und Details zurück.")]
     public async Task<string> AddDocumentToChat( // Tool: Fügt Dokument zum aktuellen Chat hinzu (erstellt Link in ConversationDocuments-Tabelle)
-        [Description("Die ID des hinzuzufügenden Dokuments (aus search_documents)")] int documentId) // Parameter-Beschreibung für LLM
+        [Description("Die ID des hinzuzufügenden Dokuments (aus search_documents)")] int documentId)
     {
         bool alreadyLinked = await this.docDbService.IsDocumentLinkedAsync(documentId, this.conversationId); // Prüfe ob bereits hinzugefügt
         

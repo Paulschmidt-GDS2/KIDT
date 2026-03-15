@@ -26,7 +26,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
                 modelId: "phi3:mini",
                 apiKey: null,
-                endpoint: new Uri("http://localhost:11434/v1") 
+                endpoint: new Uri("http://localhost:11434/v1")
             );
             this.kernel = builder.Build(); // Baue Kernel aus Builder
 
@@ -43,7 +43,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         }
     }
 
-    public async Task<string> SendAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit MaxTokens und Verlauf
+    public async Task<string> SendAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit MaxTokens und Verlauf (Non-Streaming, Fallback)
     {
         if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
         {
@@ -59,12 +59,12 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         {
             var chatHistory = new ChatHistory(); // Erstelle frische Chat-History für jeden Call
             chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
-            
+
             if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
             {
                 chatHistory.AddSystemMessage($"Bisheriger Gesprächsverlauf:\n{recentContext}");
             }
-            
+
             chatHistory.AddUserMessage(userMessage);
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
@@ -97,19 +97,57 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         }
     }
 
-    private string EnsureUtf8(string text) // Konvertiert Text zu UTF-8 (falls nötig)
+    public async IAsyncEnumerable<string> SendStreamAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit STREAMING (Token für Token!)
+    {
+        if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
+        {
+            await InitializeAsync(); // Initialisiere jetzt
+        }
+
+        if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind
+        {
+            yield return "Fehler: Konversations-Service nicht initialisiert."; // Fehler als Stream zurückgeben
+            yield break; // Stream beenden
+        }
+
+        var chatHistory = new ChatHistory(); // Erstelle frische Chat-History
+
+        // WICHTIG: System-Message mit klarer Trennung
+        chatHistory.AddSystemMessage($"{this.systemInstructions}\n\n=== ENDE DER INSTRUCTIONS (NICHT AUSGEBEN) ===\n\nAntwort nur auf die folgende User-Nachricht:");
+
+        if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
+        {
+            chatHistory.AddSystemMessage($"Kontext aus früherem Gespräch:\n{recentContext}");
+        }
+
+        chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
+
+        var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
+        {
+            Temperature = 0.5, // Mittlere Temperatur
+            MaxTokens = maxTokens // Token-Limit
+        };
+
+        // STREAMING: GetStreamingChatMessageContentsAsync gibt Token für Token zurück!
+        await foreach (var chunk in this.chatService.GetStreamingChatMessageContentsAsync(
+            chatHistory,
+            executionSettings: settings,
+            kernel: this.kernel))
+        {
+            if (chunk.Content != null) // Wenn Chunk Content hat
+            {
+                yield return chunk.Content; // Gib Chunk DIREKT zurück (kein EnsureUtf8 mehr!)
+            }
+        }
+    }
+
+    private string EnsureUtf8(string text) // Stellt sicher dass Text korrekt als UTF-8 behandelt wird
     {
         if (string.IsNullOrEmpty(text)) return text; // Leerer Text -> direkt zurück
-        
-        try
-        {
-            var bytes = Encoding.Default.GetBytes(text); // Text -> Bytes (System-Encoding)
-            return Encoding.UTF8.GetString(bytes); // Bytes -> UTF-8 String
-        }
-        catch
-        {
-            return text;
-        }
+
+        // Da Ollama API bereits UTF-8 zurückgibt, einfach den Text direkt zurückgeben
+        // Frühere Konvertierung hatte Encoding-Probleme verursacht
+        return text;
     }
 
     public ValueTask DisposeAsync() // Räumt Ressourcen auf (aktuell leer)

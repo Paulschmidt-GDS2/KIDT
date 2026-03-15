@@ -15,13 +15,18 @@ public class ChatDbContext : DbContext
         // MySQL Connection String
         // WICHTIG: Für Multi-User einfach "localhost" durch Server-IP ersetzen!
         string connectionString =
-            "Server=localhost;" +           // Teamkollege: Ändere zu Server-IP (192.168.178.71)
+            "Server=localhost;" +           // Teamkollege: Ändere zu Tailscale-IP (100.75.19.37)
             "Port=3306;" +                  
             "Database=kidt_chat;" +         
             "User=root;" +                  // Teamkollege: Ändere zu "kidt_user"
             "Password=kidt123;" +           
-            "AllowUserVariables=true;";     
-        
+            "AllowUserVariables=true;";
+
+        // 1. Start-Process "https://tailscale.com/download/windows"
+        // 2. Einloggen mit Google/MS Account und Connect klicken
+        // 3. Ich schalte dich frei
+        // 4. IP ändern wie im Kommentar oben
+
         options.UseMySQL(connectionString);
     }
 

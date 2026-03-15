@@ -120,7 +120,7 @@ body {
 .blinking-cursor {
     color: #0D0E0C; /* Farbe passend zum Text */
     font-size: 18px; /* Gleiche Schriftgröße wie normaler Text */
-    animation: blink 1.0s infinite; /* Animation alle 1.0 Sekunden */
+    animation: blink 0.8s infinite; /* Animation alle 0.8 Sekunden (schneller!) */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */

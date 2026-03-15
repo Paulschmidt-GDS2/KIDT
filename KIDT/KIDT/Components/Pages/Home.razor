@@ -13,10 +13,13 @@
 @inject IServiceProvider ServiceProvider
 @implements IDisposable
 
-<div class="chat-container"> @* Hauptcontainer *@
-<div class="messages"> @* Bereich mit Nachrichten und Scroll *@
-    <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
-        @foreach (var msg in Messages) @* Durchlaufe alle Nachrichten *@
+<div class="chat-container">
+    @* Hauptcontainer *@
+    <div class="messages">
+        @* Bereich mit Nachrichten und Scroll *@
+        <div class="messages-inner">
+            @* Innenbereich, Nachrichtenliste *@
+            @foreach (var msg in Messages) @* Durchlaufe alle Nachrichten *@
             {
                 string bubbleClass; // Variable für CSS-Klasse der Bubble
                 if (msg.IsUser) // Check: Ist es User-Nachricht?
@@ -33,14 +36,16 @@
                     {
                         <span class="blinking-cursor">_</span>
                     }
-                    else if (msg.IsUser) @* Wenn User-Nachricht *@
+                    else if (msg.IsUser)
+     @* Wenn User-Nachricht *@
                     {
                         @msg.Text
                     }
-                    else @* Wenn Assistent-Nachricht *@
+                    else
+     @* Wenn Assistent-Nachricht *@
                     {
                         <span class="typewriter">@msg.DisplayText</span>
-                        
+
                         @* Zeige gefundene Dokumente als Cards (nur bei Assistent-Nachrichten) *@
                         @if (msg.FoundDocuments.Count > 0)
                         {
@@ -77,11 +82,13 @@
         </div>
     </div>
 
-    <div class="chat-input-container"> @* Container für die Eingabe *@
+    <div class="chat-input-container">
+        @* Container für die Eingabe *@
         @* Datei-Badge: Zeigt angehängte Datei an *@
         @if (!string.IsNullOrEmpty(UploadedFileName)) @* Check: Ist Datei angehängt? *@
         {
-            <div class="file-badge"> @* Badge-Container *@
+            <div class="file-badge">
+                @* Badge-Container *@
                 <img src="images/file.png" alt="Datei" class="file-icon" />
                 <span class="file-name">@UploadedFileName</span> @* Dateiname anzeigen *@
                 <button class="file-remove" @onclick="RemoveFile" title="Datei entfernen" aria-label="Datei entfernen">
@@ -90,31 +97,32 @@
             </div>
         }
 
-        <div class="chat-input" role="search" aria-label="Chat Eingabe"> @* Input-Box *@
-            <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" @onkeydown="HandleKeyDown" rows="@rows" cols="@Cols"></textarea> @* Textfeld mit Referenz für direkten Zugriff *@
+        <div class="chat-input" role="search" aria-label="Chat Eingabe">
+            @* Input-Box *@
+            <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols"></textarea> @* Textfeld - Enter wird per JavaScript gehandhabt! *@
             <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Upload-Button *@
         </div>
     </div>
 </div>
 
 @code {
-[Parameter]
-public int ChatId { get; set; } // Parameter: Chat-ID aus URL
+    [Parameter]
+    public int ChatId { get; set; } // Parameter: Chat-ID aus URL
 
-// Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
-private class ChatMessage // Klasse für eine Chat-Nachricht
-{
-    public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
-    public bool IsUser { get; set; } // true = Benutzer, false = Assistent
-    public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
-    public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
-    public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei search_documents)
-}
+    // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
+    private class ChatMessage // Klasse für eine Chat-Nachricht
+    {
+        public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
+        public bool IsUser { get; set; } // true = Benutzer, false = Assistent
+        public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
+        public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
+        public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei search_documents)
+    }
 
-private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
-private int currentConversationId; // Datenbank: Aktuelle Chat-ID
-private bool isSaving = false; // Flag: Verhindert Neuer-Chat während Speicherung läuft
-private ElementReference textareaRef; // Referenz zum textarea-Element für direkten DOM-Zugriff
+    private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
+    private int currentConversationId; // Datenbank: Aktuelle Chat-ID
+    private bool isSaving = false; // Flag: Verhindert Neuer-Chat während Speicherung läuft
+    private ElementReference textareaRef; // Referenz zum textarea-Element für direkten DOM-Zugriff
 
     // Eingabe: wächst stufenweise pro Zeile
     private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
@@ -126,7 +134,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
     {
         get { return inputText; } // liefert aktuellen Text zurück
         set // Setter: Wird bei jeder Eingabe aufgerufen
-            {
+        {
             if (value == null) value = string.Empty; // null zu leerem String konvertieren (value = neuer Wert der gesetzt wird)
             inputText = value; // Feld setzen
             UpdateRows(); // Zeilenanzahl neu berechnen
@@ -145,31 +153,31 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         if (ChatId > 0) // Prüfe ob bestehender Chat geladen werden soll
         {
             currentConversationId = ChatId; // Übernehme Chat-ID aus URL
-            
+
             await Task.Yield(); // Gib UI-Thread frei
-            
+
             List<KIDT.Models.Message> dbMessages;
             List<KIDT.Models.Document> files;
-            
+
             using (var scope1 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Messages
             using (var scope2 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Files
             {
                 var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 1
                 var docDbService = scope2.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
-                
+
                 var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Starte Messages-Laden
                 var filesTask = docDbService.GetDocumentsForConversationAsync(currentConversationId); // Starte Dokumente-Laden
-                
+
                 await Task.WhenAll(messagesTask, filesTask); // Warte bis beide fertig (parallel)
-                
+
                 dbMessages = await messagesTask; // Hole Ergebnis Messages
                 files = await filesTask; // Hole Ergebnis Documents
             }
-            
+
             foreach (KIDT.Models.Message dbMsg in dbMessages) // Durchlaufe alle geladenen Messages
             {
                 var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser }; // Erstelle ChatMessage-Objekt
-                
+
                 if (!string.IsNullOrEmpty(dbMsg.DocumentIdsJson)) // Prüfe ob Dokumente verknüpft sind
                 {
                     try
@@ -179,7 +187,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                         {
                             using var docScope = ServiceProvider.CreateScope(); // Erstelle DB-Scope für Dokumente
                             var docDbService = docScope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
-                            
+
                             foreach (var docId in docIds) // Durchlaufe alle Dokument-IDs
                             {
                                 var doc = await docDbService.GetDocumentByIdAsync(docId); // Lade Dokument aus DB
@@ -192,7 +200,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                         System.Diagnostics.Debug.WriteLine($"[LOAD_DOCS] Fehler beim Laden von Dokumenten: {ex.Message}");
                     }
                 }
-                
+
                 if (dbMsg.IsUser) // Prüfe ob User-Nachricht
                 {
                     chatMsg.DisplayText = dbMsg.Text; // Übernehme Text für Anzeige
@@ -204,12 +212,12 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                     Messages.Add(chatMsg); // Füge zur Nachrichten-Liste hinzu
                 }
             }
-            
+
             if (files.Count > 0) // Prüfe ob Dateien vorhanden
             {
                 UploadedFileName = files[0].FileName; // Zeige erste Datei im Badge
             }
-            
+
             StateHasChanged(); // Aktualisiere UI komplett
         }
         else // Kein ChatId in URL = Neuer Chat
@@ -218,15 +226,32 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender) // Wird nach jedem Render aufgerufen
+    {
+        if (firstRender) // Nur beim ersten Render
+        {
+            var dotnetRef = DotNetObjectReference.Create(this); // Erstelle Referenz für JavaScript-Callback
+            await JSRuntime.InvokeVoidAsync("textareaHelper.setupEnterHandler", "chatTextarea", dotnetRef); // Registriere Enter-Handler
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnEnterPressed() // Wird von JavaScript aufgerufen wenn Enter gedrückt wird (ohne Shift!)
+    {
+        string textToSend = InputText; // Speichere Text
+        InputText = string.Empty; // Leere sofort (ruft UpdateRows() auf ? rows = 1!)
+        await SendMessage(textToSend); // Sende Nachricht
+    }
+
     private async void HandleNewChatRequest() // Event-Handler für Neuer-Chat-Button
     {
         if (isSaving) // Prüfe ob Speicherung läuft
         {
             return; // Warte bis fertig
         }
-        
+
         bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Prüfe ob Chat Nachrichten oder Datei hat
-        
+
         if (hasContent) // Chat hat Content
         {
             await ResetChat(); // Setze Chat zurück
@@ -245,7 +270,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             rows = 1;
             return;
         }
-        
+
         var lines = inputText.Split('\n'); // Splitte bei Newlines
         int total = 0; // Zähler für sichtbare Zeilen
         foreach (var line in lines) // Durchlaufe alle Zeilen
@@ -260,7 +285,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
     private async Task TypewriterEffect(ChatMessage message, string fullText) // Typewriter-Effekt
     {
         message.DisplayText = ""; // Start mit leerem Text
-        
+
         for (int i = 0; i < fullText.Length; i++) // Durchlaufe jeden Buchstaben
         {
             message.DisplayText += fullText[i]; // Füge nächsten Buchstaben hinzu
@@ -271,41 +296,37 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         StateHasChanged(); // Final UI update
     }
 
-    private async Task SendMessage() // Methode zum Senden der Nachricht aus inputText
+    private async Task SendMessage(string text) // Methode zum Senden der Nachricht (Text als Parameter!)
     {
-        // Text wurde schon per JavaScript aus textarea geleert, aber inputText hat noch den Wert
-        string text = inputText; // Hole Text aus inputText (wird von JavaScript nicht berührt)
         if (text == null) // Check: Ist null?
         {
             text = string.Empty; // Setze auf leer
         }
         text = text.Trim(); // Trimme Whitespace
         if (text.Length == 0) return; // leere Nachrichten nicht senden
-        
+
         isSaving = true; // Setze Flag: Speicherung läuft
-        
-        // InputText für Blazor-Binding zurücksetzen
-        inputText = string.Empty; // Leere für Blazor
-        rows = 1; // Setze Zeilen zurück
-        
+
+        // InputText und rows wurden bereits in HandleKeyDown zurückgesetzt!
+
         // 2. SOFORT: Nachricht in UI anzeigen
         Messages.Add(new ChatMessage { Text = text, DisplayText = text, IsUser = true }); // Benutzer-Nachricht hinzufügen
         StateHasChanged(); // UI sofort aktualisieren (User sieht Nachricht sofort!)
-        
+
         // 3. SOFORT: Loading-Nachricht anzeigen
         var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
         Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
         StateHasChanged(); // UI aktualisieren für Loading-Anzeige
-        
+
         // 4. PARALLEL: DB-Speicherung + AI-Anfrage (kein await = blockiert nicht!)
         int conversationIdForSave = currentConversationId; // Kopiere ID für async Task
-        
+
         if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
         {
             currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Erstelle Conversation (muss sync sein)
             conversationIdForSave = currentConversationId;
         }
-        
+
         // DB-Speicherung im Hintergrund (Fire-and-Forget während AI läuft)
         var saveUserMessageTask = Task.Run(async () =>
         {
@@ -313,57 +334,67 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             await Db.UpdateConversationTitleAsync(conversationIdForSave); // Titel aktualisieren
         });
 
-        // AI-Anfrage starten
-        var replyTask = Chat.SendAsync(text, conversationIdForSave); // Sende Nachricht an Chat-Service (asynchron) ? gibt ChatResponse zurück
-        var minDelayTask = Task.Delay(1600); // Mindestens 1600ms (2x Blink-Zyklus)
-        
-        // Warte auf AI-Antwort + Mindestzeit (saveUserMessageTask läuft parallel!)
-        await Task.WhenAll(replyTask, minDelayTask); // Warte auf beide: Antwort und Mindestzeit
-        var chatResponse = await replyTask; // Hole die ChatResponse (Message + FoundDocuments)
-        
-        // Warte bis User-Nachricht gespeichert ist (sollte schon fertig sein)
+        // Starte MinDelay (Loading bleibt mindestens 3 Sekunden sichtbar)
+        var minDelayTask = Task.Delay(1600); // 2x Blink-Zyklus
+
+        // Warte bis User-Nachricht gespeichert ist (parallel zu minDelay)
         await saveUserMessageTask;
 
-        Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
-
-        if (!string.IsNullOrWhiteSpace(chatResponse.Message)) // Füge echte Assistent-Nachricht hinzu (wenn nicht leer)
+        // Erstelle Assistent-Nachricht (wird erst nach erstem Chunk hinzugefügt!)
+        var assistantMessage = new ChatMessage
         {
-            var assistantMessage = new ChatMessage 
-            { 
-                Text = "", 
-                IsUser = false, 
-                IsLoading = false,
-                FoundDocuments = chatResponse.FoundDocuments // Gefundene Dokumente hinzufügen
-            };
-            Messages.Add(assistantMessage);
-            StateHasChanged(); // UI aktualisieren
-            
-            // Speichere Assistant-Antwort im Hintergrund während Typewriter läuft
-            var saveAssistantTask = Task.Run(async () =>
+            Text = "",
+            DisplayText = "",
+            IsUser = false,
+            IsLoading = false
+        };
+
+        string fullMessage = string.Empty; // Variable für vollständige Nachricht (für DB-Speicherung)
+        List<Document> foundDocuments = new List<Document>(); // Liste für gefundene Dokumente
+        bool firstChunkReceived = false; // Flag: Wurde erster Chunk empfangen?
+
+        // STREAMING: Empfange Token für Token!
+        await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave))
+        {
+            if (!firstChunkReceived) // Erster Chunk empfangen?
             {
-                // Extrahiere Dokument-IDs für DB-Speicherung
-                var docIds = chatResponse.FoundDocuments.Select(d => d.Id).ToList();
-                await Db.SaveMessageAsync(conversationIdForSave, false, chatResponse.Message, docIds.Count > 0 ? docIds : null); // Speichere mit DocumentIds
-            });
-            
-            await TypewriterEffect(assistantMessage, chatResponse.Message); // Starte Typewriter-Effekt (UI-Blockierend)
-            
-            await saveAssistantTask; // Warte bis Speicherung fertig (sollte schon sein)
+                firstChunkReceived = true; // Setze Flag
+                await minDelayTask; // Warte bis MinDelay vorbei (Loading bleibt mind. 3 Sekunden!)
+                Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
+                Messages.Add(assistantMessage); // Füge Assistent-Nachricht hinzu
+                StateHasChanged(); // UI aktualisieren
+            }
+
+            if (!string.IsNullOrEmpty(chunk.TextChunk)) // Chunk enthält Text?
+            {
+                fullMessage += chunk.TextChunk; // Füge zu vollständiger Nachricht hinzu
+                assistantMessage.DisplayText += chunk.TextChunk; // Zeige sofort in UI!
+                StateHasChanged(); // UI aktualisieren
+                await Task.Delay(20); // 20ms Delay für smooth Rendering (nicht zu schnell!)
+            }
+
+            if (chunk.IsComplete) // Stream ist komplett?
+            {
+                foundDocuments = chunk.FoundDocuments; // Setze gefundene Dokumente
+                assistantMessage.FoundDocuments = foundDocuments; // Füge zu Nachricht hinzu
+                break; // Stream beenden
+            }
         }
-        
+
+        assistantMessage.Text = fullMessage; // Setze vollständigen Text
+        StateHasChanged(); // Final UI update
+
+        // Speichere Assistant-Antwort im Hintergrund
+        await Task.Run(async () =>
+        {
+            var docIds = foundDocuments.Select(d => d.Id).ToList(); // Extrahiere Dokument-IDs
+            await Db.SaveMessageAsync(conversationIdForSave, false, fullMessage, docIds.Count > 0 ? docIds : null); // Speichere mit DocumentIds
+        });
+
         isSaving = false; // Speicherung abgeschlossen
     }
 
-    private async Task HandleKeyDown(KeyboardEventArgs e) // Enter = senden, Shift+Enter = neue Zeile
-    {
-        if (e.Key == "Enter" && !e.ShiftKey) // Check: Enter ohne Shift gedrückt?
-        {
-            // SOFORT: Leere textarea per JavaScript (verhindert zweite Zeile komplett!)
-            await JSRuntime.InvokeVoidAsync("textareaHelper.clearAndReset", "chatTextarea");
-            
-            await SendMessage(); // Dann Nachricht senden
-        }
-    }
+
 
     private async Task OnUploadClick() // Upload-Button geklickt: Öffnet Datei-Dialog und lädt Datei
     {
@@ -381,7 +412,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             if (result != null) // Check: Hat User eine Datei ausgewählt?
             {
                 System.Diagnostics.Debug.WriteLine($"[UPLOAD] START - Datei ausgewählt: {result.FileName}");
-                
+
                 // 1. SOFORT: Badge anzeigen
                 UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
                 StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
@@ -392,7 +423,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
 
                 // 3. Datei hochladen und Text extrahieren
                 string uploadResult = await Chat.UploadFileAsync(result.FullPath); // Lade Datei über ChatMcpService
-                
+
                 Messages.RemoveAt(Messages.Count - 1); // Entferne Loading-Nachricht
 
                 // 4. SOFORT: Ergebnis-Nachricht anzeigen
@@ -410,19 +441,19 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                 {
                     // 5. PARALLEL: Typewriter + DB-Speicherung
                     int conversationIdForSave = currentConversationId;
-                    
+
                     if (currentConversationId == 0) // Conversation erstellen falls nötig
                     {
                         currentConversationId = await Db.CreateConversationAsync("Neuer Chat");
                         conversationIdForSave = currentConversationId;
                     }
-                    
+
                     // Speicherung im Hintergrund während Typewriter läuft
                     var saveFileTask = Task.Run(async () =>
                     {
                         // 1. Generiere Thumbnail
                         string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath);
-                        
+
                         // 2. Speichere in Documents (global, für Dokumente-Seite)
                         int documentId = 0; // ID des gespeicherten Dokuments
                         using (var scope = ServiceProvider.CreateScope()) // Erstelle DB-Scope für Document-Speicherung
@@ -437,7 +468,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                                 ".json" => "json",
                                 _ => "unknown"
                             };
-                            
+
                             string fileContent;
                             if (fileType == "pdf") // PDF muss als Base64 gespeichert werden
                             {
@@ -448,21 +479,21 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
                             {
                                 fileContent = await File.ReadAllTextAsync(result.FullPath); // Lese als Text
                             }
-                            
+
                             documentId = await docDbService.SaveDocumentAsync(result.FileName, fileContent, fileType, uploadResult, thumbnail); // Speichere Dokument in DB
-                            
+
                             await docDbService.LinkDocumentToConversationAsync(documentId, conversationIdForSave); // Verknüpfe Dokument mit Chat
                         }
-                        
+
                         await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult); // Speichere Upload-Nachricht in DB
-                        
+
                         await Db.UpdateConversationTitleAsync(conversationIdForSave); // Aktualisiere Chat-Titel
-                        
+
                         return documentId; // Gib Dokument-ID zurück (wichtig für currentDocumentId!)
                     });
-                    
+
                     await TypewriterEffect(uploadMessage, uploadResult); // Zeige Upload-Nachricht mit Typewriter
-                    
+
                     int uploadedDocId = await saveFileTask; // Warte bis DB-Speicherung fertig
                     currentDocumentId = uploadedDocId; // Speichere Dokument-ID für späteres Entfernen
                     System.Diagnostics.Debug.WriteLine($"[UPLOAD] currentDocumentId gesetzt: {currentDocumentId}");
@@ -483,7 +514,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
     {
         UploadedFileName = string.Empty; // Lösche Dateiname aus Badge
         Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
-        
+
         if (currentDocumentId > 0 && currentConversationId > 0) // Prüfe ob Dokument verknüpft ist
         {
             try
@@ -502,9 +533,9 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         {
             System.Diagnostics.Debug.WriteLine($"[REMOVE] Keine Verknüpfung zu entfernen: DocId={currentDocumentId}, ConvId={currentConversationId}");
         }
-        
+
         currentDocumentId = 0; // Setze ID zurück
-        
+
         var confirmMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
         Messages.Add(confirmMessage);
         await TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Zeige Bestätigung mit Typewriter
@@ -518,12 +549,12 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
         rows = 1; // Setze Textarea auf 1 Zeile
         UploadedFileName = string.Empty; // Entferne Datei-Badge
         Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
-        
+
         currentConversationId = 0; // Setze Conversation-ID zurück
-        
+
         Navigation.NavigateTo("/", forceLoad: true); // Navigiere zu Start (force reload)
         StateHasChanged();
-        
+
         await Task.CompletedTask;
     }
 
@@ -538,9 +569,9 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             {
                 return;
             }
-            
+
             string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName); // Erstelle Pfad in Temp-Ordner
-            
+
             if (doc.FileType == "pdf") // PDF muss von Base64 konvertiert werden
             {
                 try
@@ -556,7 +587,7 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
             {
                 await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
             }
-            
+
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
         }
         catch (Exception ex)
@@ -577,27 +608,27 @@ private ElementReference textareaRef; // Referenz zum textarea-Element für direk
 
             using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
             var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
-            
+
             var doc = await docDbService.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
-            
+
             if (doc != null) // Dokument gefunden
             {
                 UploadedFileName = doc.FileName; // Zeige Dateiname im Badge
                 currentDocumentId = doc.Id; // Speichere ID für späteres Entfernen
                 StateHasChanged();
             }
-            
+
             bool success = await docDbService.LinkDocumentToConversationAsync(documentId, currentConversationId); // Verknüpfe Dokument mit Chat
-            
-            var confirmMsg = new ChatMessage 
-            { 
+
+            var confirmMsg = new ChatMessage
+            {
                 Text = string.Empty,
                 DisplayText = string.Empty,
-                IsUser = false 
+                IsUser = false
             };
             Messages.Add(confirmMsg);
             StateHasChanged();
-            
+
             if (success) // Verknüpfung erfolgreich
             {
                 await TypewriterEffect(confirmMsg, $"Dokument '{doc?.FileName}' wurde zum Chat hinzugefügt."); // Zeige Erfolgs-Nachricht
