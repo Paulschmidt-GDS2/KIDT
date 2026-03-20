@@ -1,4 +1,4 @@
-using Microsoft.SemanticKernel;
+﻿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text.Json;
@@ -13,17 +13,17 @@ namespace KIDT.Services;
 
 public class RouterService 
 {
-    private readonly IServiceProvider serviceProvider; // Service Provider f�r Dependency Injection (DocDbService)
-    private string? apiKey; // Azure OpenAI API Key (wird bei InitializeAsync geladen)
+    private readonly IServiceProvider serviceProvider; // Service Provider für Dependency Injection (DocDbService)
+    private string apiKey = string.Empty; // Azure OpenAI API Key (wird bei InitializeAsync geladen)
 
     public RouterService(IServiceProvider serviceProvider)
     {
-        this.serviceProvider = serviceProvider; // Service Provider speichern f�r sp�tere Scope-Erstellung
+        this.serviceProvider = serviceProvider; // Service Provider speichern für spätere Scope-Erstellung
     }
 
     public async Task InitializeAsync() // Lade API-Key aus Datei
     {
-        if (this.apiKey != null) // Bereits initialisiert?
+        if (this.apiKey.Length > 0) // Bereits initialisiert?
         {
             return;
         }
@@ -34,60 +34,87 @@ public class RouterService
 
     public async Task<RouterResponse> ProcessAsync(string userMessage, bool hasFile, int conversationId) // Hauptmethode: Analysiert User-Nachricht und routet zu passendem Service ODER handhabt Dokument-Suche
     {
-        if (this.apiKey == null) // API-Key noch nicht geladen?
+        if (this.apiKey.Length == 0) // API-Key noch nicht geladen?
         {
             await InitializeAsync(); // Initialisiere API-Key
         }
 
-        using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope f�r DB-Zugriff
-        var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService f�r Dokument-Operationen
+        using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für DB-Zugriff
+        var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService für Dokument-Operationen
+        var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>(); // Hole CalendarService für Kalender-Operationen
 
         try
         {
-            // SCHRITT 1: Erstelle Kernel mit MCP-Tools f�r Function Calling
+            // SCHRITT 1: Erstelle Kernel mit MCP-Tools für Function Calling
             var builder = Kernel.CreateBuilder();
-            builder.Services.AddAzureOpenAIChatCompletion( // Azure OpenAI hinzuf�gen
+            builder.Services.AddAzureOpenAIChatCompletion( // Azure OpenAI hinzufügen
                 deploymentName: "gpt-4.1-deployment", 
                 endpoint: "https://ts-openai-testing.openai.azure.com/",
-                apiKey: this.apiKey!.Trim()
+                apiKey: this.apiKey.Trim()
             );
 
             var kernel = builder.Build(); // Kernel erstellen
+
+            McpToolsRegistry.RegisterTools(kernel, docDbService, calendarService, conversationId); // Registriere MCP-Tools (search_documents, add_document_to_chat, list_calendar_events, create_calendar_event, delete_calendar_event)
             
-            McpToolsRegistry.RegisterTools(kernel, docDbService, conversationId); // Registriere MCP-Tools (search_documents, add_document_to_chat)
-            
-            var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service f�r LLM-Anfragen
+            var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service für LLM-Anfragen
             var chatHistory = new ChatHistory(); // Chat-History erstellen (System + User)
-            
+
+            // Aktuelles Datum für relative Datumsangaben
+            DateTime now = DateTime.Now;
+            string currentDate = now.ToString("yyyy-MM-dd"); // Format: 2025-01-15
+            string currentDateGerman = now.ToString("dd.MM.yyyy"); // Format: 15.01.2025
+            int currentYear = now.Year;
+
             string systemPrompt =
-                "Du bist ein Router-Agent mit Dokumenten-Tools.\n\n" +
-                "KRITISCH WICHTIG: Du hast KEINE Informationen �ber Dokumente!\n" +
-                "Du MUSST die Tools nutzen wenn User nach Dokumenten fragt!\n\n" +
-                "Verf�gbare Tools:\n" +
+                "Du bist ein Router-Agent mit Dokumenten- und Kalender-Tools.\n\n" +
+                $"WICHTIG: AKTUELLES DATUM: {currentDate} ({currentDateGerman}), Jahr: {currentYear}\n" +
+                "Nutze dieses Datum für relative Angaben wie 'heute', 'morgen', '20.03' (= 20.03.{currentYear})!\n\n" +
+                "KRITISCH WICHTIG: Du hast KEINE Informationen über Dokumente oder Termine!\n" +
+                "Du MUSST die Tools nutzen wenn User danach fragt!\n\n" +
+                "Verfügbare Tools:\n" +
+                "DOKUMENTE:\n" +
                 "- search_documents(query): Sucht Dokumente in Datenbank\n" +
-                "- add_document_to_chat(documentId): F�gt Dokument zum Chat hinzu\n\n" +
-                "REGELN:\n" +
-                "1. User fragt nach Dokumenten? ? search_documents() aufrufen!\n" +
-                "2. User will Dokument hinzuf�gen? ? add_document_to_chat(id) aufrufen!\n" +
-                "   Beispiele: 'f�ge das hinzu', 'nimm Dokument 5', 'add die zum Chat'\n" +
-                "3. Normale Frage? ? Antworte mit JSON: {\"needsRouting\": true, \"intent\": \"...\"}\n\n" +
+                "- add_document_to_chat(documentId): Fügt Dokument zum Chat hinzu\n\n" +
+                "KALENDER:\n" +
+                "- list_calendar_events(startDate?, endDate?): Listet Termine (optional mit Zeitraum)\n" +
+                "- create_calendar_event(date, title, isAllDay?, time?, colorIndex?, reminderMinutes?): Erstellt Termin\n" +
+                "- update_calendar_event(...): Aktualisiert Termin\n" +
+                "- delete_calendar_event(...): Löscht Termin\n\n" +
+                "REGELN FÜR TERMIN-ERSTELLUNG:\n" +
+                "PFLICHT-Parameter für create_calendar_event:\n" +
+                "  1. date (MUSS explizit genannt sein: 'heute', 'morgen', '20.03', etc.)\n" +
+                "  2. title (Name des Termins)\n" +
+                "  3. isAllDay ODER time (ganztägig oder Uhrzeit)\n\n" +
+                "Wenn IRGENDEIN Pflicht-Parameter fehlt → Route zu conversation!\n\n" +
                 "Beispiele:\n" +
-                "User: 'Hast du Dokumente �ber Python?' ? search_documents('Python')\n" +
-                "User: 'F�ge Dokument 5 zum Chat hinzu' ? add_document_to_chat(5)\n" +
-                "User: 'Hallo' ? {\"needsRouting\": true, \"intent\": \"conversation\"}\n" +
-                "User: 'Analysiere X' ? {\"needsRouting\": true, \"intent\": \"dataAnalysis\"}";
+                "  'Erstelle Termin Paul' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Datum fehlt!)\n" +
+                "  'Neuer Termin heute' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Titel UND Zeit fehlt!)\n" +
+                "  'Termin Meeting heute' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Zeit fehlt!)\n" +
+                "  'Meeting heute 14:00' → create_calendar_event(date='{currentDate}', title='Meeting', isAllDay=false, time='14:00')\n" +
+                "  'Zahnarzt morgen ganztägig' → create_calendar_event(date='<morgen berechnen>', title='Zahnarzt', isAllDay=true)\n\n" +
+                "ANDERE REGELN:\n" +
+                "- User fragt nach Dokumenten? → search_documents()\n" +
+                "- User will Dokument hinzufügen? → add_document_to_chat(id)\n" +
+                "- User fragt nach Terminen? → list_calendar_events()\n" +
+                "- User will Termin ändern? → update_calendar_event()\n" +
+                "- User will Termin löschen? → delete_calendar_event()\n" +
+                "- Normale Frage? → {{\"needsRouting\": true, \"intent\": \"conversation\"}}";
 
-            chatHistory.AddSystemMessage(systemPrompt); // F�ge System-Prompt hinzu
-            chatHistory.AddUserMessage(userMessage); // F�ge User-Nachricht hinzu
+            chatHistory.AddSystemMessage(systemPrompt); // Füge System-Prompt hinzu
+            chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
 
-            var executionSettings = new OpenAIPromptExecutionSettings // Execution-Settings f�r LLM-Anfrage
+            var executionSettings = new OpenAIPromptExecutionSettings // Execution-Settings für LLM-Anfrage
             {
                 ToolCallBehavior = ToolCallBehavior.EnableKernelFunctions, // Enable Function Calling (manuelles Handling!)
-                Temperature = 0.1, // Niedrige Temperature f�r deterministisches Verhalten
-                MaxTokens = 1000 // Maximale Antwort-L�nge
+                Temperature = 0.1, // Niedrige Temperature für deterministisches Verhalten
+                MaxTokens = 1000 // Maximale Antwort-Länge
             };
             
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Sende Anfrage mit Function Calling...");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] User Message: {userMessage}");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Has File: {hasFile}");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] System Prompt Length: {systemPrompt.Length} chars");
 
             var response = await chatService.GetChatMessageContentAsync( // Sende Anfrage an LLM
                 chatHistory, // Chat-History (System + User)
@@ -95,27 +122,29 @@ public class RouterService
                 kernel: kernel // Kernel mit registrierten Tools
             );
 
-            string responseText = string.Empty; // Variable f�r Response-Text
+            string responseText = string.Empty; // Variable für Response-Text
             if (response.Content != null) // Response hat Content?
             {
-                responseText = response.Content; // Setze Response-Text
+                responseText = response.Content.Trim(); // Setze Response-Text und trimme Whitespace
             }
+
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] === GPT-4 RAW RESPONSE ===");
+            System.Diagnostics.Debug.WriteLine(responseText);
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] === END RAW RESPONSE ===");
             
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Response: {responseText}");
-            
-            int itemCount = 0; // Variable f�r Item-Count
+            int itemCount = 0; // Variable für Item-Count
             if (response.Items != null) // Response hat Items?
             {
                 itemCount = response.Items.Count; // Setze Item-Count
             }
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Response Items: {itemCount}");
             
-            // SCHRITT 2: Pr�fe ob LLM Tool-Calls ausf�hren m�chte
-            List<Document> foundDocuments = new List<Document>(); // Liste f�r gefundene Dokumente
+            // SCHRITT 2: Prüfe ob LLM Tool-Calls ausführen möchte
+            List<Document> foundDocuments = new List<Document>(); // Liste für gefundene Dokumente
             bool hasToolCalls = false; // Flag: Wurde Tool aufgerufen?
             
             
-            if (response.Items != null) // LLM hat Items zur�ckgegeben?
+            if (response.Items != null) // LLM hat Items zurückgegeben?
             {
                 foreach (var item in response.Items) // Durchlaufe alle Items
                 {
@@ -131,9 +160,9 @@ public class RouterService
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Plugin: {functionCall.PluginName}, Function: {functionCall.FunctionName}");
                             
                             var function = kernel.Plugins.GetFunction(functionCall.PluginName, functionCall.FunctionName); // Hole registrierte Function
-                            System.Diagnostics.Debug.WriteLine($"[ROUTER] Function gefunden, f�hre aus...");
+                            System.Diagnostics.Debug.WriteLine($"[ROUTER] Function gefunden, führe aus...");
                             
-                            var result = await function.InvokeAsync(kernel, functionCall.Arguments); // F�hre Tool manuell aus mit Arguments
+                            var result = await function.InvokeAsync(kernel, functionCall.Arguments); // Führe Tool manuell aus mit Arguments
                             
                             var resultText = result.ToString(); // Tool-Result zu String konvertieren
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool Result: {resultText}");
@@ -144,28 +173,82 @@ public class RouterService
                             {
                                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Parsing JSON...");
                 var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // Parse JSON-Result
-                                System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON geparsed: found={toolResult?.found}, documentIds={toolResult?.documentIds?.Count}");
-                                
-                                if (toolResult != null && toolResult.documentIds != null) // Erfolgreiche Suche?
+                                bool hasToolResult = false; // Flag für ToolResult vorhanden
+                                bool hasDocIds = false; // Flag für DocumentIds vorhanden
+                                if (toolResult != null) // ToolResult vorhanden?
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Lade {toolResult.documentIds.Count} Dokumente...");
-                                    
-                                    foreach (var docId in toolResult.documentIds) // Durchlaufe gefundene Dokument-IDs
+                                    hasToolResult = true;
+                                    if (toolResult.documentIds != null) // DocumentIds vorhanden?
                                     {
-                                        var doc = await docDbService.GetDocumentByIdAsync(docId); // Lade volles Dokument aus DB
-                                        if (doc != null) foundDocuments.Add(doc); // F�ge zu Liste hinzu
+                                        hasDocIds = true;
                                     }
-                                    
-                                    string message; // Variable f�r Nachricht
-                                    if (toolResult.found > 0) // Dokumente gefunden?
+                                }
+                                if (hasToolResult)
+                                {
+                                    int docIdsCount = 0; // Initialisiere Count
+                                    int foundCount = 0; // Initialisiere found Count
+                                    if (toolResult != null) // Prüfe ob toolResult vorhanden
                                     {
-                                        List<string> fileNames = new List<string>(); // Erstelle Liste f�r Dateinamen
-                                        foreach (Document d in foundDocuments) // Gehe durch alle gefundenen Dokumente
+                                        foundCount = toolResult.found; // Hole found Count
+                                        if (toolResult.documentIds != null) // Prüfe ob documentIds vorhanden
                                         {
-                                            fileNames.Add(d.FileName); // F�ge Dateiname zur Liste hinzu
+                                            docIdsCount = toolResult.documentIds.Count; // Hole Count
                                         }
+                                    }
+                                    System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON geparsed: found={foundCount}, documentIds={docIdsCount}");
+                                }
+
+                                if (hasToolResult && hasDocIds) // Erfolgreiche Suche?
+                                {
+                                    int docIdsCount = 0; // Initialisiere Count
+                                    if (toolResult != null && toolResult.documentIds != null) // Prüfe ob documentIds vorhanden
+                                    {
+                                        docIdsCount = toolResult.documentIds.Count; // Hole Count
+                                    }
+                                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Lade {docIdsCount} Dokumente...");
+
+                                    if (toolResult != null && toolResult.documentIds != null) // Nochmalige Prüfung für foreach
+                                    {
+                                        foreach (var docId in toolResult.documentIds) // Durchlaufe gefundene Dokument-IDs
+                                        {
+                                            Document docTemp = await docDbService.GetDocumentByIdAsync(docId); // Lade volles Dokument aus DB
+                                            bool docFound = false; // Flag für Dokument gefunden
+                                            Document doc = new Document(); // Initialisiere Dokument
+                                            if (docTemp != null) // Prüfe ob Dokument vorhanden
+                                            {
+                                                doc = docTemp; // Übernehme Dokument
+                                                if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
+                                                {
+                                                    docFound = true; // Setze Flag
+                                                }
+                                            }
+                                            if (docFound) // Füge nur hinzu wenn gefunden
+                                            {
+                                                foundDocuments.Add(doc); // Füge zu Liste hinzu
+                                            }
+                                        }
+                                    }
+
+                                    string message; // Variable für Nachricht
+                                    int toolResultFound = 0; // Initialisiere found Count
+                                    if (toolResult != null) // Prüfe ob toolResult vorhanden
+                                    {
+                                        toolResultFound = toolResult.found; // Hole found Count
+                                    }
+                                    if (toolResultFound > 0) // Dokumente gefunden?
+                                    {
+                                        List<string> fileNames = new List<string>(); // Erstelle Liste für Dateinamen
+                                        foreach (Document d in foundDocuments) // Gehe durch alle gefundenen Dokumente
+                                                                {
+                                                                    string docFileName = string.Empty; // Initialisiere Dateiname
+                                                                    if (d.FileName != null) // Dateiname vorhanden?
+                                                                    {
+                                                                        docFileName = d.FileName; // Übernehme Dateiname
+                                                                    }
+                                                                    fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
+                                                                }
                                         string fileNamesList = string.Join(", ", fileNames); // Verbinde Dateinamen mit Komma
-                                        message = $"{toolResult.found} Dokument(e) gefunden: {fileNamesList}";
+                                        message = $"{toolResultFound} Dokument(e) gefunden: {fileNamesList}";
                                     }
                                     else // Keine Dokumente gefunden
                                     {
@@ -176,55 +259,322 @@ public class RouterService
                                     System.Diagnostics.Debug.WriteLine($"[ROUTER] Returning: {message}");
                                     
                                     RouterResponse searchResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                    searchResponse.ShouldRoute = false; // Kein Routing n�tig
+                                    searchResponse.ShouldRoute = false; // Kein Routing nötig
                                     searchResponse.DirectResponse = message;
                                     searchResponse.FoundDocuments = foundDocuments;
                                     searchResponse.TargetService = string.Empty; // Kein Target-Service
                                     searchResponse.MaxTokens = 0; // Keine Token-Limit
-                                    searchResponse.Reason = "Dokumentensuche durchgef�hrt (Function Calling)";
+                                    searchResponse.Reason = "Dokumentensuche durchgeführt (Function Calling)";
                                     searchResponse.ToolWasUsed = true; // Tool wurde verwendet
                                     return searchResponse;
                                 }
                             }
-                            
-                            
+
+
+                            // list_calendar_events Tool wurde aufgerufen
+                            if (functionCall.FunctionName == "list_calendar_events") // War Tool list_calendar_events?
+                            {
+                                var listResult = JsonSerializer.Deserialize<CalendarListResultJson>(resultText); // Parse JSON-Result
+                                bool hasListResult = false; // Flag für ListResult vorhanden
+                                bool hasEvents = false; // Flag für Events vorhanden
+                                if (listResult != null) // ListResult vorhanden?
+                                {
+                                    hasListResult = true;
+                                    if (listResult.events != null) // Events vorhanden?
+                                    {
+                                        hasEvents = true;
+                                    }
+                                }
+
+                                if (hasListResult) // Erfolgreich geparsed?
+                                {
+                                    string message; // Variable für Nachricht
+                                    int foundCount = 0; // Initialisiere Count
+                                    List<CalendarEvent> foundEvents = new List<CalendarEvent>(); // Liste für Events
+
+                                    if (listResult != null) // Prüfe ob listResult vorhanden
+                                    {
+                                        foundCount = listResult.found; // Hole found Count
+                                    }
+
+                                    if (foundCount > 0 && hasEvents) // Termine gefunden und Events vorhanden?
+                                    {
+                                        if (listResult != null && listResult.events != null) // Prüfe ob events vorhanden
+                                        {
+                                            foreach (var e in listResult.events)
+                                            {
+                                                // Lade vollständiges Event aus DB
+                                                var fullEvent = await calendarService.GetEventByIdAsync(e.id);
+                                                if (fullEvent != null)
+                                                {
+                                                    foundEvents.Add(fullEvent);
+                                                }
+                                            }
+                                        }
+                                        message = $"{foundCount} Termin(e) gefunden"; // Kurze Meldung - Cards zeigen Details
+                                    }
+                                    else // Keine Termine gefunden
+                                    {
+                                        message = "Keine Termine gefunden.";
+                                    }
+
+                                    RouterResponse listResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    listResponse.ShouldRoute = false; // Kein Routing nötig
+                                    listResponse.DirectResponse = message;
+                                    listResponse.FoundDocuments = new List<Document>(); // Keine Dokumente
+                                    listResponse.FoundEvents = foundEvents; // Setze gefundene Events
+                                    listResponse.TargetService = string.Empty; // Kein Target-Service
+                                    listResponse.MaxTokens = 0; // Keine Token-Limit
+                                    listResponse.Reason = "Termine aufgelistet (Function Calling)";
+                                    listResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return listResponse;
+                                }
+                            }
+
+                            // create_calendar_event Tool wurde aufgerufen
+                            if (functionCall.FunctionName == "create_calendar_event") // War Tool create_calendar_event?
+                            {
+                                var createResult = JsonSerializer.Deserialize<CalendarCreateResultJson>(resultText); // Parse JSON-Result
+                                if (createResult != null && createResult.success) // Erfolgreich erstellt?
+                                {
+                                    string createMessage = string.Empty; // Initialisiere Nachricht
+                                    if (createResult.message != null) // Nachricht vorhanden?
+                                    {
+                                        createMessage = createResult.message; // Übernehme Nachricht
+                                    }
+
+                                    RouterResponse createResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    createResponse.ShouldRoute = false; // Kein Routing nötig
+                                    createResponse.DirectResponse = createMessage;
+                                    createResponse.FoundDocuments = new List<Document>(); // Keine Dokumente
+                                    createResponse.TargetService = string.Empty; // Kein Target-Service
+                                    createResponse.MaxTokens = 0; // Keine Token-Limit
+                                    createResponse.Reason = "Termin erstellt (Function Calling)";
+                                    createResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return createResponse;
+                                }
+                                else // Fehler beim Erstellen
+                                {
+                                    string errorMessage = "Termin konnte nicht erstellt werden.";
+                                    if (createResult != null && createResult.message != null) // Fehlermeldung vorhanden?
+                                    {
+                                        errorMessage = createResult.message; // Verwende spezifische Fehlermeldung
+                                    }
+
+                                    RouterResponse createErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    createErrorResponse.ShouldRoute = false; // Kein Routing nötig
+                                    createErrorResponse.DirectResponse = errorMessage;
+                                    createErrorResponse.FoundDocuments = new List<Document>(); // Keine Dokumente
+                                    createErrorResponse.TargetService = string.Empty; // Kein Target-Service
+                                    createErrorResponse.MaxTokens = 0; // Keine Token-Limit
+                                    createErrorResponse.Reason = "Termin-Erstellung fehlgeschlagen";
+                                    createErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return createErrorResponse;
+                                }
+                            }
+
+                            // delete_calendar_event Tool wurde aufgerufen
+                            if (functionCall.FunctionName == "delete_calendar_event") // War Tool delete_calendar_event?
+                            {
+                                var deleteResult = JsonSerializer.Deserialize<CalendarDeleteResultJson>(resultText); // Parse JSON-Result
+
+                                // Mehrere Termine gefunden → Nachfragen
+                                if (deleteResult != null && deleteResult.needsClarification && deleteResult.events != null)
+                                {
+                                    var eventList = new List<string>();
+                                    foreach (var e in deleteResult.events)
+                                    {
+                                        string timeInfo = "";
+                                        if (e.time != "Ganztägig")
+                                        {
+                                            timeInfo = $" ({e.time})";
+                                        }
+                                        eventList.Add($"• ID {e.id}: {e.title}" + timeInfo);
+                                    }
+                                    string deleteMsg = string.Empty; // Initialisiere Nachricht
+                                    if (deleteResult.message != null) // Nachricht vorhanden?
+                                    {
+                                        deleteMsg = deleteResult.message; // Übernehme Nachricht
+                                    }
+                                    string message = deleteMsg + "\n" + string.Join("\n", eventList);
+
+                                    RouterResponse clarificationResponse = new RouterResponse();
+                                    clarificationResponse.ShouldRoute = false;
+                                    clarificationResponse.DirectResponse = message;
+                                    clarificationResponse.FoundDocuments = new List<Document>();
+                                    clarificationResponse.TargetService = string.Empty;
+                                    clarificationResponse.MaxTokens = 0;
+                                    clarificationResponse.Reason = "Mehrere Termine gefunden (Nachfrage)";
+                                    clarificationResponse.ToolWasUsed = true;
+                                    return clarificationResponse;
+                                }
+
+                                if (deleteResult != null && deleteResult.success) // Erfolgreich gelöscht?
+                                {
+                                    string deleteMessage = string.Empty; // Initialisiere Nachricht
+                                    if (deleteResult.message != null) // Nachricht vorhanden?
+                                    {
+                                        deleteMessage = deleteResult.message; // Übernehme Nachricht
+                                    }
+
+                                    RouterResponse deleteResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    deleteResponse.ShouldRoute = false; // Kein Routing nötig
+                                    deleteResponse.DirectResponse = deleteMessage;
+                                    deleteResponse.FoundDocuments = new List<Document>(); // Keine Dokumente
+                                    deleteResponse.TargetService = string.Empty; // Kein Target-Service
+                                    deleteResponse.MaxTokens = 0; // Keine Token-Limit
+                                    deleteResponse.Reason = "Termin gelöscht (Function Calling)";
+                                    deleteResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return deleteResponse;
+                                }
+                                else // Fehler beim Löschen
+                                {
+                                    string errorMessage = "Termin konnte nicht gelöscht werden.";
+                                    if (deleteResult != null && deleteResult.message != null) // Fehlermeldung vorhanden?
+                                    {
+                                        errorMessage = deleteResult.message; // Verwende spezifische Fehlermeldung
+                                    }
+
+                                    RouterResponse deleteErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    deleteErrorResponse.ShouldRoute = false; // Kein Routing nötig
+                                    deleteErrorResponse.DirectResponse = errorMessage;
+                                    deleteErrorResponse.FoundDocuments = new List<Document>(); // Keine Dokumente
+                                    deleteErrorResponse.TargetService = string.Empty; // Kein Target-Service
+                                    deleteErrorResponse.MaxTokens = 0; // Keine Token-Limit
+                                    deleteErrorResponse.Reason = "Termin nicht gefunden";
+                                    deleteErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return deleteErrorResponse;
+                                }
+                            }
+
+                            // update_calendar_event Tool wurde aufgerufen
+                            if (functionCall.FunctionName == "update_calendar_event") // War Tool update_calendar_event?
+                            {
+                                var updateResult = JsonSerializer.Deserialize<CalendarUpdateResultJson>(resultText); // Parse JSON-Result
+
+                                // Mehrere Termine gefunden → Nachfragen
+                                if (updateResult != null && updateResult.needsClarification && updateResult.events != null)
+                                {
+                                    var eventList = new List<string>();
+                                    foreach (var e in updateResult.events)
+                                    {
+                                        string timeInfo = "";
+                                        if (e.time != "Ganztägig")
+                                        {
+                                            timeInfo = $" ({e.time})";
+                                        }
+                                        eventList.Add($"• ID {e.id}: {e.title}" + timeInfo);
+                                    }
+                                    string updateMsg = string.Empty; // Initialisiere Nachricht
+                                    if (updateResult.message != null) // Nachricht vorhanden?
+                                    {
+                                        updateMsg = updateResult.message; // Übernehme Nachricht
+                                    }
+                                    string message = updateMsg + "\n" + string.Join("\n", eventList);
+
+                                    RouterResponse clarificationResponse = new RouterResponse();
+                                    clarificationResponse.ShouldRoute = false;
+                                    clarificationResponse.DirectResponse = message;
+                                    clarificationResponse.FoundDocuments = new List<Document>();
+                                    clarificationResponse.TargetService = string.Empty;
+                                    clarificationResponse.MaxTokens = 0;
+                                    clarificationResponse.Reason = "Mehrere Termine gefunden (Nachfrage)";
+                                    clarificationResponse.ToolWasUsed = true;
+                                    return clarificationResponse;
+                                }
+
+                                if (updateResult != null && updateResult.success) // Erfolgreich aktualisiert?
+                                {
+                                    string updateMessage = string.Empty; // Initialisiere Nachricht
+                                    if (updateResult.message != null) // Nachricht vorhanden?
+                                    {
+                                        updateMessage = updateResult.message; // Übernehme Nachricht
+                                    }
+
+                                    RouterResponse updateResponse = new RouterResponse();
+                                    updateResponse.ShouldRoute = false;
+                                    updateResponse.DirectResponse = updateMessage;
+                                    updateResponse.FoundDocuments = new List<Document>();
+                                    updateResponse.TargetService = string.Empty;
+                                    updateResponse.MaxTokens = 0;
+                                    updateResponse.Reason = "Termin aktualisiert (Function Calling)";
+                                    updateResponse.ToolWasUsed = true;
+                                    return updateResponse;
+                                }
+                                else // Fehler beim Aktualisieren
+                                {
+                                    string errorMessage = "Termin konnte nicht aktualisiert werden.";
+                                    if (updateResult != null && updateResult.message != null)
+                                    {
+                                        errorMessage = updateResult.message;
+                                    }
+
+                                    RouterResponse updateErrorResponse = new RouterResponse();
+                                    updateErrorResponse.ShouldRoute = false;
+                                    updateErrorResponse.DirectResponse = errorMessage;
+                                    updateErrorResponse.FoundDocuments = new List<Document>();
+                                    updateErrorResponse.TargetService = string.Empty;
+                                    updateErrorResponse.MaxTokens = 0;
+                                    updateErrorResponse.Reason = "Termin-Update fehlgeschlagen";
+                                    updateErrorResponse.ToolWasUsed = true;
+                                    return updateErrorResponse;
+                                }
+                            }
+
+
                             // add_document_to_chat Tool wurde aufgerufen
                             if (functionCall.FunctionName == "add_document_to_chat") // War Tool add_document_to_chat?
                             {
                                 var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // Parse JSON-Result
-                                if (addResult != null && addResult.success) // Erfolgreich hinzugef�gt?
+                                if (addResult != null && addResult.success) // Erfolgreich hinzugefügt?
                                 {
-                                    var doc = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
-                                    if (doc != null) // Dokument gefunden?
+                                    Document docTemp = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
+                                    bool docFound = false; // Flag für Dokument gefunden
+                                    Document doc = new Document(); // Initialisiere Dokument
+                                    if (docTemp != null) // Prüfe ob Dokument vorhanden
+                                    {
+                                        doc = docTemp; // Übernehme Dokument
+                                        if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
+                                        {
+                                            docFound = true; // Setze Flag
+                                        }
+                                    }
+                                    if (docFound) // Füge nur hinzu wenn gefunden
                                     {
                                         foundDocuments.Add(doc);
                                     }
-                                    
+
+                                    string fileName = "Unbekannt"; // Standard-Dateiname
+                                    if (addResult.fileName != null) // Dateiname vorhanden?
+                                    {
+                                        fileName = addResult.fileName; // Übernehme Dateiname
+                                    }
+
                                     RouterResponse addSuccessResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                    addSuccessResponse.ShouldRoute = false; // Kein Routing n�tig
-                                    addSuccessResponse.DirectResponse = $"? Dokument '{addResult.fileName}' wurde zum Chat hinzugef�gt.";
+                                    addSuccessResponse.ShouldRoute = false; // Kein Routing nötig
+                                    addSuccessResponse.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
                                     addSuccessResponse.FoundDocuments = foundDocuments;
                                     addSuccessResponse.TargetService = string.Empty; // Kein Target-Service
                                     addSuccessResponse.MaxTokens = 0; // Keine Token-Limit
-                                    addSuccessResponse.Reason = "Dokument hinzugef�gt (Function Calling)";
+                                    addSuccessResponse.Reason = "Dokument hinzugefügt (Function Calling)";
                                     addSuccessResponse.ToolWasUsed = true; // Tool wurde verwendet
                                     return addSuccessResponse;
                                 }
-                                else // Fehler beim Hinzuf�gen
+                                else // Fehler beim Hinzufügen
                                 {
-                                    string errorMessage = "Dokument konnte nicht hinzugef�gt werden.";
+                                    string errorMessage = "Dokument konnte nicht hinzugefügt werden.";
                                     if (addResult != null && addResult.message != null) // Fehlermeldung vorhanden?
                                     {
                                         errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
                                     }
                                     
                                     RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                    addErrorResponse.ShouldRoute = false; // Kein Routing n�tig
+                                    addErrorResponse.ShouldRoute = false; // Kein Routing nötig
                                     addErrorResponse.DirectResponse = errorMessage;
                                     addErrorResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
                                     addErrorResponse.TargetService = string.Empty; // Kein Target-Service
                                     addErrorResponse.MaxTokens = 0; // Keine Token-Limit
-                                    addErrorResponse.Reason = "Dokument bereits verkn�pft";
+                                    addErrorResponse.Reason = "Dokument bereits verknüpft";
                                     addErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
                                     return addErrorResponse;
                                 }
@@ -242,7 +592,7 @@ public class RouterService
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tools aufgerufen: {hasToolCalls}");
             
             // SCHRITT 3: Keine Tools aufgerufen ? Fallback auf JSON-basiertes Intent-Routing
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Keine Tools genutzt, pr�fe Intent-JSON...");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Keine Tools genutzt, prüfe Intent-JSON...");
             
             if (responseText.TrimStart().StartsWith("{")) // Response ist JSON?
             {
@@ -251,24 +601,24 @@ public class RouterService
                     var routingJson = JsonSerializer.Deserialize<RoutingResponseJson>(responseText, // Parse JSON-Response
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitive
                     
-                    if (routingJson != null && routingJson.needsRouting == true) // Routing n�tig?
+                    if (routingJson != null && routingJson.needsRouting == true) // Routing nötig?
                     {
-                        string targetService = "conversation"; // Standardm��ig Conversation
+                        string targetService = "conversation"; // Standardmäßig Conversation
                         if (routingJson.intent == "dataAnalysis") // Intent ist DataAnalysis?
                         {
                             targetService = "dataAnalysis";
                         }
                         
-                        int maxTokens = 500; // Standard Token-Limit f�r Conversation (reicht f�r kurze UND lange Antworten)
-                        if (targetService == "dataAnalysis") // DataAnalysis gew�hlt?
+                        int maxTokens = 500; // Standard Token-Limit für Conversation (reicht für kurze UND lange Antworten)
+                        if (targetService == "dataAnalysis") // DataAnalysis gewählt?
                         {
-                            maxTokens = 2000; // H�heres Token-Limit f�r komplexe Analyse
+                            maxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
                         }
                         
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
                         
                         RouterResponse intentResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                        intentResponse.ShouldRoute = true; // Routing n�tig
+                        intentResponse.ShouldRoute = true; // Routing nötig
                         intentResponse.DirectResponse = null;
                         intentResponse.TargetService = targetService;
                         intentResponse.MaxTokens = maxTokens;
@@ -283,17 +633,18 @@ public class RouterService
                     System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON-Parse-Fehler: {ex.Message}");
                 }
             }
-            
-            
-            // SCHRITT 4: Letzter Fallback ? Intent-Klassifizierung per GPT-4
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback: Intent-Klassifizierung...");
+
+            // SCHRITT 4: Letzter Fallback → Intent-Klassifizierung per GPT-4
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback: Intent-Klassifizierung per GPT-4...");
             var fallbackIntent = await ClassifyIntentAsync(userMessage); // Klassifiziere Intent per GPT-4
-            
+
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback Intent Result: {fallbackIntent.Intent}");
+
             if (fallbackIntent.Intent == "document_search") // Intent ist Dokumenten-Suche?
             {
                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback-Suche: '{fallbackIntent.SearchQuery}'");
                 
-                string searchQuery = string.Empty; // Variable f�r Such-Query
+                string searchQuery = string.Empty; // Variable für Such-Query
                 if (fallbackIntent.SearchQuery != null) // Such-Query vorhanden?
                 {
                     searchQuery = fallbackIntent.SearchQuery; // Setze Such-Query
@@ -301,13 +652,18 @@ public class RouterService
                 
                 var documents = await docDbService.SearchDocumentsAsync(searchQuery); // Suche in Datenbank
                 
-                string message; // Variable f�r Nachricht
+                string message; // Variable für Nachricht
                 if (documents.Count > 0) // Dokumente gefunden?
                 {
-                    List<string> fileNames = new List<string>(); // Erstelle Liste f�r Dateinamen
+                    List<string> fileNames = new List<string>(); // Erstelle Liste für Dateinamen
                     foreach (Document d in documents) // Gehe durch alle gefundenen Dokumente
                     {
-                        fileNames.Add(d.FileName);
+                        string docFileName = string.Empty; // Initialisiere Dateiname
+                        if (d.FileName != null) // Dateiname vorhanden?
+                        {
+                            docFileName = d.FileName; // Übernehme Dateiname
+                        }
+                        fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
                     }
                     string fileNamesList = string.Join(", ", fileNames); // Verbinde Dateinamen mit Komma
                     message = $"{documents.Count} Dokument(e) gefunden: {fileNamesList}";
@@ -318,31 +674,31 @@ public class RouterService
                 }
                 
                 RouterResponse fallbackSearchResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                fallbackSearchResponse.ShouldRoute = false; // Kein Routing n�tig
+                fallbackSearchResponse.ShouldRoute = false; // Kein Routing nötig
                 fallbackSearchResponse.DirectResponse = message;
                 fallbackSearchResponse.FoundDocuments = documents;
                 fallbackSearchResponse.TargetService = string.Empty; // Kein Target-Service
                 fallbackSearchResponse.MaxTokens = 0; // Keine Token-Limit
-                fallbackSearchResponse.Reason = "Dokumentensuche durchgef�hrt (Fallback)";
-                fallbackSearchResponse.ToolWasUsed = true; // Tool-�hnlich (DB-Suche)
+                fallbackSearchResponse.Reason = "Dokumentensuche durchgeführt (Fallback)";
+                fallbackSearchResponse.ToolWasUsed = true; // Tool-ähnlich (DB-Suche)
                 return fallbackSearchResponse;
             }
             
             // Normales Intent-Routing (Conversation oder DataAnalysis)
-            string finalTargetService = "conversation"; // Standardm��ig Conversation
+            string finalTargetService = "conversation"; // Standardmäßig Conversation
             if (fallbackIntent.Intent == "dataAnalysis") // Intent ist DataAnalysis?
             {
                 finalTargetService = "dataAnalysis";
             }
             
-            int finalMaxTokens = 500; // Standard Token-Limit f�r Conversation
-            if (finalTargetService == "dataAnalysis") // DataAnalysis gew�hlt?
+            int finalMaxTokens = 500; // Standard Token-Limit für Conversation
+            if (finalTargetService == "dataAnalysis") // DataAnalysis gewählt?
             {
-                finalMaxTokens = 2000; // H�heres Token-Limit f�r komplexe Analyse
+                finalMaxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
             }
             
             RouterResponse finalResponse = new RouterResponse(); // Erstelle neue RouterResponse
-            finalResponse.ShouldRoute = true; // Routing n�tig
+            finalResponse.ShouldRoute = true; // Routing nötig
             finalResponse.DirectResponse = null; 
             finalResponse.TargetService = finalTargetService; 
             finalResponse.MaxTokens = finalMaxTokens; 
@@ -360,10 +716,10 @@ public class RouterService
     private async Task<IntentResult> ClassifyIntentAsync(string userMessage) // Hilfsmethode: Klassifiziert Intent per GPT-4 (Fallback wenn Function Calling versagt)
     {
         var builder = Kernel.CreateBuilder(); // Erstelle neuen Kernel
-        builder.Services.AddAzureOpenAIChatCompletion( //F�ge Azure OpenAI hinzu
+        builder.Services.AddAzureOpenAIChatCompletion( //Füge Azure OpenAI hinzu
             deploymentName: "gpt-4.1-deployment",
             endpoint: "https://ts-openai-testing.openai.azure.com/",
-            apiKey: this.apiKey!.Trim()
+            apiKey: this.apiKey.Trim()
         );
         
         var kernel = builder.Build(); // Kernel erstellen
@@ -389,19 +745,21 @@ public class RouterService
         
         var settings = new OpenAIPromptExecutionSettings // Execution-Settings
         {
-            Temperature = 0.1, // Niedrige Temperature f�r deterministisches Verhalten
-            MaxTokens = 200 // Maximale Antwort-L�nge
+            Temperature = 0.1, // Niedrige Temperature für deterministisches Verhalten
+            MaxTokens = 200 // Maximale Antwort-Länge
         };
         
         var response = await chatService.GetChatMessageContentAsync(chatHistory, settings, kernel); // Sende Anfrage an LLM
-        
+
         string jsonResponse = "{}"; // Standard: Leeres JSON
         if (response.Content != null) // Response hat Content?
         {
-            jsonResponse = response.Content; // Setze JSON-Response
+            jsonResponse = response.Content.Trim(); // Setze JSON-Response und trimme
         }
-        
-        System.Diagnostics.Debug.WriteLine($"[ROUTER] Intent-Response: {jsonResponse}");
+
+        System.Diagnostics.Debug.WriteLine($"[ROUTER] === ClassifyIntentAsync RAW RESPONSE ===");
+        System.Diagnostics.Debug.WriteLine(jsonResponse);
+        System.Diagnostics.Debug.WriteLine($"[ROUTER] === END CLASSIFY RESPONSE ===");
         
         var intent = JsonSerializer.Deserialize<IntentJson>(jsonResponse, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Parse JSON
         
@@ -433,11 +791,11 @@ public class RouterService
         return result;
     }
 
-    // === HELPER-KLASSEN F�R JSON-SERIALISIERUNG ===
+    // === HELPER-KLASSEN FÜR JSON-SERIALISIERUNG ===
 
     private class RoutingResponseJson // JSON-Klasse: Intent-basiertes Routing-Response
     {
-        public bool needsRouting { get; set; } // Routing n�tig?
+        public bool needsRouting { get; set; } // Routing nötig?
         public string? intent { get; set; } // Intent (z.B. "conversation", "dataAnalysis")
     }
 
@@ -450,7 +808,7 @@ public class RouterService
 
     private class AddDocumentResultJson // JSON-Klasse: Ergebnis von add_document_to_chat Tool
     {
-        public bool success { get; set; } // Erfolgreich hinzugef�gt?
+        public bool success { get; set; } // Erfolgreich hinzugefügt?
         public int documentId { get; set; } // Dokument-ID
         public string? fileName { get; set; } // Dateiname
         public string? message { get; set; } // Optionale Nachricht
@@ -469,15 +827,57 @@ public class RouterService
         public string? SearchQuery { get; set; } // Such-Query (oder null)
         public int DocumentId { get; set; } // Dokument-ID (Standard: 0)
     }
+
+    private class CalendarListResultJson // JSON-Klasse: Ergebnis von list_calendar_events Tool
+    {
+        public int found { get; set; } // Anzahl gefundener Termine
+        public List<CalendarEventJson>? events { get; set; } // Liste der Termine
+        public string? message { get; set; } // Optionale Nachricht
+    }
+
+    private class CalendarEventJson // JSON-Klasse: Einzelner Termin in list_calendar_events
+    {
+        public int id { get; set; } // Termin-ID
+        public string date { get; set; } = string.Empty; // Datum formatiert
+        public string title { get; set; } = string.Empty; // Titel
+        public string time { get; set; } = string.Empty; // Uhrzeit oder "Ganztägig"
+        public int color { get; set; } // Farbindex
+    }
+
+    private class CalendarCreateResultJson // JSON-Klasse: Ergebnis von create_calendar_event Tool
+    {
+        public bool success { get; set; } // Erfolgreich erstellt?
+        public string? message { get; set; } // Nachricht
+        public int eventId { get; set; } // ID des neuen Termins
+    }
+
+    private class CalendarDeleteResultJson // JSON-Klasse: Ergebnis von delete_calendar_event Tool
+    {
+        public bool success { get; set; } // Erfolgreich gelöscht?
+        public bool needsClarification { get; set; } // Mehrere Termine gefunden? Nachfragen nötig?
+        public string? message { get; set; } // Nachricht
+        public int eventId { get; set; } // ID des gelöschten Termins
+        public List<CalendarEventJson>? events { get; set; } // Liste der Termine (bei Mehrdeutigkeit)
+    }
+
+    private class CalendarUpdateResultJson // JSON-Klasse: Ergebnis von update_calendar_event Tool
+    {
+        public bool success { get; set; } // Erfolgreich aktualisiert?
+        public bool needsClarification { get; set; } // Mehrere Termine gefunden? Nachfragen nötig?
+        public string? message { get; set; } // Nachricht
+        public int eventId { get; set; } // ID des aktualisierten Termins
+        public List<CalendarEventJson>? events { get; set; } // Liste der Termine (bei Mehrdeutigkeit)
+    }
 }
 
-public class RouterResponse // Klasse: Response des RouterService (wird an ChatCoordinator zur�ckgegeben)
+public class RouterResponse // Klasse: Response des RouterService (wird an ChatCoordinator zurückgegeben)
 {
     public bool ShouldRoute { get; set; } // Soll zu anderem Service geroutet werden?
     public string? DirectResponse { get; set; } // Direkte Antwort an User (wenn kein Routing)
     public string TargetService { get; set; } = string.Empty; // Ziel-Service ("conversation" oder "dataAnalysis")
-    public int MaxTokens { get; set; } // Token-Limit f�r Ziel-Service
+    public int MaxTokens { get; set; } // Token-Limit für Ziel-Service
     public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei Dokument-Suche)
-    public string Reason { get; set; } = string.Empty; // Grund f�r Routing/Direktantwort
+    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>(); // Gefundene Termine (bei Kalender-Tools)
+    public string Reason { get; set; } = string.Empty; // Grund für Routing/Direktantwort
     public bool ToolWasUsed { get; set; } // Wurde Tool verwendet?
 }

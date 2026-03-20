@@ -1,4 +1,4 @@
-using Microsoft.SemanticKernel;
+ï»¿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text;
@@ -7,16 +7,17 @@ using KIDT.Database;
 namespace KIDT.Services;
 
 /// <summary>
-/// Spezialisierter Service für Daten-Analyse und Tool-Nutzung.
-/// Nutzt qwen2.5:7b für präzise Analysen mit MCP-Tools.
+/// Spezialisierter Service fÃ¼r Daten-Analyse und Text-Verarbeitung.
+/// Nutzt qwen2.5:7b fÃ¼r prÃ¤zise Analysen von hochgeladenen Dateien und Chat-Dokumenten.
+/// KEINE Tool-Integration - Tools werden vom RouterService gehandhabt.
 /// </summary>
-public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung mit asynchroner Aufräumung
+public class DataAnalysisService : IAsyncDisposable // Service fÃ¼r Text-Analyse mit asynchroner AufrÃ¤umung
 {
-    private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
-    private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
-    private string systemInstructions = "Du bist ein Daten-Analyse-Spezialist. Nutze IMMER die verfügbaren Tools für präzise Analysen.";
+    private Kernel kernel = null!; // Semantic Kernel-Instanz fÃ¼r KI (wird in InitializeAsync initialisiert)
+    private IChatCompletionService chatService = null!; // Chat-Service von Ollama (wird in InitializeAsync initialisiert)
+    private string systemInstructions = string.Empty; // System-Instructions aus data-analysis-instructions.md
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
-    private DocumentDbService? docDbService; // Service für Dokumenten-Zugriff
+    private DocumentDbService docDbService = null!; // Service fÃ¼r Dokumenten-Zugriff (wird in InitializeAsync initialisiert)
     private int currentConversationId = 0; // Aktuelle Conversation-ID
 
     public async Task InitializeAsync(DocumentDbService documentDbService, int conversationId) // Initialisiere Service
@@ -32,7 +33,7 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             this.currentConversationId = conversationId; // Speichere Conversation-ID
             
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
-            builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
+            builder.Services.AddOpenAIChatCompletion( // FÃ¼ge Chat-Completion hinzu
                 modelId: "qwen2.5:7b",
                 apiKey: null,
                 endpoint: new Uri("http://localhost:11434/v1")
@@ -67,9 +68,9 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
         try
         {
             var chatHistory = new ChatHistory(); // Erstelle neue Chat-History
-            chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+            chatHistory.AddSystemMessage(this.systemInstructions); // FÃ¼ge System-Instructions hinzu
 
-            bool hasContext = false; // Variable für Context-Check
+            bool hasContext = false; // Variable fÃ¼r Context-Check
             if (!string.IsNullOrEmpty(recentContext)) // Kontext vorhanden?
             {
                 hasContext = true;
@@ -77,12 +78,12 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             
             if (hasContext) // Kontext vorhanden?
             {
-                chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}");
+                chatHistory.AddSystemMessage($"Letzter GesprÃ¤chsverlauf:\n{recentContext}");
             }
             
-            string finalMessage = userMessage; // Variable für finale Nachricht
+            string finalMessage = userMessage; // Variable fÃ¼r finale Nachricht
             
-            bool hasFile = false; // Variable für Datei-Check
+            bool hasFile = false; // Variable fÃ¼r Datei-Check
             if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Datei vorhanden?
             {
                 hasFile = true;
@@ -90,22 +91,22 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
             
             if (hasFile) // Datei vorhanden?
             {
-                string limitedContent = fileContent; // Variable für Datei-Inhalt
+                string limitedContent = fileContent; // Variable fÃ¼r Datei-Inhalt
                 int maxChars = 5000; // Maximum 5000 Zeichen
                 
                 if (fileContent.Length > maxChars) // Inhalt zu lang?
                 {
-                    limitedContent = fileContent.Substring(0, maxChars); // Kürze auf Maximum
-                    limitedContent += "\n\n[... Datei gekürzt, nur erste 5000 Zeichen gezeigt ...]"; // Füge Warnung hinzu
+                    limitedContent = fileContent.Substring(0, maxChars); // KÃ¼rze auf Maximum
+                    limitedContent += "\n\n[... Datei gekÃ¼rzt, nur erste 5000 Zeichen gezeigt ...]"; // FÃ¼ge Warnung hinzu
                 }
                 
                 finalMessage = $"[Datei: {fileName}]\n\n{limitedContent}\n\n---\n\n{userMessage}";
             }
 
-            chatHistory.AddUserMessage(finalMessage); // Füge User-Nachricht zur History hinzu
+            chatHistory.AddUserMessage(finalMessage); // FÃ¼ge User-Nachricht zur History hinzu
 
             var settings = new OpenAIPromptExecutionSettings(); // Erstelle Settings-Objekt
-            settings.Temperature = 0.3; // Setze Temperatur (niedrig = präzise)
+            settings.Temperature = 0.3; // Setze Temperatur (niedrig = prÃ¤zise)
             settings.MaxTokens = maxTokens; // Setze Token-Limit
             
             var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an KI
@@ -114,16 +115,17 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
                 kernel: this.kernel // Mit Kernel
             );
 
-            string assistantMessage; // Variable für Antwort
+            string assistantMessage; // Variable fÃ¼r Antwort
             if (response.Content != null) // Response hat Content?
             {
                 assistantMessage = response.Content; // DIREKT verwenden (kein EnsureUtf8 mehr!)
+                assistantMessage = CleanLlmResponse(assistantMessage); // Bereinige Antwort von Debug-Informationen
             }
             else // Kein Content
             {
                 assistantMessage = "Keine Antwort erhalten.";
             }
-            
+
             return assistantMessage;
         }
         catch (Exception ex)
@@ -132,20 +134,98 @@ public class DataAnalysisService : IAsyncDisposable // Service für Tool-Nutzung 
         }
     }
 
-    private string EnsureUtf8(string text) // Stellt sicher dass Text korrekt als UTF-8 behandelt wird
-    {
-        if (string.IsNullOrEmpty(text)) // Text ist leer?
-        {
-            return text;
-        }
-
-        // Da Ollama API bereits UTF-8 zurückgibt, einfach den Text direkt zurückgeben
-        // Frühere Konvertierung hatte Encoding-Probleme verursacht
-        return text;
-    }
-
-    public ValueTask DisposeAsync() // Räumt Ressourcen auf (aktuell leer)
+    public ValueTask DisposeAsync() // RÃ¤umt Ressourcen auf (aktuell leer)
     {
         return ValueTask.CompletedTask; // Aktuell nichts zu tun
+    }
+
+    private static string CleanLlmResponse(string response) // Bereinigt LLM-Antworten von Debug-Informationen
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return response;
+        }
+
+        response = response.Trim();
+
+        // Entferne AnfÃ¼hrungszeichen am Anfang/Ende
+        if (response.StartsWith("\"") && response.EndsWith("\"") && response.Length > 2)
+        {
+            response = response.Substring(1, response.Length - 2);
+        }
+
+        // Entferne gÃ¤ngige Emojis (einfach und schnell, kein Regex!)
+        response = response
+            .Replace("âœ…", "")
+            .Replace("âŒ", "")
+            .Replace("ðŸŽ‰", "")
+            .Replace("âš ï¸", "")
+            .Replace("âœ“", "")
+            .Replace("â†’", "");
+
+        // Entferne bekannte Debug-Marker
+        string[] debugMarkers = new[]
+        {
+            "=== Input:",
+            "=== Output:",
+            "DENSE_CATEGORIES",
+            "### QUERY REPORT",
+            "As a solution",
+            "--- Begin of code"
+        };
+
+        bool hasDebugContent = false;
+        foreach (var marker in debugMarkers)
+        {
+            if (response.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                hasDebugContent = true;
+                break;
+            }
+        }
+
+        if (!hasDebugContent)
+        {
+            return response.Trim();
+        }
+
+        // Suche nach echtem Text nach Debug-Bereich
+        string[] lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        StringBuilder cleanedResponse = new StringBuilder();
+        bool skipMode = false;
+
+        foreach (string line in lines)
+        {
+            string trimmedLine = line.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.All(c => c == '='))
+            {
+                continue;
+            }
+
+            bool isDebugLine = false;
+            foreach (var marker in debugMarkers)
+            {
+                if (trimmedLine.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                {
+                    isDebugLine = true;
+                    skipMode = true;
+                    break;
+                }
+            }
+
+            if (!isDebugLine && !skipMode)
+            {
+                cleanedResponse.AppendLine(line);
+            }
+            else if (!isDebugLine && skipMode && trimmedLine.Length > 10)
+            {
+                skipMode = false;
+                cleanedResponse.AppendLine(line);
+            }
+        }
+
+        string cleaned = cleanedResponse.ToString().Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Wie kann ich dir helfen?" : cleaned;
     }
 }

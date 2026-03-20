@@ -1,111 +1,262 @@
-﻿@page "/kalender"
+﻿@* Kalender-Seite: Monats-/Wochen-/Tagesansicht mit Terminen *@
+@page "/kalender"
+@using System.Globalization
+@using KIDT.Services
+@using KIDT.Models
+@inject CalendarService CalendarService
+@inject NavigationManager Navigation
 
-@* Grafischer Kalender mit Monats-/Wochen-/Tagesansicht, Navigation und Klick-zum-Hinzufügen von Terminen *@
-<div class="page-container calendar-page">
-    @* Toolbar: Navigation und View-Auswahl *@
+<div class="page-container">
+    @* Toolbar: Navigation und Ansichts-Auswahl *@
     <div class="calendar-toolbar">
-        <div class="left">
-            <button @onclick="Prev">&lt;</button> @* Zur vorherigen Periode springen *@
-            <button @onclick="Today">Heute</button> @* Heute als Fokusdatum setzen *@
-            <button @onclick="Next">&gt;</button> @* Zur nächsten Periode springen *@
+        <div class="toolbar-left">
+            <button class="nav-button" @onclick="Prev">&lt;</button> @* Vorherige Periode *@
+            <button class="nav-button today-button" @onclick="Today">Heute</button> @* Zur heutigen Ansicht springen *@
+            <button class="nav-button" @onclick="Next">&gt;</button> @* Nächste Periode *@
         </div>
-        <div class="center">
-            <strong>@ViewTitle</strong> @* Anzeige: z.B. "März 2026" oder "Woche von ..." *@
+        <div class="toolbar-center">
+            <span class="view-title">@ViewTitle</span> @* Zeige aktuellen Monat/Woche/Tag *@
         </div>
-        <div class="right">
-            <select @bind="currentView"> @* Wahl: Monat / Woche / Tag *@
-                <option value="Month">Monat</option>
-                <option value="Week">Woche</option>
-                <option value="Day">Tag</option>
-            </select>
+        <div class="toolbar-right">
+            <div class="view-buttons">
+                <button class="view-button @(currentView == "Month" ? "active" : "")" @onclick='() => currentView = "Month"'>Monat</button>
+                <button class="view-button @(currentView == "Week" ? "active" : "")" @onclick='() => currentView = "Week"'>Woche</button>
+                <button class="view-button @(currentView == "Day" ? "active" : "")" @onclick='() => currentView = "Day"'>Tag</button>
+            </div>
         </div>
     </div>
 
-    @* Monatsansicht: 7 Spalten (Mo-So), 6 Reihen -> 42 Zellen *@
-    @if (currentView == "Month")
-    {
-        <div class="month-grid">
-            @foreach (var dow in DayNames)
-            {
-                <div class="weekday-header">@dow</div>
-            }
+    @* Scrollbarer Kalender-Bereich *@
+    <div class="calendar-container">
+        @if (currentView == "Month") @* Monatsansicht: 7x6 Grid *@
+        {
+            <div class="month-grid">
+                @foreach (var dayName in DayNames) @* Wochentag-Header *@
+                {
+                    <div class="weekday-header">@dayName</div>
+                }
 
-            @foreach (var cell in MonthCells)
-            {
-                var isCurrentMonth = cell.Month == DisplayMonth.Month && cell.Year == DisplayMonth.Year;
-                <div class="day-cell @(isCurrentMonth ? "current-month" : "other-month")" @onclick="() => OnDayClick(cell)">
-                    <div class="day-number">@cell.Day</div>
-                    <div class="events-preview">
-                        @foreach (var ev in GetEventsForDate(cell).Take(3)) @* Zeige maximal 3 Events als Vorschau *@
-                        {
-                            <div class="event-item">@ev.Title</div>
-                        }
-                        @if (GetEventsForDate(cell).Count > 3)
-                        {
-                            <div class="more">+@((GetEventsForDate(cell).Count) - 3)</div> @* Anzahl zusätzlicher Events *@
-                        }
+                @foreach (var cell in MonthCells) @* 42 Tageszellen *@
+                {
+                    var isCurrentMonth = cell.Month == DisplayMonth.Month && cell.Year == DisplayMonth.Year; // Check: Ist Zelle im aktuellen Monat?
+                    <div class="day-cell @(isCurrentMonth ? "current-month" : "other-month")" @onclick="() => OnDayClick(cell)">
+                        <div class="day-number">@cell.Day</div> @* Tagesnummer *@
+                        <div class="events-preview">
+                            @foreach (var ev in GetEventsForDate(cell).Take(3)) @* Zeige max 3 Termine *@
+                            {
+                                <div class="event-item event-color-@ev.ColorIndex" style="background: @availableColors[ev.ColorIndex] !important;" @onclick="@((e) => OnEventClick(ev, e))" @onclick:stopPropagation="true">
+                                    <span class="event-title-text">@ev.Title</span>
+                                    @if (!ev.IsAllDay && ev.HasTime)
+                                    {
+                                        <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                    }
+                                </div>
+                            }
+                            @if (GetEventsForDate(cell).Count > 3) @* Zeige Anzahl weiterer Termine *@
+                            {
+                                <div class="more">+@(GetEventsForDate(cell).Count - 3)</div>
+                            }
+                        </div>
                     </div>
+                }
+            </div>
+        }
+        else if (currentView == "Week") @* Wochenansicht *@
+        {
+            <div class="week-view">
+                <div class="week-header">
+                    @foreach (var day in WeekDays) @* Wochentag-Header *@
+                    {
+                        <div class="week-day-header">@day.ToString("ddd dd.MM", germanCulture)</div>
+                    }
                 </div>
-            }
-        </div>
-    }
-    else if (currentView == "Week")
-    {
-        @* Wochenansicht: Kopf mit Tagen, Körper mit Tagesbereichen *@
-        <div class="week-view">
-            <div class="week-header">
-                @foreach (var d in WeekDays)
-                {
-                    <div class="week-day-header">@d.ToString("ddd dd.MM")</div>
-                }
+                <div class="week-body">
+                    @foreach (var day in WeekDays) @* Tagesspalten *@
+                    {
+                        <div class="week-day" @onclick="() => OnDayClick(day)">
+                            <div class="day-number">@day.Day</div>
+                            @foreach (var ev in GetEventsForDate(day)) @* Alle Termine des Tages *@
+                            {
+                                <div class="event-item event-color-@ev.ColorIndex" style="background: @availableColors[ev.ColorIndex] !important;" @onclick="@((e) => OnEventClick(ev, e))" @onclick:stopPropagation="true">
+                                    <span class="event-title-text">@ev.Title</span>
+                                    @if (!ev.IsAllDay && ev.HasTime)
+                                    {
+                                        <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
-            <div class="week-body">
-                @foreach (var d in WeekDays)
-                {
-                    <div class="week-day" @onclick="() => OnDayClick(d)">
-                        <div class="day-number">@d.Day</div>
-                        @foreach (var ev in GetEventsForDate(d))
-                        {
-                            <div class="event-item">@ev.Title</div>
-                        }
-                    </div>
-                }
+        }
+        else if (currentView == "Day") @* Tagesansicht *@
+        {
+            <div class="day-view">
+                <h4 class="day-title">@DisplayDay.ToString("dddd, dd.MM.yyyy", germanCulture)</h4>
+                <div class="day-events">
+                    @foreach (var ev in GetEventsForDate(DisplayDay)) @* Alle Termine des Tages *@
+                    {
+                        <div class="event-item event-color-@ev.ColorIndex" style="background: @availableColors[ev.ColorIndex] !important;" @onclick="@((e) => OnEventClick(ev, e))" @onclick:stopPropagation="true">
+                            <span class="event-title-text">@ev.Title</span>
+                            @if (!ev.IsAllDay && ev.HasTime)
+                            {
+                                <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="add-event-inline">
+                    <input class="event-input" placeholder="Neuer Termin" @bind="newEventText" />
+                    <button class="add-button" @onclick="() => AddEventForDate(DisplayDay)">hinzufügen</button>
+                </div>
             </div>
-        </div>
-    }
-    else if (currentView == "Day")
-    {
-        @* Tagesansicht mit kompletter Eventliste und Eingabefeld *@
-        <div class="day-view">
-            <h4>@DisplayDay.ToString("dddd, dd.MM.yyyy")</h4>
-            <div class="day-events">
-                @foreach (var ev in GetEventsForDate(DisplayDay))
-                {
-                    <div class="event-item">@ev.Title</div>
-                }
-            </div>
-            <div class="add-event-inline">
-                <input placeholder="Neuer Termin" @bind="newEventText" />
-                <button @onclick="() => AddEventForDate(DisplayDay)">Hinzufügen</button>
-            </div>
-        </div>
-    }
+        }
+    </div>
 
-    @* Overlay-Dialog zum Hinzufügen eines Termins (einfach, ohne externe Dialog-Komponente) *@
+    @* Dialog zum hinzufügen eines Termins *@
     @if (showAddDialog)
     {
         <div class="dialog-backdrop" @onclick="CloseDialog">
             <div class="dialog" @onclick:stopPropagation="true">
-                <h4>Neuen Termin hinzufügen</h4>
-                <div>
-                    <label>Datum: </label> @dialogDate.ToString("dd.MM.yyyy")
+                <h4 class="dialog-title">Neuen Termin hinzufügen</h4>
+                <div class="dialog-date">
+                    <label>Datum: </label>@dialogDate.ToString("dd.MM.yyyy")
                 </div>
-                <div>
-                    <input placeholder="Titel" @bind="newEventText" />
+                <input class="dialog-input" placeholder="Titel" @bind="newEventText" />
+
+                <div class="dialog-time-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="allDay" class="time-checkbox" @bind="isAllDay" />
+                        <label for="allDay" class="checkbox-label">Ganztägig</label>
+                    </div>
+                    @if (!isAllDay)
+                    {
+                        <div class="time-input-wrapper">
+                            <label class="input-label">Uhrzeit:</label>
+                            <input type="time" class="time-input" value="@selectedTime" @onchange="OnAddTimeChanged" />
+                        </div>
+                    }
                 </div>
+
+                <div class="dialog-color-section">
+                    <div class="color-picker-label">Farbe wählen:</div>
+                    <div class="dialog-color-picker">
+                        @for (int i = 0; i < availableColors.Length; i++)
+                        {
+                            var colorIndex = i; // Lokale Kopie für Lambda
+                            <div class="color-option @(selectedColorIndex == colorIndex ? "selected" : "")" 
+                                 style="background: @availableColors[colorIndex];"
+                                 @onclick="() => selectedColorIndex = colorIndex">
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="dialog-reminder-section">
+                    <div class="reminder-label-header">Erinnerung</div>
+                    <div class="reminder-buttons">
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == null ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = null">Keine</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 5 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 5">5 Min</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 15 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 15">15 Min</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 30 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 30">30 Min</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 60 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 60">1 Stunde</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 120 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 120">2 Stunden</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 1440 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 1440">1 Tag</button>
+                        <button type="button" class="reminder-btn @(newEventReminderMinutes == 10080 ? "active" : "")" 
+                                @onclick="() => newEventReminderMinutes = 10080">1 Woche</button>
+                    </div>
+                </div>
+
                 <div class="dialog-actions">
-                    <button @onclick="ConfirmAdd">Speichern</button>
-                    <button @onclick="CloseDialog">Abbrechen</button>
+                    <button class="dialog-button save-button" @onclick="ConfirmAdd">Speichern</button>
+                    <button class="dialog-button cancel-button" @onclick="CloseDialog">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Edit-Dialog für bestehende Events *@
+    @if (showEditDialog && editingEvent != null)
+    {
+        <div class="dialog-backdrop" @onclick="CloseEditDialog">
+            <div class="dialog edit-dialog" @onclick:stopPropagation="true">
+                <h4 class="dialog-title">Termin bearbeiten</h4>
+                <div class="dialog-date">
+                    <label>Datum: </label>@editingEvent.Start.ToString("dd.MM.yyyy")
+                </div>
+
+                <div class="dialog-input-group">
+                    <label class="input-label">Titel:</label>
+                    <input class="dialog-input" placeholder="Titel" @bind="editingEvent.Title" />
+                </div>
+
+                <div class="dialog-time-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="editAllDay" class="time-checkbox" @bind="editingEvent.IsAllDay" />
+                        <label for="editAllDay" class="checkbox-label">Ganztägig</label>
+                    </div>
+                    @if (!editingEvent.IsAllDay)
+                    {
+                        <div class="time-input-wrapper">
+                            <label class="input-label">Uhrzeit:</label>
+                            <input type="time" class="time-input" value="@(editingEvent.HasTime ? editingEvent.Time.ToString(@"hh\:mm") : "09:00")" 
+                                   @onchange="OnEditTimeChanged" />
+                        </div>
+                    }
+                </div>
+
+                <div class="dialog-color-section">
+                    <div class="color-picker-label">Farbe:</div>
+                    <div class="dialog-color-picker">
+                        @for (int i = 0; i < availableColors.Length; i++)
+                        {
+                            var colorIndex = i;
+                            <div class="color-option @(editingEvent.ColorIndex == colorIndex ? "selected" : "")" 
+                                 style="background: @availableColors[colorIndex];"
+                                 @onclick="() => editingEvent.ColorIndex = colorIndex">
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="dialog-reminder-section">
+                    <div class="reminder-label-header">Erinnerung</div>
+                    <div class="reminder-buttons">
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == null ? "active" : "")" 
+                                @onclick="() => editingEvent.ReminderMinutesBefore = null">Keine</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 5 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 5; editingEvent.ReminderShown = false; }">5 Min</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 15 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 15; editingEvent.ReminderShown = false; }">15 Min</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 30 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 30; editingEvent.ReminderShown = false; }">30 Min</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 60 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 60; editingEvent.ReminderShown = false; }">1 Stunde</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 120 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 120; editingEvent.ReminderShown = false; }">2 Stunden</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 1440 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 1440; editingEvent.ReminderShown = false; }">1 Tag</button>
+                        <button type="button" class="reminder-btn @(editingEvent.ReminderMinutesBefore == 10080 ? "active" : "")" 
+                                @onclick="() => { editingEvent.ReminderMinutesBefore = 10080; editingEvent.ReminderShown = false; }">1 Woche</button>
+                    </div>
+                    @if (editingEvent.ReminderMinutesBefore != null && editingEvent.ReminderShown)
+                    {
+                        <div class="reminder-status-shown">Erinnerung wurde bereits angezeigt</div>
+                    }
+                </div>
+
+                <div class="dialog-actions">
+                    <button class="dialog-button save-button" @onclick="SaveEditedEvent">Speichern</button>
+                    <button class="dialog-button delete-button" @onclick="DeleteEvent">Löschen</button>
+                    <button class="dialog-button cancel-button" @onclick="CloseEditDialog">Abbrechen</button>
                 </div>
             </div>
         </div>
@@ -113,137 +264,295 @@
 </div>
 
 @code {
-    // Aktuelle Ansicht: "Month" | "Week" | "Day"
-    private string currentView = "Month";
-    // Fokussiertes Datum (zentral für Navigation und Anzeige)
-    private DateTime selectedDate = DateTime.Today;
-    // Erster Tag des angezeigten Monats
-    private DateTime DisplayMonth => new DateTime(selectedDate.Year, selectedDate.Month, 1);
-    // Anzeige-Datum für Tagesansicht
-    private DateTime DisplayDay => selectedDate.Date;
-    // Zellen für Monats-Grid (42 Einträge: 6 Wochen x 7 Tage)
-    private List<DateTime> MonthCells = new();
-    // Tage der aktuellen Woche
-    private List<DateTime> WeekDays = new();
-    // Kürzel für Wochentage (Mo-So)
-    private string[] DayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
+    private string currentView = "Month"; // Aktuelle Ansicht: "Month" | "Week" | "Day"
+    private DateTime selectedDate = DateTime.Today; // Aktuell fokussiertes Datum
+    private DateTime DisplayMonth => new DateTime(selectedDate.Year, selectedDate.Month, 1); // Erster Tag des angezeigten Monats
+    private DateTime DisplayDay => selectedDate.Date; // Angezeigter Tag in Tagesansicht
+    private List<DateTime> MonthCells = new(); // 42 Zellen für Monats-Grid (6 Wochen)
+    private List<DateTime> WeekDays = new(); // 7 Tage für Wochenansicht
+    private string[] DayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" }; // Wochentag-Kürzel
+    private CultureInfo germanCulture = new CultureInfo("de-DE"); // Deutsche Kultur für Datums-Formatierung
 
-    // Interne Event-Repräsentation
-    private class CalendarEvent { public DateTime Start; public string Title = string.Empty; }
-    private Dictionary<DateTime, List<CalendarEvent>> events = new();
+    private Dictionary<DateTime, List<CalendarEvent>> events = new(); // Termine nach Datum gruppiert (Cache)
+    private string[] availableColors = new[] { "#848877", "#A8C5DD", "#F4C2B8", "#C3E5A4", "#F7DC9F", "#D4B5E8", "#FFB6C1", "#B0D9B0" }; // 8 Farben
 
-    // Dialog-Zustand für Terminerstellung
-    private bool showAddDialog = false;
-    private DateTime dialogDate = DateTime.Today;
-    private string newEventText = string.Empty;
+    private bool showAddDialog = false; // Zeigt Dialog-Zustand an
+    private bool showEditDialog = false; // Zeigt Edit-Dialog an
+    private DateTime dialogDate = DateTime.Today; // Datum für neuen Termin
+    private string newEventText = string.Empty; // Eingabefeld für Termintitel
+    private int selectedColorIndex = 0; // Ausgewählte Farbe für neuen Termin
+    private CalendarEvent editingEvent = new CalendarEvent(); // Event das gerade bearbeitet wird (Initialisiere mit neuem Objekt)
+    private bool isAllDay = true; // Ganztägig-Option
+    private string selectedTime = "09:00"; // Ausgewählte Uhrzeit
+    private int? newEventReminderMinutes = null; // Erinnerungszeit für neuen Termin
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
-        // Beispieltermine hinzufügen (kann später durch DB ersetzt werden)
-        AddSampleEvent(DateTime.Today, "Meeting mit Team");
-        AddSampleEvent(DateTime.Today.AddDays(2), "Projekt-Review");
-        BuildMonthCells();
-        BuildWeekDays();
+        BuildMonthCells(); // Monats-Grid initialisieren
+        BuildWeekDays(); // Wochen-Tage initialisieren
+        await LoadEventsAsync(); // Termine aus Datenbank laden
     }
 
-    // Baut die 42 Zellen für die Monatsansicht (beginnt montags)
-    private void BuildMonthCells()
+    protected override async Task OnParametersSetAsync()
     {
-        MonthCells.Clear();
-        var first = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1);
-        int offset = ((int)first.DayOfWeek + 6) % 7; // Tagesindex so, dass Montag=0
-        var start = first.AddDays(-offset);
-        for (int i = 0; i < 42; i++) MonthCells.Add(start.AddDays(i));
+        var uri = Navigation.Uri;
+        var queryIndex = uri.IndexOf("?eventId=");
+
+        if (queryIndex > -1)
+        {
+            var queryPart = uri.Substring(queryIndex + 9);
+            var ampIndex = queryPart.IndexOf("&");
+            if (ampIndex > -1) queryPart = queryPart.Substring(0, ampIndex);
+
+            if (int.TryParse(queryPart, out int eventId))
+            {
+                var ev = await CalendarService.GetEventByIdAsync(eventId);
+                if (ev != null)
+                {
+                    editingEvent = ev;
+                    showEditDialog = true;
+
+                    Navigation.NavigateTo("/Kalender", replace: true);
+                }
+            }
+        }
     }
 
-    // Baut die 7 Tage für die Wochenansicht (Montag - Sonntag)
-    private void BuildWeekDays()
+    private async Task LoadEventsAsync() // Lädt alle Termine aus der Datenbank
     {
-        WeekDays.Clear();
-        int offset = ((int)selectedDate.DayOfWeek + 6) % 7;
-        var start = selectedDate.AddDays(-offset).Date;
-        for (int i = 0; i < 7; i++) WeekDays.Add(start.AddDays(i));
+        var allEvents = await CalendarService.GetAllEventsAsync(); // Alle Termine laden
+        events.Clear(); // Cache leeren
+
+        foreach (var ev in allEvents) // Termine nach Datum gruppieren
+        {
+            var date = ev.Start.Date; // Nur Datum ohne Uhrzeit
+            if (!events.ContainsKey(date)) events[date] = new List<CalendarEvent>();
+            events[date].Add(ev);
+        }
     }
 
-    // Navigation: vorherige Periode
-    private void Prev()
+    private void BuildMonthCells() // Baut 42 Zellen für Monats-Grid (startet montags)
     {
-        if (currentView == "Month") selectedDate = selectedDate.AddMonths(-1);
-        else if (currentView == "Week") selectedDate = selectedDate.AddDays(-7);
-        else selectedDate = selectedDate.AddDays(-1);
-        BuildMonthCells();
-        BuildWeekDays();
+        MonthCells.Clear(); // Liste leeren
+        var first = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1); // Erster Tag des Monats
+        int offset = ((int)first.DayOfWeek + 6) % 7; // Offset berechnen (Montag = 0)
+        var start = first.AddDays(-offset); // Starttag berechnen (kann im Vormonat liegen)
+        for (int i = 0; i < 42; i++) MonthCells.Add(start.AddDays(i)); // 42 Tage hinzufügen
     }
 
-    // Navigation: nächste Periode
-    private void Next()
+    private void BuildWeekDays() // Baut 7 Tage für Wochenansicht (Montag - Sonntag)
     {
-        if (currentView == "Month") selectedDate = selectedDate.AddMonths(1);
-        else if (currentView == "Week") selectedDate = selectedDate.AddDays(7);
-        else selectedDate = selectedDate.AddDays(1);
-        BuildMonthCells();
-        BuildWeekDays();
+        WeekDays.Clear(); // Liste leeren
+        int offset = ((int)selectedDate.DayOfWeek + 6) % 7; // Offset zum Montag berechnen
+        var start = selectedDate.AddDays(-offset).Date; // Montag der aktuellen Woche
+        for (int i = 0; i < 7; i++) WeekDays.Add(start.AddDays(i)); // 7 Tage hinzufügen
     }
 
-    // Navigation: zur heutigen Ansicht
-    private void Today()
+    private void Prev() // Navigiert zur vorherigen Periode
     {
-        selectedDate = DateTime.Today;
-        BuildMonthCells();
-        BuildWeekDays();
+        if (currentView == "Month") selectedDate = selectedDate.AddMonths(-1); // Vorheriger Monat
+        else if (currentView == "Week") selectedDate = selectedDate.AddDays(-7); // Vorherige Woche
+        else selectedDate = selectedDate.AddDays(-1); // Vorheriger Tag
+        BuildMonthCells(); // Grid aktualisieren
+        BuildWeekDays(); // Woche aktualisieren
     }
 
-    // Öffnet den Dialog zum Hinzufügen eines Termins für das angeklickte Datum
-    private void OnDayClick(DateTime day)
+    private void Next() // Navigiert zur Nächsten Periode
     {
-        dialogDate = day.Date;
-        newEventText = string.Empty;
-        showAddDialog = true;
+        if (currentView == "Month") selectedDate = selectedDate.AddMonths(1); // Nächster Monat
+        else if (currentView == "Week") selectedDate = selectedDate.AddDays(7); // Nächste Woche
+        else selectedDate = selectedDate.AddDays(1); // Nächster Tag
+        BuildMonthCells(); // Grid aktualisieren
+        BuildWeekDays(); // Woche aktualisieren
     }
 
-    private void CloseDialog() => showAddDialog = false;
-
-    private void ConfirmAdd()
+    private void Today() // Springt zur heutigen Ansicht
     {
-        AddEventForDate(dialogDate);
-        showAddDialog = false;
+        selectedDate = DateTime.Today; // Heutiges Datum setzen
+        BuildMonthCells(); // Grid aktualisieren
+        BuildWeekDays(); // Woche aktualisieren
     }
 
-    // Fügt einen Termin für das gegebene Datum hinzu (in-memory)
-    private void AddEventForDate(DateTime date)
+    private void OnDayClick(DateTime day) // öffnet Dialog beim Klick auf einen Tag
     {
-        if (string.IsNullOrWhiteSpace(newEventText)) return;
-        var d = date.Date;
-        if (!events.ContainsKey(d)) events[d] = new List<CalendarEvent>();
-        events[d].Add(new CalendarEvent { Start = d, Title = newEventText.Trim() });
-        newEventText = string.Empty;
-        BuildMonthCells();
-        BuildWeekDays();
+        dialogDate = day.Date; // Datum setzen
+        newEventText = string.Empty; // Eingabefeld leeren
+        selectedColorIndex = 0; // Standard-Farbe
+        isAllDay = true; // Standard: Ganztägig
+        selectedTime = "09:00"; // Standard-Uhrzeit
+        newEventReminderMinutes = null; // Keine Erinnerung als Standard
+        showAddDialog = true; // Dialog anzeigen
     }
 
-    private void AddSampleEvent(DateTime date, string title)
+    private void OnEventClick(CalendarEvent ev, MouseEventArgs e) // öffnet Edit-Dialog beim Klick auf Event
     {
-        var d = date.Date;
-        if (!events.ContainsKey(d)) events[d] = new List<CalendarEvent>();
-        events[d].Add(new CalendarEvent { Start = d, Title = title });
+        editingEvent = ev; // Event zum Bearbeiten setzen
+        showEditDialog = true; // Edit-Dialog anzeigen
     }
 
-    // Liefert alle Termine f�r ein Datum (oder leer)
-    private List<CalendarEvent> GetEventsForDate(DateTime date)
+    private void CloseEditDialog() // Schließt Edit-Dialog
     {
-        var d = date.Date;
-        if (events.TryGetValue(d, out var list)) return list;
-        return new List<CalendarEvent>();
+        showEditDialog = false; // Dialog verstecken
+        editingEvent = new CalendarEvent(); // Event zurücksetzen auf neues Objekt
     }
 
-    // Titelanzeige je nach Sicht (Monat/Woche/Tag)
-    private string ViewTitle
+    private void OnAddTimeChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e) // Handler für Zeit-Änderung im Add-Dialog
+    {
+        string timeValue = "09:00"; // Standard-Zeit
+        if (e.Value != null) // Prüfe ob Wert vorhanden
+        {
+            object val = e.Value; // Hole Wert als object
+            if (val != null) // Prüfe ob object nicht null
+            {
+                string valStrTemp = string.Empty; // Initialisiere String
+                try
+                {
+                    valStrTemp = $"{val}"; // Verwende String-Interpolation statt Convert.ToString (garantiert non-null)
+                }
+                catch
+                {
+                    valStrTemp = string.Empty; // Bei Fehler leer
+                }
+                if (valStrTemp.Length > 0) // Prüfe ob String nicht leer
+                {
+                    timeValue = valStrTemp; // Übernehme Wert
+                }
+            }
+        }
+        selectedTime = timeValue; // Setze selectedTime
+    }
+
+    private void OnEditTimeChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e) // Handler für Zeit-Änderung im Edit-Dialog
+    {
+        string timeValue = string.Empty; // Initialisiere Zeit
+        if (e.Value != null) // Prüfe ob Wert vorhanden
+        {
+            object val = e.Value; // Hole Wert als object
+            if (val != null) // Prüfe ob object nicht null
+            {
+                string valStrTemp = string.Empty; // Initialisiere String
+                try
+                {
+                    valStrTemp = $"{val}"; // Verwende String-Interpolation statt Convert.ToString (garantiert non-null)
+                }
+                catch
+                {
+                    valStrTemp = string.Empty; // Bei Fehler leer
+                }
+                if (valStrTemp.Length > 0) // Prüfe ob String nicht leer
+                {
+                    timeValue = valStrTemp; // Übernehme Wert
+                }
+            }
+        }
+        if (timeValue.Length > 0) // Prüfe ob Zeit gesetzt
+        {
+            UpdateEditTime(timeValue); // Aktualisiere Zeit
+        }
+    }
+
+    private void UpdateEditTime(string timeString) // Aktualisiert Uhrzeit im Edit-Dialog
+    {
+        if (editingEvent != null)
+        {
+            TimeSpan time;
+            bool parseSuccess = TimeSpan.TryParse(timeString, out time);
+            if (parseSuccess)
+            {
+                editingEvent.Time = time; // Uhrzeit setzen
+                editingEvent.HasTime = true;
+            }
+        }
+    }
+
+    private async Task SaveEditedEvent() // Speichert bearbeiteten Termin
+    {
+        if (editingEvent != null && !string.IsNullOrWhiteSpace(editingEvent.Title)) // Check: Titel vorhanden?
+        {
+            if (!editingEvent.IsAllDay && !editingEvent.HasTime) // Wenn nicht ganztägig, setze Default-Zeit
+            {
+                editingEvent.Time = new TimeSpan(9, 0, 0); // Default 09:00
+                editingEvent.HasTime = true;
+            }
+            else if (editingEvent.IsAllDay) // Wenn ganztägig, entferne Zeit
+            {
+                editingEvent.Time = TimeSpan.Zero;
+                editingEvent.HasTime = false;
+            }
+
+            editingEvent.ReminderShown = false; // Reminder zurücksetzen bei Bearbeitung
+
+            await CalendarService.UpdateEventAsync(editingEvent); // In Datenbank speichern
+            await LoadEventsAsync(); // Termine neu laden
+        }
+        CloseEditDialog(); // Dialog schließen
+    }
+
+    private async Task DeleteEvent() // Löscht Termin
+    {
+        if (editingEvent != null) // Check: Event vorhanden?
+        {
+            await CalendarService.DeleteEventDirectAsync(editingEvent); // Aus Datenbank löschen
+            await LoadEventsAsync(); // Termine neu laden
+            CloseEditDialog(); // Dialog schließen
+        }
+    }
+
+    private void CloseDialog() => showAddDialog = false; // Schließt Add-Dialog
+
+    private async Task ConfirmAdd() // Speichert neuen Termin
+    {
+        await AddEventForDate(dialogDate); // Termin hinzufügen
+        showAddDialog = false; // Dialog schließen
+    }
+
+    private async Task AddEventForDate(DateTime date) // Fügt Termin für Datum hinzu
+    {
+        if (string.IsNullOrWhiteSpace(newEventText)) return; // Prüfe auf leeren Titel
+        var d = date.Date; // Nur Datum ohne Uhrzeit
+
+        TimeSpan time = TimeSpan.Zero; // Standard: keine Uhrzeit
+        bool hasTime = false;
+        if (!isAllDay)
+        {
+            TimeSpan parsedTime;
+            bool parseSuccess = TimeSpan.TryParse(selectedTime, out parsedTime);
+            if (parseSuccess) // Check: Uhrzeit gewählt?
+            {
+                time = parsedTime; // Uhrzeit setzen
+                hasTime = true;
+            }
+        }
+
+        var newEvent = new CalendarEvent(); 
+        newEvent.Start = d;
+        newEvent.Title = newEventText.Trim();
+        newEvent.ColorIndex = selectedColorIndex;
+        newEvent.IsAllDay = isAllDay;
+        newEvent.Time = time;
+        newEvent.HasTime = hasTime;
+
+        await CalendarService.AddEventAsync(newEvent); // In Datenbank speichern
+        await LoadEventsAsync(); // Termine neu laden
+
+        newEventText = string.Empty; // Eingabefeld leeren
+        selectedColorIndex = 0; // Farbe zurücksetzen
+        isAllDay = true; // Zurücksetzen
+    }
+
+    private List<CalendarEvent> GetEventsForDate(DateTime date) // Liefert alle Termine für ein Datum
+    {
+        var d = date.Date; // Nur Datum ohne Uhrzeit
+        return events.TryGetValue(d, out var list) ? list : new List<CalendarEvent>(); // Liste oder leere Liste zurückgeben
+    }
+
+    private string ViewTitle // Titel-Text je nach Ansicht
     {
         get
         {
-            if (currentView == "Month") return DisplayMonth.ToString("MMMM yyyy");
-            if (currentView == "Week") return $"Woche von {WeekDays.First().ToString("dd.MM.yyyy")}";
-            return DisplayDay.ToString("dddd, dd.MM.yyyy");
+            if (currentView == "Month") return DisplayMonth.ToString("MMMM yyyy", germanCulture); // z.B. "März 2026"
+            if (currentView == "Week") return $"Woche von {WeekDays.First().ToString("dd.MM.yyyy", germanCulture)}"; // z.B. "Woche von 03.03.2025"
+            return DisplayDay.ToString("dddd, dd.MM.yyyy", germanCulture); // z.B. "Montag, 03.03.2025"
         }
     }
 }

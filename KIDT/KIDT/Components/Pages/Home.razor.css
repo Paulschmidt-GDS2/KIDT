@@ -1,4 +1,4 @@
-/* Home.razor Component Styles */
+ï»¿/* Home.razor Component Styles */
 
 /* Body ohne Rand */
 body {
@@ -7,29 +7,32 @@ body {
 
 /* Chat-Hauptcontainer */
 .chat-container {
-    height: 100%; /* Füllt gesamte Höhe */
+    height: 100%; /* FÃ¼llt gesamte HÃ¶he */
     display: flex; /* Flexbox aktivieren */
     flex-direction: column; /* Kinder vertikal stapeln */
+    min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
+    overflow: hidden; /* KEIN Scroll - nur .messages scrollt */
 }
 
 /* === NACHRICHTENBEREICH === */
 
-/* Scrollbarer Bereich für Nachrichten */
+/* Scrollbarer Bereich fÃ¼r Nachrichten */
 .messages {
-    flex: 1; /* Nimmt verfügbaren Platz ein */
-    overflow-y: auto; /* Vertikaler Scroll wenn nötig */
-    padding: 16px 16px 160px; /* Abstand oben/seitlich/unten */
+    flex: 1; /* Nimmt verfÃ¼gbaren Platz ein */
+    overflow-y: auto; /* Vertikaler Scroll wenn nÃ¶tig */
+    padding: 16px; /* GleichmÃ¤ÃŸiger Abstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    display: flex; /* Flexbox für Zentrierung */
+    display: flex; /* Flexbox fÃ¼r Zentrierung */
     justify-content: center; /* Horizontal zentrieren */
     scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
-    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+    scrollbar-width: thin; /* DÃ¼nne Scrollbar Firefox */
+    min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
 }
 
     /* Scrollbar-Breite */
     .messages::-webkit-scrollbar {
         width: 8px; /* Breite der Scrollbar */
-        height: 8px; /* Höhe für horizontale Scrollbar */
+        height: 8px; /* HÃ¶he fÃ¼r horizontale Scrollbar */
     }
 
     /* Scrollbar-Hintergrund */
@@ -50,42 +53,42 @@ body {
             background: #0E0F0D; /* Extrem subtil heller beim Hover (kaum sichtbar) */
         }
 
-/* Innerer Container für Nachrichten */
+/* Innerer Container fÃ¼r Nachrichten */
 .messages-inner {
     width: min(800px, calc(100% - 120px)); /* Max 800px oder Fensterbreite minus 120px */
     display: flex; /* Flexbox aktivieren */
     flex-direction: column; /* Nachrichten vertikal stapeln */
-    gap: 16px; /* Abstand zwischen Nachrichten */
-    padding: 0.25cm 0 0.25cm 0.25cm; /* Padding oben/rechts/unten/links */
+    gap: 24px; /* Abstand zwischen Nachrichten (erhÃ¶ht fÃ¼r bessere Lesbarkeit) */
+    padding: 0.25cm 0 32px 0.25cm; /* Padding oben/rechts/unten/links - Extra unten fÃ¼r Fade! */
     box-sizing: border-box; /* Padding in Breite einrechnen */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .messages-inner {
         width: min(1040px, calc(100% - 156px)); /* 800px * 1.3 = 1040px, 120px * 1.3 = 156px */
-        gap: 21px; /* 16px * 1.3 = 20.8px ? 21px */
-        padding: 0.325cm 0 0.325cm 0.325cm; /* 0.25cm * 1.3 = 0.325cm */
+        gap: 28px; /* 24px * 1.3 = 31.2px, abgerundet 28px fÃ¼r bessere Optik */
+        padding: 0.325cm 0 42px 0.325cm; /* 0.25cm * 1.3 = 0.325cm, 32px * 1.3 = 42px */
     }
 }
 
 /* === NACHRICHTEN-BUBBLES === */
 
-/* Basis-Stil für alle Nachrichten-Bubbles */
+/* Basis-Stil fÃ¼r alle Nachrichten-Bubbles */
 .message-bubble {
     display: inline-block; /* Inline-Element mit Block-Eigenschaften */
     max-width: min(600px, 90%); /* Max 600px oder 90% der Container-Breite */
     padding: 0.25cm; /* Innenabstand */
     border-radius: 6px; /* Abgerundete Ecken */
-    text-align: left; /* Text linksbündig */
-    word-wrap: break-word; /* Lange Wörter umbrechen */
+    text-align: left; /* Text linksbÃ¼ndig */
+    word-wrap: break-word; /* Lange WÃ¶rter umbrechen */
     overflow-wrap: anywhere; /* Text bei Bedarf umbrechen */
-    margin: 0; /* Kein Außenabstand */
+    margin: 0; /* Kein AuÃŸenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    white-space: pre-wrap; /* Zeilenumbrüche und Whitespace beibehalten */
+    white-space: pre-wrap; /* ZeilenumbrÃ—che und Whitespace beibehalten */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .message-bubble {
         max-width: min(780px, 90%); /* 600px * 1.3 = 780px */
@@ -119,18 +122,18 @@ body {
 /* Blinkender Cursor wie in Konsole */
 .blinking-cursor {
     color: #0D0E0C; /* Farbe passend zum Text */
-    font-size: 18px; /* Gleiche Schriftgröße wie normaler Text */
+    font-size: 18px; /* Gleiche SchriftgrÃ¶ÃŸe wie normaler Text */
     animation: blink 0.8s infinite; /* Animation alle 0.8 Sekunden (schneller!) */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .blinking-cursor {
         font-size: 23px; /* 18px * 1.3 = 23.4px ? 23px */
     }
 }
 
-/* Keyframes für Blink-Animation */
+/* Keyframes fÃ¼r Blink-Animation */
 @keyframes blink {
     0%, 49% {
         opacity: 1; /* Sichtbar */
@@ -143,9 +146,9 @@ body {
 
 /* === DATEI-BADGE === */
 
-/* Badge für angehängte Datei */
+/* Badge fÃ¼r angehÃ—ngte Datei */
 .file-badge {
-    display: flex; /* Flexbox für horizontale Anordnung */
+    display: flex; /* Flexbox fÃ¼r horizontale Anordnung */
     align-items: center; /* Vertikal zentrieren */
     gap: 8px; /* Abstand zwischen Icon/Name/Button */
     padding: 8px 12px; /* Innenabstand */
@@ -155,14 +158,14 @@ body {
     width: fit-content; /* Nur so breit wie Inhalt */
     box-sizing: border-box; /* Padding in Breite einrechnen */
     align-self: flex-start; /* Links ausrichten */
-    margin-left: calc((100% - min(800px, calc(100% - 120px))) / 2); /* Linksbündig mit Input-Box */
+    margin-left: calc((100% - min(800px, calc(100% - 120px))) / 2); /* LinksbÃ¼ndig mit Input-Box */
     pointer-events: auto; /* Klicks auf Badge erlauben */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .file-badge {
-        margin-left: calc((100% - min(1040px, calc(100% - 156px))) / 2); /* Linksbündig mit Input-Box */
+        margin-left: calc((100% - min(1040px, calc(100% - 156px))) / 2); /* LinksbÃ¼ndig mit Input-Box */
         padding: 10px 16px; /* 8px * 1.3 = 10.4px ? 10px, 12px * 1.3 = 15.6px ? 16px */
         gap: 10px; /* 8px * 1.3 = 10.4px ? 10px */
     }
@@ -171,10 +174,10 @@ body {
 /* Datei-Icon */
 .file-icon {
     width: 16px; /* Icon-Breite */
-    height: 16px; /* Icon-Höhe */
+    height: 16px; /* Icon-HÃ¶he */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .file-icon {
         width: 21px; /* 16px * 1.3 = 20.8px ? 21px */
@@ -185,14 +188,14 @@ body {
 /* Dateiname im Badge */
 .file-name {
     color: #0D0E0C; /* Textfarbe */
-    font-size: 14px; /* Schriftgröße */
+    font-size: 14px; /* SchriftgrÃ¶ÃŸe */
     max-width: 300px; /* Maximale Breite */
-    overflow: hidden; /* Überfluss verstecken */
-    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    overflow: hidden; /* Ã¼berfluss verstecken */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Ã¼berfluss */
     white-space: nowrap; /* Kein Zeilenumbruch */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .file-name {
         font-size: 18px; /* 14px * 1.3 = 18.2px ? 18px */
@@ -202,20 +205,44 @@ body {
 
 /* === INPUT-BEREICH === */
 
-/* Container für File-Badge und Input-Box */
+/* Container fÃ¼r File-Badge und Input-Box */
 .chat-input-container {
-    position: sticky; /* Fixiert bei Scroll */
-    bottom: 12%; /* 12% vom unteren Rand */
+    flex: 0 0 auto; /* Fixe GrÃ¶ÃŸe, kein Wachsen/Schrumpfen */
     display: flex; /* Flexbox aktivieren */
     flex-direction: column; /* Kinder vertikal stapeln */
     align-items: center; /* Horizontal zentrieren */
+    padding: 16px 0; /* Abstand oben/unten */
     pointer-events: none; /* Klicks durchlassen */
+    position: relative; /* FÃ¼r Pseudo-Element */
+}
+
+/* Fade-Out-Gradient Ã¼ber der Input-Box */
+.chat-input-container::before {
+    content: ""; /* Leeres Pseudo-Element */
+    position: absolute; /* Absolute Positionierung */
+    top: -25px; /* 25px Ã¼ber der Input-Box (noch subtiler) */
+    left: 50%; /* Horizontal zentriert */
+    transform: translateX(-50%); /* Korrekte Zentrierung */
+    width: min(800px, calc(100% - 120px)); /* Gleiche Breite wie .messages-inner */
+    height: 25px; /* HÃ¶he des Fade-Bereichs (reduziert) */
+    background: linear-gradient(to bottom, transparent, #6C7061); /* Gradient von transparent zu Main-Background */
+    pointer-events: none; /* Klicks durchlassen */
+    z-index: 1; /* Ãœber Nachrichten, unter Input-Box */
+}
+
+/* Fullscreen-Modus: Breite anpassen */
+@media (min-width: 1400px) {
+    .chat-input-container::before {
+        width: min(1040px, calc(100% - 156px)); /* 800px * 1.3 = 1040px */
+        height: 30px; /* Etwas grÃ¶ÃŸer im Fullscreen (25px * 1.2 = 30px) */
+        top: -30px; /* Entsprechend angepasst */
+    }
 }
 
 /* Die eigentliche Input-Box */
 .chat-input {
     pointer-events: auto; /* Klicks auf dieser Box erlauben */
-    display: flex; /* Flexbox für horizontale Anordnung */
+    display: flex; /* Flexbox fÃ¼r horizontale Anordnung */
     align-items: center; /* Vertikal zentrieren */
     gap: 8px; /* Abstand zwischen Textbox und Button */
     padding: 10px 12px; /* Innenabstand */
@@ -224,10 +251,10 @@ body {
     border-radius: 6px; /* Abgerundete Ecken */
     width: min(800px, calc(100% - 120px)); /* Max 800px oder Fensterbreite minus 120px */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    transition: box-shadow 0.2s ease; /* Smooth Shadow-Übergang */
+    transition: box-shadow 0.2s ease; /* Smooth Shadow-Ã¼bergang */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .chat-input {
         width: min(1040px, calc(100% - 156px)); /* 800px * 1.3 = 1040px */
@@ -240,27 +267,27 @@ body {
 
 /* Mehrzeiliges Textfeld */
 .chat-textbox {
-    flex: 1; /* Nimmt verfügbaren Platz ein */
-    min-height: 44px; /* Mindesthöhe */
-    max-height: 10cm; /* Maximale Höhe */
-    line-height: 28px; /* Zeilenhöhe */
+    flex: 1; /* Nimmt verfÃ¼gbaren Platz ein */
+    min-height: 44px; /* MindestHÃ¶he */
+    max-height: 10cm; /* Maximale HÃ¶he */
+    line-height: 28px; /* ZeilenHÃ¶he */
     padding: 8px 12px; /* Innenabstand */
     border-radius: 8px; /* Abgerundete Ecken */
     border: none; /* Kein Rahmen */
     background: #848877; /* Dunkler Hintergrund */
     color: #0D0E0C; /* Textfarbe */
-    font-size: 18px; /* Schriftgröße */
+    font-size: 18px; /* SchriftgrÃ¶ÃŸe */
     overflow-y: auto; /* Vertikaler Scroll bei Bedarf */
-    resize: none; /* Größenänderung deaktivieren */
+    resize: none; /* grÃ¶ÃŸenÃ¤nderung deaktivieren */
     width: 100%; /* Volle Breite */
     box-sizing: border-box; /* Padding in Breite einrechnen */
     scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
-    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+    scrollbar-width: thin; /* DÃ¼nne Scrollbar Firefox */
     outline: none; /* Kein Outline */
     vertical-align: middle; /* Vertikal zentrieren */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .chat-textbox {
         font-size: 23px; /* 18px * 1.3 = 23.4px ? 23px */
@@ -276,19 +303,19 @@ body {
     border: none; /* Kein Rahmen */
 }
 
-/* Scrollbar-Breite für Chrome/Safari */
+/* Scrollbar-Breite fÃ¼r Chrome/Safari */
 .chat-textbox::-webkit-scrollbar {
     width: 8px; /* Scrollbar-Breite */
-    height: 8px; /* Scrollbar-Höhe */
+    height: 8px; /* Scrollbar-HÃ¶he */
 }
 
-/* Scrollbar-Hintergrund für Chrome/Safari */
+/* Scrollbar-Hintergrund fÃ¼r Chrome/Safari */
 .chat-textbox::-webkit-scrollbar-track {
     background: transparent; /* Transparenter Hintergrund */
     border-radius: 8px; /* Abgerundete Ecken */
 }
 
-/* Scrollbar-Griff für Chrome/Safari */
+/* Scrollbar-Griff fÃ¼r Chrome/Safari */
 .chat-textbox::-webkit-scrollbar-thumb {
     background: #0D0E0C; /* Dunkler Griff */
     border-radius: 8px; /* Abgerundete Ecken */
@@ -316,12 +343,12 @@ body {
     background: #848877; /* heller Hintergrund */
     color: #0D0E0C; /* Textfarbe */
     cursor: pointer; /* Zeiger-Cursor */
-    font-size: 18px; /* Schriftgröße */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    font-size: 18px; /* SchriftgrÃ¶ÃŸe */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth ÃœbergÃ¤nge */
     outline: none; /* Kein Outline */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .chat-upload {
         padding: 13px 18px; /* 10px * 1.3 = 13px, 14px * 1.3 = 18.2px ? 18px */
@@ -340,15 +367,15 @@ body {
     border: none; /* Kein Rahmen */
     cursor: pointer; /* Zeiger-Cursor */
     padding: 4px; /* Kleiner Innenabstand */
-    margin: 0; /* Kein Außenabstand */
+    margin: 0; /* Kein AuÃŸenabstand */
     opacity: 0.7; /* Leicht transparent */
-    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
-    line-height: 1; /* Zeilenhöhe 1 */
-    display: flex; /* Flexbox für Icon */
+    transition: opacity 0.2s ease; /* Smooth Opacity-Ã¼bergang */
+    line-height: 1; /* ZeilenHÃ¶he 1 */
+    display: flex; /* Flexbox fÃ¼r Icon */
     align-items: center; /* Icon zentrieren */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .file-remove {
         padding: 5px; /* 4px * 1.3 = 5.2px ? 5px */
@@ -358,10 +385,10 @@ body {
 /* Icon im Entfernen-Button */
 .file-remove img {
     width: 16px; /* Icon-Breite */
-    height: 16px; /* Icon-Höhe */
+    height: 16px; /* Icon-HÃ¶he */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .file-remove img {
         width: 21px; /* 16px * 1.3 = 20.8px ? 21px */
@@ -403,20 +430,20 @@ body {
 
 /* === GEFUNDENE DOKUMENTE IM CHAT === */
 
-/* Grid für gefundene Dokumente (horizontal scrollbar) */
+/* Grid fÃ¼r gefundene Dokumente (horizontal scrollbar) */
 .found-documents-grid {
-    display: flex; /* Flexbox für horizontales Layout */
+    display: flex; /* Flexbox fÃ¼r horizontales Layout */
     gap: 12px; /* Abstand zwischen Cards */
     margin-top: 12px; /* Abstand zur Nachricht */
     overflow-x: auto; /* Horizontal scrollbar bei vielen Dokumenten */
-    padding-bottom: 8px; /* Platz für Scrollbar */
+    padding-bottom: 8px; /* Platz fÃ¼r Scrollbar */
     scrollbar-color: #0D0E0C transparent; /* Firefox: Dunkler Griff, transparenter Hintergrund */
-    scrollbar-width: thin; /* Dünne Scrollbar */
+    scrollbar-width: thin; /* DÃ¼nne Scrollbar */
 }
 
 /* Scrollbar Webkit */
 .found-documents-grid::-webkit-scrollbar {
-    height: 6px; /* Höhe der Scrollbar */
+    height: 6px; /* HÃ¶he der Scrollbar */
 }
 
 .found-documents-grid::-webkit-scrollbar-track {
@@ -436,7 +463,7 @@ body {
     border-radius: 6px; /* Abgerundete Ecken */
     padding: 12px; /* Innenabstand */
     background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth ÃœbergÃ¤nge */
     display: flex; /* Flexbox */
     flex-direction: column; /* Vertikal stapeln */
     gap: 8px; /* Abstand zwischen Elementen */
@@ -444,7 +471,7 @@ body {
 }
 
 .doc-card-content {
-    cursor: pointer; /* Zeiger-Cursor für Klick */
+    cursor: pointer; /* Zeiger-Cursor fÃ¼r Klick */
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -454,21 +481,21 @@ body {
     background: rgba(132, 136, 119, 0.2); /* Heller beim Hover */
 }
 
-/* Button zum Hinzufügen - Minimalistisch */
+/* Button zum HinzufÃ—gen - Minimalistisch */
 .add-doc-btn {
     width: auto; /* Nur so breit wie der Text */
     padding: 3px 2px; /* Vertikal 3px, horizontal sehr schmal (2px) */
     background: transparent; /* Transparenter Hintergrund */
     color: #0D0E0C; /* Gleiche Schriftfarbe wie alles andere */
-    border: 1px solid rgba(13, 14, 12, 0.3); /* Sehr dünner, subtiler Rahmen */
+    border: 1px solid rgba(13, 14, 12, 0.3); /* Sehr DÃ¼nner, subtiler Rahmen */
     border-radius: 3px; /* Passend zum App-Stil */
     cursor: pointer;
     font-size: 11px; /* Kompakte Schrift, passt gut in Button */
     font-weight: 500; /* Medium weight passend zum App-Stil */
     transition: all 0.15s ease; /* Kurze smooth Transition */
-    line-height: 1; /* Minimale Zeilenhöhe */
-    text-transform: uppercase; /* Großbuchstaben */
-    letter-spacing: 0.4px; /* Leichter Buchstabenabstand für Lesbarkeit */
+    line-height: 1; /* Minimale ZeilenHÃ¶he */
+    text-transform: uppercase; /* GroÃ—buchstaben */
+    letter-spacing: 0.4px; /* Leichter Buchstabenabstand fÃ¼r Lesbarkeit */
     white-space: nowrap; /* Kein Zeilenumbruch */
 }
 
@@ -482,7 +509,7 @@ body {
     background: rgba(13, 14, 12, 0.1); /* Etwas dunkler beim Klick */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .add-doc-btn {
         padding: 4px 3px; /* 3px * 1.3 ? 4px vertikal, 2px * 1.3 ? 3px horizontal */
@@ -495,7 +522,7 @@ body {
 /* Thumbnail im Dokument-Card */
 .doc-thumbnail-chat {
     width: 100%; /* Volle Breite */
-    height: 120px; /* Feste Höhe */
+    height: 120px; /* Feste HÃ¶he */
     object-fit: cover; /* Bild zuschneiden */
     object-position: top; /* Von oben beginnen */
     border-radius: 4px; /* Abgerundete Ecken */
@@ -504,7 +531,7 @@ body {
 /* Icon-Placeholder (wenn kein Thumbnail) */
 .doc-icon-placeholder {
     width: 100%; /* Volle Breite */
-    height: 120px; /* Gleiche Höhe wie Thumbnail */
+    height: 120px; /* Gleiche HÃ¶he wie Thumbnail */
     display: flex; /* Flexbox */
     align-items: center; /* Vertikal zentrieren */
     justify-content: center; /* Horizontal zentrieren */
@@ -514,7 +541,7 @@ body {
 
 .doc-icon-chat {
     width: 48px; /* Icon-Breite */
-    height: 48px; /* Icon-Höhe */
+    height: 48px; /* Icon-HÃ¶he */
     opacity: 0.3; /* Leicht transparent */
 }
 
@@ -528,9 +555,9 @@ body {
 /* Dokument-Name */
 .doc-name-chat {
     color: #0D0E0C; /* Textfarbe */
-    font-size: 13px; /* Schriftgröße */
+    font-size: 13px; /* SchriftgrÃ¶ÃŸe */
     font-weight: 500; /* Mittleres Gewicht */
-    overflow: hidden; /* Überfluss verstecken */
+    overflow: hidden; /* Ã¼berfluss verstecken */
     text-overflow: ellipsis; /* Auslassungspunkte */
     white-space: nowrap; /* Kein Zeilenumbruch */
 }
@@ -538,12 +565,12 @@ body {
 /* Dokument-Typ */
 .doc-type-chat {
     color: #0D0E0C; /* Textfarbe */
-    font-size: 11px; /* Kleinere Schriftgröße */
+    font-size: 11px; /* Kleinere SchriftgrÃ¶ÃŸe */
     opacity: 0.6; /* Leicht transparent */
-    text-transform: uppercase; /* Großbuchstaben */
+    text-transform: uppercase; /* GroÃ—buchstaben */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .found-documents-grid {
         gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */

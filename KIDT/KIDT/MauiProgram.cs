@@ -24,7 +24,7 @@ namespace KIDT
             // Hinweis: Diese Services stellen Funktionalität für Dialoge, Notifications,
             // Tooltips und Context-Menus bereit und müssen im DI-Container verfügbar sein.
             builder.Services.AddScoped<DialogService>();
-            builder.Services.AddScoped<NotificationService>();
+            builder.Services.AddScoped<Radzen.NotificationService>();
             builder.Services.AddScoped<TooltipService>();
             builder.Services.AddScoped<ContextMenuService>();
 
@@ -35,7 +35,9 @@ namespace KIDT
             builder.Services.AddSingleton<ChatCoordinator>();
             builder.Services.AddTransient<ChatDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
             builder.Services.AddTransient<DocumentDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
+            builder.Services.AddTransient<CalendarService>(); // Service für Kalender-Termine
             builder.Services.AddSingleton<ThumbnailGenerator>();
+            builder.Services.AddSingleton<AppNotificationService>(); // Singleton für Termin-Benachrichtigungen
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();
@@ -43,12 +45,16 @@ namespace KIDT
 #endif
 
             var app = builder.Build();
-            
+
             // Einmalige DB-Initialisierung beim App-Start
             using (var scope = app.Services.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
                 dbContext.Database.EnsureCreated(); // Erstelle Tabellen wenn nicht vorhanden
+
+                // Migriere Datenbank-Schema (füge neue Spalten hinzu falls nötig)
+                var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>();
+                Task.Run(async () => await calendarService.EnsureDatabaseSchemaAsync()).Wait(); // Synchron warten
             }
 
             return app;

@@ -1,4 +1,4 @@
-using System.IO;
+ï»¿using System.IO;
 using System.Threading.Tasks;
 
 #if WINDOWS
@@ -12,7 +12,7 @@ namespace KIDT.Services;
 
 public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
 {
-    public async Task<string> GenerateThumbnailAsync(string filePath) // Generiert Thumbnail für Datei
+    public async Task<string> GenerateThumbnailAsync(string filePath) // Generiert Thumbnail fÃ¼r Datei
     {
         string extension = Path.GetExtension(filePath).ToLower(); // Hole Datei-Endung (klein geschrieben)
         
@@ -26,13 +26,13 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
         }
     }
     
-    private async Task<string> GeneratePdfThumbnailAsync(string filePath) // Generiert Thumbnail für PDF (erste Seite)
+    private async Task<string> GeneratePdfThumbnailAsync(string filePath) // Generiert Thumbnail fÃ¼r PDF (erste Seite)
     {
 #if WINDOWS
         try
         {
             StorageFile file = await StorageFile.GetFileFromPathAsync(filePath); // Lade PDF-Datei
-            PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file); // Öffne PDF
+            PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file); // Ã–ffne PDF
             
             if (pdfDoc.PageCount == 0) // Check: Hat PDF keine Seiten?
             {
@@ -48,9 +48,9 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
             
             await page.RenderToStreamAsync(stream, options); // Rendere Seite zu Stream
             
-            stream.Seek(0); // Stream zurücksetzen
+            stream.Seek(0); // Stream zurÃ¼cksetzen
             
-            byte[] bytes = new byte[stream.Size]; // Byte-Array für Bild
+            byte[] bytes = new byte[stream.Size]; // Byte-Array fÃ¼r Bild
             IBuffer buffer = await stream.ReadAsync(bytes.AsBuffer(), (uint)stream.Size, InputStreamOptions.None); // Lese Stream
             
             string base64 = Convert.ToBase64String(bytes); // Konvertiere zu Base64
@@ -62,7 +62,7 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
             throw new Exception("Fehler beim Generieren des PDF-Thumbnails: " + ex.Message);
         }
 #else
-        await Task.Delay(1); // Placeholder für nicht-Windows-Plattformen
+        await Task.Delay(1); // Placeholder fÃ¼r nicht-Windows-Plattformen
         return string.Empty;
 #endif
     }

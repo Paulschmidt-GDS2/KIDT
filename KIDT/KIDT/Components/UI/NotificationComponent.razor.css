@@ -1,0 +1,164 @@
+/* === GEMEINSAME NOTIFICATION STYLES === */
+.notification-startup,
+.notification-reminder {
+    position: fixed;
+    background-color: #848877;
+    border: 2px solid #0D0E0C;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    font-family: "Courier New", Courier, monospace;
+    color: #0D0E0C;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.notification-startup.show,
+.notification-reminder.show {
+    opacity: 1;
+}
+
+.notification-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #0D0E0C;
+    font-weight: bold;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+}
+
+.notification-close:hover {
+    color: #e50000;
+    transform: scale(1.2);
+}
+
+/* === STARTUP NOTIFICATION (Mittig Oben) === */
+.notification-startup {
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    width: 450px;
+    max-width: 90vw;
+    padding: 20px;
+}
+
+.notification-startup.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.notification-header {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    padding-right: 30px;
+}
+
+.notification-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    background: rgba(13, 14, 12, 0.05);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.event-row:hover {
+    background: rgba(13, 14, 12, 0.15);
+}
+
+.event-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #0D0E0C;
+}
+
+.event-date {
+    font-size: 12px;
+    color: #555;
+}
+
+.event-time {
+    color: #006bb7;
+    font-weight: 600;
+}
+
+.no-events {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* === EVENT REMINDER (Rechts Unten) === */
+.notification-reminder {
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    padding: 16px;
+    cursor: pointer;
+    transform: translateX(400px);
+}
+
+.notification-reminder.show {
+    transform: translateX(0);
+}
+
+.notification-reminder:hover {
+    background-color: #959886;
+}
+
+.notification-content {
+    padding-right: 30px;
+}
+
+.notification-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #0D0E0C;
+}
+
+.notification-info {
+    font-size: 12px;
+    color: #2a2b28;
+    margin-bottom: 6px;
+}
+
+.notification-countdown {
+    font-size: 13px;
+    font-weight: bold;
+    color: #006bb7;
+    margin-top: 4px;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 600px) {
+    .notification-startup {
+        width: 90vw;
+        top: 10px;
+    }
+
+    .notification-reminder {
+        width: 90vw;
+        right: 5%;
+        bottom: 10px;
+    }
+}

@@ -1,4 +1,4 @@
-using System.Text;
+ï»¿using System.Text;
 using UglyToad.PdfPig;
 
 namespace KIDT.Services;
@@ -6,13 +6,13 @@ namespace KIDT.Services;
 /// <summary>
 /// Service zum Extrahieren von Text aus Dateien (PDF, TXT, MD, JSON).
 /// </summary>
-public class FileService // Klasse für Datei-Operationen
+public class FileService // Klasse fÃ¼r Datei-Operationen
 {
     /// <summary>
     /// Extrahiert Text aus einer Datei basierend auf ihrer Erweiterung.
-    /// Unterstützt: PDF, TXT, MD, JSON. Max. 4 MB pro Datei.
+    /// UnterstÃ¼tzt: PDF, TXT, MD, JSON. Max. 4 MB pro Datei.
     /// </summary>
-    public async Task<string> ExtractTextAsync(string filePath) // Hauptmethode: Lädt Datei und gibt Text zurück
+    public async Task<string> ExtractTextAsync(string filePath) // Hauptmethode: LÃ¤dt Datei und gibt Text zurÃ¼ck
     {
         try
         {
@@ -21,12 +21,12 @@ public class FileService // Klasse für Datei-Operationen
                 return "Fehler: Datei nicht gefunden.";
             }
 
-            var fileInfo = new FileInfo(filePath); // Datei-Infos holen (Größe, etc.)
+            var fileInfo = new FileInfo(filePath); // Datei-Infos holen (GrÃ¶ÃŸe, etc.)
             long maxSize = 4 * 1024 * 1024; // 4 MB Limit in Bytes
-            if (fileInfo.Length > maxSize) // Ist Datei zu groß?
+            if (fileInfo.Length > maxSize) // Ist Datei zu groÃŸ?
             {
-                long sizeMB = fileInfo.Length / (1024 * 1024); // Größe in MB berechnen
-                return $"Fehler: Datei ist zu groß ({sizeMB} MB). Maximum: 4 MB.";
+                long sizeMB = fileInfo.Length / (1024 * 1024); // GrÃ¶ÃŸe in MB berechnen
+                return $"Fehler: Datei ist zu groÃŸ ({sizeMB} MB). Maximum: 4 MB.";
             }
 
             var extension = Path.GetExtension(filePath).ToLowerInvariant(); // Dateierweiterung holen (z.B. ".pdf") und zu lowercase
@@ -51,10 +51,10 @@ public class FileService // Klasse für Datei-Operationen
                     break;
                 
                 default: // Unbekannter Dateityp
-                    return "Fehler: Dateityp nicht unterstützt. Unterstützt: PDF, TXT, MD, JSON."; // Fehler-Nachricht
+                    return "Fehler: Dateityp nicht unterstÃ¼tzt. UnterstÃ¼tzt: PDF, TXT, MD, JSON."; // Fehler-Nachricht
             }
             
-            return result; // Gibt Ergebnis zurück
+            return result; // Gibt Ergebnis zurÃ¼ck
         }
         catch (Exception ex)
         {
@@ -65,34 +65,34 @@ public class FileService // Klasse für Datei-Operationen
     /// <summary>
     /// Extrahiert Text aus PDF mit PdfPig.
     /// </summary>
-    private async Task<string> ExtractFromPdfAsync(string filePath) // PDF-Extraktion: Öffnet PDF und holt Text aller Seiten
+    private async Task<string> ExtractFromPdfAsync(string filePath) // PDF-Extraktion: Ã–ffnet PDF und holt Text aller Seiten
     {
-        return await Task.Run(() => // Läuft in eigenem Thread (UI nicht blockieren)
+        return await Task.Run(() => // LÃ¤uft in eigenem Thread (UI nicht blockieren)
         {
             try
             {
-                using var document = PdfDocument.Open(filePath); // Öffne PDF mit PdfPig
-                var textBuilder = new StringBuilder(); // StringBuilder für effizienten Text-Zusammenbau
+                using var document = PdfDocument.Open(filePath); // Ã–ffne PDF mit PdfPig
+                var textBuilder = new StringBuilder(); // StringBuilder fÃ¼r effizienten Text-Zusammenbau
 
                 foreach (var page in document.GetPages()) // Durchlaufe alle Seiten
                 {
-                    textBuilder.AppendLine(page.Text); // Text der Seite hinzufügen (OHNE Seiten-Marker - spart Tokens!)
+                    textBuilder.AppendLine(page.Text); // Text der Seite hinzufÃ¼gen (OHNE Seiten-Marker - spart Tokens!)
                     textBuilder.AppendLine(); // Leerzeile nach jeder Seite
                 }
 
                 var extractedText = textBuilder.ToString(); // Finaler Text als String
 
-                string[] separators = new string[] { " ", "\t", "\n" }; // Trennzeichen für Split
+                string[] separators = new string[] { " ", "\t", "\n" }; // Trennzeichen fÃ¼r Split
                 var words = extractedText.Split(separators, StringSplitOptions.RemoveEmptyEntries); // Splitte bei Leerzeichen/Tabs/Newlines
-                int wordCount = words.Length; // Anzahl Wörter zählen
+                int wordCount = words.Length; // Anzahl WÃ¶rter zÃ¤hlen
                 
-                if (wordCount > 3000) // Check: PDF zu lang für Token-Limit?
+                if (wordCount > 3000) // Check: PDF zu lang fÃ¼r Token-Limit?
                 {
-                    string warning = $"[WARNUNG: Diese PDF ist sehr lang ({wordCount} Wörter). Das Modell kann möglicherweise nicht alles verarbeiten.]\n\n";
+                    string warning = $"[WARNUNG: Diese PDF ist sehr lang ({wordCount} WÃ¶rter). Das Modell kann mÃ¶glicherweise nicht alles verarbeiten.]\n\n";
                     extractedText = warning + extractedText; // Warnung vor Text setzen
                 }
 
-                return extractedText; // Gib extrahierten Text zurück
+                return extractedText; // Gib extrahierten Text zurÃ¼ck
             }
             catch (Exception ex)
             {

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+ï»¿using System.Security.Cryptography;
 using System.Text;
 using KIDT.Models;
 using Microsoft.EntityFrameworkCore;
@@ -19,20 +19,22 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         string fileHash = ComputeFileHash(fileContent); // Berechne Hash vom Datei-Inhalt
 
         var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        
-        Document? existingDoc = null; // Variable für existierendes Dokument
+
+        Document existingDoc = new Document(); // Initialisiere mit neuem Objekt
+        bool docExists = false; // Flag fÃ¼r existierendes Dokument
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             if (d.FileHash == fileHash) // Gleicher Hash gefunden?
             {
                 existingDoc = d; // Dokument existiert bereits
+                docExists = true; // Setze Flag
                 break;
             }
         }
 
-        if (existingDoc != null) // Dokument existiert bereits?
+        if (docExists) // Dokument existiert bereits?
         {
-            return existingDoc.Id; // Gib existierende ID zurück (verhindert Duplikate)
+            return existingDoc.Id; // Gib existierende ID zurÃ¼ck (verhindert Duplikate)
         }
 
         Document newDoc = new Document(); // Erstelle neues Dokument-Objekt
@@ -44,26 +46,26 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         newDoc.ThumbnailBase64 = thumbnailBase64;
         newDoc.UploadedAt = DateTime.UtcNow;
 
-        this.db.Documents.Add(newDoc); // Füge Dokument zur Datenbank hinzu
-        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
+        this.db.Documents.Add(newDoc); // FÃ¼ge Dokument zur Datenbank hinzu
+        await this.db.SaveChangesAsync(); // Speichere Ã„nderungen in Datenbank
 
         return newDoc.Id;
     }
 
     public async Task<List<Document>> GetAllDocumentsAsync() // Lade alle Dokumente
     {
-        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Ã„nderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
         
         allDocuments.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
-        return allDocuments; // Gib sortierte Liste zurück
+        return allDocuments; // Gib sortierte Liste zurÃ¼ck
     }
 
-    public async Task<Document?> GetDocumentByIdAsync(int documentId) // Lade einzelnes Dokument
+    public async Task<Document> GetDocumentByIdAsync(int documentId) // Lade einzelnes Dokument
     {
-        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Ã„nderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        
+
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             if (d.Id == documentId) // Ist das die gesuchte ID?
@@ -71,18 +73,20 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
                 return d;
             }
         }
-        
-        return null;
+
+        Document notFoundDoc = new Document(); // Erstelle Dummy-Dokument fÃ¼r nicht gefunden
+        notFoundDoc.Id = -1; // Setze ID auf -1 als Indikator fÃ¼r "nicht gefunden"
+        return notFoundDoc;
     }
 
     public async Task<List<Document>> SearchDocumentsAsync(string searchTerm) // Suche Dokumente nach Suchbegriff
     {
         string lowerSearchTerm = searchTerm.ToLower(); // Konvertiere Suchbegriff zu Kleinbuchstaben
 
-        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
+        var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Ã„nderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
         
-        var filtered = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        var filtered = new List<Document>(); // Erstelle leere Liste fÃ¼r Ergebnis
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             string lowerFileName = d.FileName.ToLower(); // Dateiname in Kleinbuchstaben
@@ -98,66 +102,64 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         return filtered;
     }
 
-    public async Task<bool> LinkDocumentToConversationAsync(int documentId, int conversationId) // Verknüpfe Dokument mit Chat
+    public async Task<bool> LinkDocumentToConversationAsync(int documentId, int conversationId) // VerknÃ¼pfe Dokument mit Chat
     {
-        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        
-        bool alreadyLinked = false; // Standardmäßig: Noch nicht verknüpft
-        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        // PrÃ¼fe ob Link bereits existiert (ohne Navigation Properties zu laden)
+        var existingLink = await this.db.ConversationDocuments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cd => cd.ConversationId == conversationId && cd.DocumentId == documentId);
+
+        if (existingLink != null) // Link existiert bereits?
         {
-            if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
-            {
-                alreadyLinked = true; // Link existiert bereits
-                break;
-            }
+            return false; // Bereits verknÃ¼pft
         }
 
-        if (alreadyLinked) // Link existiert bereits?
+        // Erstelle neue VerknÃ¼pfung
+        ConversationDocument link = new ConversationDocument
         {
-            return false;
-        }
+            ConversationId = conversationId,
+            DocumentId = documentId,
+            AddedAt = DateTime.UtcNow
+        };
 
-        ConversationDocument link = new ConversationDocument(); // Erstelle neue Verknüpfung
-        link.ConversationId = conversationId; // Setze Chat-ID
-        link.DocumentId = documentId; // Setze Dokument-ID
-        link.AddedAt = DateTime.UtcNow; // Setze aktuelles Datum (UTC)
-
-        this.db.ConversationDocuments.Add(link); // Füge Verknüpfung zur Datenbank hinzu
-        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
+        this.db.ConversationDocuments.Add(link); // FÃ¼ge VerknÃ¼pfung zur Datenbank hinzu
+        await this.db.SaveChangesAsync(); // Speichere Ã„nderungen
 
         return true;
     }
 
-    public async Task<bool> UnlinkDocumentFromConversationAsync(int documentId, int conversationId) // Entferne Verknüpfung zwischen Dokument und Chat
+    public async Task<bool> UnlinkDocumentFromConversationAsync(int documentId, int conversationId) // Entferne VerknÃ¼pfung zwischen Dokument und Chat
     {
-        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        
-        ConversationDocument? link = null; // Variable für gefundene Verknüpfung
-        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle VerknÃ¼pfungen aus Datenbank
+
+        ConversationDocument link = new ConversationDocument(); // Initialisiere mit neuem Objekt
+        bool linkFound = false; // Flag fÃ¼r gefundene VerknÃ¼pfung
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle VerknÃ¼pfungen
         {
             if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
             {
-                link = cd; // Verknüpfung gefunden
+                link = cd; // VerknÃ¼pfung gefunden
+                linkFound = true; // Setze Flag
                 break;
             }
         }
 
-        if (link == null) // Keine Verknüpfung gefunden?
+        if (linkFound == false) // Keine VerknÃ¼pfung gefunden?
         {
             return false;
         }
 
-        this.db.ConversationDocuments.Remove(link); // Entferne Verknüpfung aus Datenbank
-        await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank
+        this.db.ConversationDocuments.Remove(link); // Entferne VerknÃ¼pfung aus Datenbank
+        await this.db.SaveChangesAsync(); // Speichere Ã„nderungen in Datenbank
 
         return true;
     }
 
-    public async Task<bool> IsDocumentLinkedAsync(int documentId, int conversationId) // Prüfe ob Dokument mit Chat verknüpft ist
+    public async Task<bool> IsDocumentLinkedAsync(int documentId, int conversationId) // PrÃ¼fe ob Dokument mit Chat verknÃ¼pft ist
     {
-        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle VerknÃ¼pfungen aus Datenbank
         
-        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle VerknÃ¼pfungen
         {
             if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
             {
@@ -168,22 +170,22 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         return false;
     }
 
-    public async Task<List<Document>> GetDocumentsForConversationAsync(int conversationId) // Lade alle Dokumente für einen Chat
+    public async Task<List<Document>> GetDocumentsForConversationAsync(int conversationId) // Lade alle Dokumente fÃ¼r einen Chat
     {
-        var query = this.db.ConversationDocuments.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
-        var allLinks = await query.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
+        var query = this.db.ConversationDocuments.AsNoTracking(); // Starte Query ohne Ã„nderungs-Verfolgung
+        var allLinks = await query.ToListAsync(); // Lade alle VerknÃ¼pfungen aus Datenbank
         
-        var documentIds = new List<int>(); // Erstelle leere Liste für Dokument-IDs
-        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        var documentIds = new List<int>(); // Erstelle leere Liste fÃ¼r Dokument-IDs
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle VerknÃ¼pfungen
         {
-            if (cd.ConversationId == conversationId) // Gehört zu diesem Chat?
+            if (cd.ConversationId == conversationId) // GehÃ¶rt zu diesem Chat?
             {
                 documentIds.Add(cd.DocumentId);
             }
         }
         
         var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        var result = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        var result = new List<Document>(); // Erstelle leere Liste fÃ¼r Ergebnis
         
         foreach (int docId in documentIds) // Gehe durch alle gefundenen Dokument-IDs
         {
@@ -201,37 +203,49 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         return result;
     }
 
-    public async Task DeleteDocumentAsync(int documentId) // Lösche Dokument aus Datenbank
+    public async Task DeleteDocumentAsync(int documentId) // LÃ¶sche Dokument aus Datenbank
     {
-        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        var links = new List<ConversationDocument>(); // Erstelle leere Liste für zu löschende Verknüpfungen
-        
-        foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
+        var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle VerknÃ¼pfungen aus Datenbank
+        var links = new List<ConversationDocument>(); // Erstelle leere Liste fÃ¼r zu lÃ¶schende VerknÃ¼pfungen
+
+        foreach (ConversationDocument cd in allLinks) // Gehe durch alle VerknÃ¼pfungen
         {
-            if (cd.DocumentId == documentId) // Gehört zu diesem Dokument?
+            if (cd.DocumentId == documentId) // GehÃ¶rt zu diesem Dokument?
             {
                 links.Add(cd);
             }
         }
-        
-        this.db.ConversationDocuments.RemoveRange(links); // Entferne alle Verknüpfungen aus Datenbank
-        
-        Document? doc = await this.db.Documents.FindAsync(documentId); // Suche Dokument
-        if (doc != null) // Dokument gefunden?
+
+        this.db.ConversationDocuments.RemoveRange(links); // Entferne alle VerknÃ¼pfungen aus Datenbank
+
+        var allDocuments = await this.db.Documents.ToListAsync();
+        Document doc = new Document(); // Initialisiere mit neuem Objekt
+        bool docFound = false; // Flag fÃ¼r Dokument gefunden
+        foreach (Document d in allDocuments)
+        {
+            if (d.Id == documentId)
+            {
+                doc = d;
+                docFound = true; // Setze Flag
+                break;
+            }
+        }
+
+        if (docFound) // Dokument gefunden?
         {
             this.db.Documents.Remove(doc);
         }
-        
-        await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
+
+        await this.db.SaveChangesAsync(); // Speichere alle Ã„nderungen in Datenbank
     }
 
-    private string ComputeFileHash(string fileContent) // Hilfsmethode: Berechnet SHA256-Hash von File-Content (für Duplikat-Erkennung)
+    private string ComputeFileHash(string fileContent) // Hilfsmethode: Berechnet SHA256-Hash von File-Content (fÃ¼r Duplikat-Erkennung)
     {
         using (SHA256 sha256 = SHA256.Create()) // Erstelle SHA256-Hasher (wird automatisch disposed)
         {
             byte[] contentBytes = Encoding.UTF8.GetBytes(fileContent); // Konvertiere String zu UTF8-Bytes
             byte[] hashBytes = sha256.ComputeHash(contentBytes); // Berechne SHA256-Hash (32 Bytes)
-            return Convert.ToBase64String(hashBytes); // Konvertiere Hash zu Base64-String (für DB-Speicherung)
+            return Convert.ToBase64String(hashBytes); // Konvertiere Hash zu Base64-String (fÃ¼r DB-Speicherung)
         }
     }
 }

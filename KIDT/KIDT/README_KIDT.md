@@ -1,4 +1,4 @@
-# KIDT - KI-gestützter Dokumenten- und Terminmanager
+ï»¿# KIDT - KI-gestÃ¼tzter Dokumenten- und Terminmanager
 
 Ein intelligentes Desktop-Chat-System mit Multi-Model-Architektur, MCP-Integration und Dokument-Verwaltung.
 
@@ -6,7 +6,7 @@ Ein intelligentes Desktop-Chat-System mit Multi-Model-Architektur, MCP-Integrati
 
 ## Inhaltsverzeichnis
 
-- [Überblick] -> Z. 20-54
+- [Ãœberblick] -> Z. 20-54
 - [Architektur] -> Z. 56-87
 - [File-Struktur] -> Z. 89-168
 - [Datenfluss & Ablauf] -> Z. 170-273
@@ -17,12 +17,12 @@ Ein intelligentes Desktop-Chat-System mit Multi-Model-Architektur, MCP-Integrati
 
 ---
 
-## Überblick
+## Ãœberblick
 
 KIDT ist ein .NET MAUI Desktop-Chat mit intelligenter Multi-Model-Architektur:
 - **3 spezialisierte KI-Modelle** (Router, Conversation, Data Analysis)
-- **MCP (Model Context Protocol)** für Tool-Funktionen
-- **MySQL-Datenbank** für Chat-History & Dokumente (Multi-User-fähig!)
+- **MCP (Model Context Protocol)** fÃ¼r Tool-Funktionen
+- **MySQL-Datenbank** fÃ¼r Chat-History & Dokumente (Multi-User-fÃ¤hig!)
 - **PDF/Text-Upload** mit automatischer Extraktion
 - **Dokument-Suche** via Function Calling
 
@@ -81,8 +81,8 @@ Database (ChatDb / DocDb)
 | Modell            | Engine              | Aufgabe                                        |
 |-------------------|---------------------|------------------------------------------------|
 | **Router**        | GPT-4 (Azure)       | Intent-Erkennung, Tool-Calls, Dokumenten-Suche |
-| **Conversation**  | phi3:mini (Ollama)  | Schnelle, freundliche Gespräche                |
-| **Data Analysis** | qwen2.5:7b (Ollama) | Präzise Daten-Analyse                          |
+| **Conversation**  | phi3:mini (Ollama)  | Schnelle, freundliche GesprÃ¤che                |
+| **Data Analysis** | qwen2.5:7b (Ollama) | PrÃ¤zise Daten-Analyse                          |
 
 ---
 
@@ -93,13 +93,13 @@ Database (ChatDb / DocDb)
 | File          | Verantwortung                                                                |
 |---------------|------------------------------------------------------------------------------|
 | `Home.razor`  | Chat-Interface, Textarea, Upload-Badge, Typewriter-Effekt, Message-Rendering |
-| `Daten.razor` | Chat-History & Dokument-Explorer, Tab-Navigation, Lösch-Funktionen           |
+| `Daten.razor` | Chat-History & Dokument-Explorer, Tab-Navigation, LÃ¶sch-Funktionen           |
 
 #### Home.razor - Wichtige Methoden:
 - `OnInitializedAsync()` ? Lade bestehenden Chat aus DB (parallel Messages + Documents)
 - `SendMessage()` ? User-Nachricht ? Router ? AI-Antwort ? DB-Speicherung (parallel)
 - `OnUploadClick()` ? Datei-Upload ? Extraktion ? DB-Speicherung (Documents + ConversationDocuments)
-- `TypewriterEffect()` ? Zeichen-für-Zeichen Anzeige der AI-Antwort
+- `TypewriterEffect()` ? Zeichen-fÃ¼r-Zeichen Anzeige der AI-Antwort
 
 ---
 
@@ -109,15 +109,15 @@ Database (ChatDb / DocDb)
 |-----------------------|-------------------------------------------------------------------------------------------------------|------------|
 | `ChatCoordinator`     | **Hauptorchestrator**: Koordiniert Upload, Router, Services, DB-Speicherung                           | -          |
 | `RouterService`       | **Intent-Detection**: Analysiert User-Nachricht ? `conversation` / `dataAnalysis` / `document_search` | GPT-4      |
-| `ConversationService` | Schnelle Gespräche, Small Talk                                                                        | phi3:mini  |
-| `DataAnalysisService` | Daten-Analyse mit erhöhtem Token-Limit                                                                | qwen2.5:7b |
+| `ConversationService` | Schnelle GesprÃ¤che, Small Talk                                                                        | phi3:mini  |
+| `DataAnalysisService` | Daten-Analyse mit erhÃ¶htem Token-Limit                                                                | qwen2.5:7b |
 | `FileService`         | Text-Extraktion aus PDF/TXT/MD/JSON                                                                   | -          |
 | `ThumbnailGenerator`  | PDF-Thumbnail-Generierung (erste Seite)                                                               | -          |
 
 #### ChatCoordinator - Workflow:
 ```csharp
 SendAsync(userMessage, conversationId)
-  +---> LoadDocumentsForConversation() // Lade verknüpfte Dokumente
+  +---> LoadDocumentsForConversation() // Lade verknÃ¼pfte Dokumente
   +---> GetChatContext() // Lade letzte 10 Nachrichten
   |
   +---> RouterService.ProcessAsync()
@@ -134,8 +134,8 @@ SendAsync(userMessage, conversationId)
 1. Kernel mit MCP-Tools erstellen (search_documents, add_document_to_chat)
 2. System-Prompt mit Tool-Instruktionen
 3. GetChatMessageContentAsync() ---> GPT-4 entscheidet
-4. Prüfe Response:
-   +---> FunctionCallContent? ---> Führe Tool manuell aus
+4. PrÃ¼fe Response:
+   +---> FunctionCallContent? ---> FÃ¼hre Tool manuell aus
    +---> JSON {needsRouting:true}? ---> Route zu Service
    +---> Fallback ---> ClassifyIntentAsync()
 5. Return RouterResponse { ShouldRoute, TargetService, FoundDocuments }
@@ -148,23 +148,23 @@ SendAsync(userMessage, conversationId)
 | Service             | Zweck                                                                                      |
 |---------------------|--------------------------------------------------------------------------------------------|
 | `ChatDbContext`     | EF Core Context (Conversations, Messages, Documents, ConversationDocuments)                |
-| `ChatDbService`     | CRUD für Conversations, Messages                                                            |
-| `DocumentDbService` | CRUD für Documents (global), Verknüpfungen (ConversationDocuments), Suche                  |
+| `ChatDbService`     | CRUD fÃ¼r Conversations, Messages                                                            |
+| `DocumentDbService` | CRUD fÃ¼r Documents (global), VerknÃ¼pfungen (ConversationDocuments), Suche                  |
 
 #### Wichtige Methoden:
 
 **ChatDbService**:
 - `CreateConversationAsync()` ? Neue Conversation
 - `SaveMessageAsync(conversationId, isUser, text, documentIds?)` ? Speichere Nachricht + optional Dokument-IDs als JSON
-- `LoadMessagesAsync()` ? Lade alle Messages für Chat (inkl. DocumentIdsJson)
-- `LoadAllConversationsAsync()` ? Lade alle Conversations mit verknüpften Documents (via ConversationDocuments)
-- `DeleteConversationAsync()` ? Lösche Conversation + Messages + ConversationDocuments-Verknüpfungen
+- `LoadMessagesAsync()` ? Lade alle Messages fÃ¼r Chat (inkl. DocumentIdsJson)
+- `LoadAllConversationsAsync()` ? Lade alle Conversations mit verknÃ¼pften Documents (via ConversationDocuments)
+- `DeleteConversationAsync()` ? LÃ¶sche Conversation + Messages + ConversationDocuments-VerknÃ¼pfungen
 
 **DocumentDbService**:
-- `SaveDocumentAsync()` ? Speichere Dokument (mit Hash für Duplikat-Erkennung)
+- `SaveDocumentAsync()` ? Speichere Dokument (mit Hash fÃ¼r Duplikat-Erkennung)
 - `SearchDocumentsAsync(searchTerm)` ? Volltextsuche in FileName + ExtractedText
-- `LinkDocumentToConversationAsync()` ? Erstelle Verknüpfung in ConversationDocuments
-- `GetDocumentsForConversationAsync()` ? Lade alle verknüpften Dokumente für Chat
+- `LinkDocumentToConversationAsync()` ? Erstelle VerknÃ—pfung in ConversationDocuments
+- `GetDocumentsForConversationAsync()` ? Lade alle verknÃ¼pften Dokumente fÃ¼r Chat
 
 ---
 
@@ -178,7 +178,7 @@ User gibt Text ein ---> Enter
   v
 Home.razor: SendMessage()
   +---> InputText leeren (sofort)
-  +---> User-Nachricht zu UI hinzufügen
+  +---> User-Nachricht zu UI hinzufÃ—gen
   +---> Loading-Nachricht anzeigen
   |
   +---> Parallel:
@@ -208,7 +208,7 @@ ChatCoordinator:
   v
 Home.razor:
   +---> Loading-Nachricht entfernen
-  +---> Assistent-Nachricht hinzufügen
+  +---> Assistent-Nachricht hinzufÃ—gen
   +---> TypewriterEffect() starten
   +---> Parallel: SaveMessageAsync(assistant, documentIds)
 ```
@@ -232,18 +232,18 @@ Chat.UploadFileAsync()
   |
   v
 Home.razor:
-+---> TypewriterEffect() für Ergebnis
++---> TypewriterEffect() fÃ¼r Ergebnis
 +---> Parallel: Task.Run()
      +---> ThumbnailGenerator.GenerateThumbnailAsync()
      +---> DocDb.SaveDocumentAsync() // Global + Hash-Check
-     +---> DocDb.LinkDocumentToConversationAsync() // Verknüpfung erstellen
+     +---> DocDb.LinkDocumentToConversationAsync() // VerknÃ—pfung erstellen
      +---> Db.SaveMessageAsync(assistant, text)
 ```
 
 ### Dokument suchen
 
 ```
-User: "Hast du Dokumente über Python?"
+User: "Hast du Dokumente Ã—ber Python?"
   |
   v
 RouterService: search_documents Tool erkannt
@@ -251,7 +251,7 @@ RouterService: search_documents Tool erkannt
   +---> GPT-4 Response: FunctionCallContent { FunctionName: "search_documents", Arguments: {query: "Python"} }
   |
   v
-RouterService: Tool manuell ausführen
+RouterService: Tool manuell ausFÃ¼hren
   +---> kernel.Plugins.GetFunction("Document", "search_documents")
   +---> function.InvokeAsync(kernel, arguments)
   |
@@ -276,7 +276,7 @@ Home.razor: Zeige Dokumente als Cards mit Thumbnail
 
 ### Was ist MCP?
 
-**Model Context Protocol** = Tool-Funktionen für KI-Modelle (ähnlich OpenAI Function Calling)
+**Model Context Protocol** = Tool-Funktionen fÃ¼r KI-Modelle (Ã—hnlich OpenAI Function Calling)
 
 ### Implementierung
 
@@ -291,12 +291,12 @@ McpToolsRegistry (static Helper)
             +---> kernel.ImportPluginFromFunctions("Document", [search_documents, add_document_to_chat])
 ```
 
-### Verfügbare Tools
+### verfÃ¼gbare Tools
 
-| Tool                   | Parameter         | Rückgabe                              | Zweck                       |
+| Tool                   | Parameter         | RÃ—ckgabe                              | Zweck                       |
 |------------------------|-------------------|---------------------------------------|-----------------------------|
 | `search_documents`     | `query: string`   | `{ found: int, documentIds: int[] }`  | Sucht Dokumente in DB       |
-| `add_document_to_chat` | `documentId: int` | `{ success: bool, fileName: string }` | Verknüpft Dokument mit Chat |
+| `add_document_to_chat` | `documentId: int` | `{ success: bool, fileName: string }` | VerknÃ—pft Dokument mit Chat |
 
 #### DocumentTools.SearchDocuments - Ablauf:
 ```csharp
@@ -319,7 +319,7 @@ public async Task<string> SearchDocuments(string query)
 if (item is FunctionCallContent functionCall)
 {
     var function = kernel.Plugins.GetFunction(pluginName, functionName);
-    var result = await function.InvokeAsync(kernel, arguments); // Manuell ausführen!
+    var result = await function.InvokeAsync(kernel, arguments); // Manuell ausFÃ¼hren!
     
     if (functionName == "search_documents")
     {
@@ -335,7 +335,7 @@ if (item is FunctionCallContent functionCall)
 
 ### Router-Modell (GPT-4)
 
-**Aufgabe**: "Traffic Controller" für alle User-Anfragen
+**Aufgabe**: "Traffic Controller" fÃ¼r alle User-Anfragen
 
 #### Funktionen:
 1. **Intent-Detection**: Klassifiziert User-Anfrage
@@ -344,7 +344,7 @@ if (item is FunctionCallContent functionCall)
    
 2. **Tool-Calling**: Entscheidet wann Tools genutzt werden
    - User fragt nach Dokumenten? ---> `search_documents()`
-   - User will Dokument hinzufügen? ---> `add_document_to_chat()`
+   - User will Dokument hinzufÃ—gen? ---> `add_document_to_chat()`
 
 3. **Direct Response**: Beantwortet selbst bei Tool-Nutzung
    - "2 Dokument(e) gefunden: python.pdf, tutorial.md"
@@ -352,16 +352,16 @@ if (item is FunctionCallContent functionCall)
 #### System-Prompt:
 ```
 Du bist ein Router-Agent mit Dokumenten-Tools.
-KRITISCH WICHTIG: Du hast KEINE Informationen über Dokumente!
+KRITISCH WICHTIG: Du hast KEINE Informationen Ã—ber Dokumente!
 Du MUSST die Tools nutzen wenn User nach Dokumenten fragt!
 
-Verfügbare Tools:
+verfÃ¼gbare Tools:
 - search_documents(query): Sucht Dokumente in Datenbank
-- add_document_to_chat(documentId): Fügt Dokument zum Chat hinzu
+- add_document_to_chat(documentId): FÃ—gt Dokument zum Chat hinzu
 
 REGELN:
 1. User fragt nach Dokumenten? ---> search_documents() aufrufen!
-2. User will Dokument hinzufügen? ---> add_document_to_chat(id) aufrufen!
+2. User will Dokument hinzufÃ—gen? ---> add_document_to_chat(id) aufrufen!
 3. Normale Frage? ---> Antworte mit JSON: {"needsRouting": true, "intent": "..."}
 ```
 
@@ -374,21 +374,21 @@ REGELN:
 
 ### Conversation-Modell (phi3:mini)
 
-**Aufgabe**: Schnelle, freundliche Gespräche
+**Aufgabe**: Schnelle, freundliche GesprÃ¤che
 
 - **Temperature**: 0.5 (ausgewogen)
 - **MaxTokens**: 300 (kurze Antworten)
 - **Context**: Letzte 10 Nachrichten
-- **Ideal für**: Small Talk, einfache Fragen
+- **Ideal fÃ¼r**: Small Talk, einfache Fragen
 
 ### Data Analysis-Modell (qwen2.5:7b)
 
-**Aufgabe**: Präzise Daten-Analyse
+**Aufgabe**: PrÃ¤zise Daten-Analyse
 
-- **Temperature**: 0.3 (präzise)
-- **MaxTokens**: 2000 (ausführliche Analysen)
-- **Context**: Letzte 10 Nachrichten + verknüpfte Dokumente
-- **Ideal für**: Dokument-Analyse, Daten-Verarbeitung
+- **Temperature**: 0.3 (PrÃ¤zise)
+- **MaxTokens**: 2000 (ausfÃ—hrliche Analysen)
+- **Context**: Letzte 10 Nachrichten + verknÃ¼pfte Dokumente
+- **Ideal fÃ¼r**: Dokument-Analyse, Daten-Verarbeitung
 
 ---
 
@@ -396,17 +396,17 @@ REGELN:
 
 ### Chat-System
 - Multi-Conversation-Support (jeder Chat hat eigene ID)
-- Typewriter-Effekt für AI-Antworten
-- Loading-Animation während AI antwortet
+- Typewriter-Effekt fÃ¼r AI-Antworten
+- Loading-Animation wÃ¤hrend AI antwortet
 - Auto-Scroll zu neuester Nachricht
 - Chat-History persistent in DB
 - Auto-Titel-Generierung (erste User-Nachricht, max 50 Zeichen)
 
 ### Datei-Upload
-- Unterstützte Formate: PDF, TXT, MD, JSON
+- UnterstÃ—tzte Formate: PDF, TXT, MD, JSON
 - Max. 4 MB pro Datei
 - Automatische Text-Extraktion
-- Thumbnail-Generierung für PDFs
+- Thumbnail-Generierung fÃ¼r PDFs
 - Datei-Badge im Chat-Input
 - Duplikat-Erkennung via SHA256-Hash
 
@@ -415,20 +415,20 @@ REGELN:
 - MCP Function Calling via GPT-4
 - Dokument-Cards mit Thumbnail
 - Click-to-Open in Standard-App
-- "Zum Chat hinzufügen" Button
+- "Zum Chat hinzufÃ—gen" Button
 
 ### Dokument-Verwaltung
 - Globale Dokument-Bibliothek
-- Pro-Chat Verknüpfungen (ConversationDocuments)
+- Pro-Chat VerknÃ¼pfungen (ConversationDocuments)
 - Explorer-Ansicht (Daten.razor)
 - Sortierung nach Upload-Datum
-- Lösch-Funktion (mit UI-Sofort + DB-Parallel)
+- LÃ¶sch-Funktion (mit UI-Sofort + DB-Parallel)
 
 ### Routing & Intent
 - Automatische Intent-Erkennung
 - Tool-Call-Detection
 - Fallback-Mechanismen (3-stufig)
-- Debug-Logging für Entwicklung
+- Debug-Logging fÃ¼r Entwicklung
 
 ---
 
@@ -453,14 +453,14 @@ Messages (Nachrichten)
 Documents (Global)
 +--- Id (Primary Key)
 +--- FileName
-+--- FileHash (SHA256, für Duplikat-Check)
-+--- FileContent (Base64 für PDF, Text für TXT/MD/JSON)
++--- FileHash (SHA256, fÃ¼r Duplikat-Check)
++--- FileContent (Base64 fÃ¼r PDF, Text fÃ¼r TXT/MD/JSON)
 +--- FileType (pdf/txt/md/json)
 +--- ExtractedText
 +--- ThumbnailBase64
 +--- UploadedAt
 
-ConversationDocuments (Verknüpfung, Many-to-Many)
+ConversationDocuments (VerknÃ—pfung, Many-to-Many)
 +--- ConversationId (Primary Key, Foreign Key)
 +--- DocumentId (Primary Key, Foreign Key)
 +--- AddedAt
@@ -479,7 +479,7 @@ Document N:M Conversations (via ConversationDocuments)
 ## Wichtige Konzepte
 
 ### Parallele DB-Operationen
-- Separate DbContext-Scopes für parallele Queries (verhindert Concurrency-Konflikt)
+- Separate DbContext-Scopes fÃ¼r parallele Queries (verhindert Concurrency-Konflikt)
 - UI-Update sofort, DB-Speicherung parallel (Fire-and-Forget)
 
 ### Typewriter-Effekt
@@ -488,22 +488,22 @@ Document N:M Conversations (via ConversationDocuments)
 - Parallel: DB-Speicherung der Nachricht
 
 ### File-Badge
-- Zeigt angehängte Datei im Chat-Input
+- Zeigt angehÃ—ngte Datei im Chat-Input
 - Persistent bis Chat-Wechsel oder Entfernen
-- `currentDocumentId` für späteres Löschen der Verknüpfung
+- `currentDocumentId` fÃ¼r spÃ—teres LÃ¶schen der VerknÃ—pfung
 
-### Dokument-Verknüpfung
-- **Documents**: Global (für alle Chats wiederverwendbar)
+### Dokument-VerknÃ—pfung
+- **Documents**: Global (fÃ¼r alle Chats wiederverwendbar)
 - **ConversationDocuments**: Many-to-Many Junction-Tabelle (Composite Key: ConversationId + DocumentId)
-- **Conversation.LinkedDocuments**: `[NotMapped]` Property - wird zur Laufzeit manuell gefüllt
+- **Conversation.LinkedDocuments**: `[NotMapped]` Property - wird zur Laufzeit manuell gefÃ—llt
 
 ### Router-Logic
 - 3-stufiger Fallback: Function Calling ---> JSON ---> ClassifyIntent
-- Debug-Logging für jeden Schritt
+- Debug-Logging fÃ¼r jeden Schritt
 - Manual Tool-Execution (kein automatisches Callback)
 
 ### Datenbank-Migration (UploadedFiles ? Documents)
-**? Durchgeführt:** Die ursprüngliche `uploadedfiles`-Tabelle wurde entfernt und durch das `Documents`-System ersetzt:
+**? DurchgefÃ—hrt:** Die ursprÃ—ngliche `uploadedfiles`-Tabelle wurde entfernt und durch das `Documents`-System ersetzt:
 
 **Vorher:**
 - `UploadedFiles` (Pro Chat) - Redundante Speicherung
@@ -512,11 +512,11 @@ Document N:M Conversations (via ConversationDocuments)
 
 **Jetzt:**
 - `Documents` (Global, wiederverwendbar) - Einzige Dokumenten-Quelle
-- `ConversationDocuments` (Junction-Tabelle) - Many-to-Many Verknüpfung
-- `Conversation.LinkedDocuments` (`[NotMapped]`) - Zur Laufzeit gefüllt
+- `ConversationDocuments` (Junction-Tabelle) - Many-to-Many VerknÃ—pfung
+- `Conversation.LinkedDocuments` (`[NotMapped]`) - Zur Laufzeit gefÃ—llt
 
 **Wichtig:**
-- `LoadAllConversationsAsync()` lädt `LinkedDocuments` manuell via `ConversationDocuments`
+- `LoadAllConversationsAsync()` lÃ—dt `LinkedDocuments` manuell via `ConversationDocuments`
 - `[NotMapped]` verhindert, dass EF Core eine direkte Beziehung erstellt
 - Badge-Funktion verwendet jetzt `currentDocumentId` (aus `Documents`)
 
@@ -537,5 +537,5 @@ Document N:M Conversations (via ConversationDocuments)
 
 **Version**: 1.1  
 **Framework**: .NET MAUI 10 / C# 14.0  
-**Datenbank**: MySQL mit EF Core (Multi-User-fähig!)  
+**Datenbank**: MySQL mit EF Core (Multi-User-fÃ¤hig!)  
 **KI-Modelle**: Azure OpenAI (GPT-4), Ollama (phi3:mini, qwen2.5:7b)

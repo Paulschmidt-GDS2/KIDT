@@ -1,0 +1,108 @@
+@* Toast-Benachrichtigungs-Komponente für Termin-Erinnerungen *@
+@using KIDT.Models
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@if (isVisible)
+{
+    if (notification?.Type == NotificationType.StartupOverview)
+    {
+        <div class="notification-startup @(isVisible ? "show" : "")">
+            <button class="notification-close" @onclick="Dismiss">×</button>
+            <div class="notification-header">Anstehende Termine</div>
+            <div class="notification-body">
+                @if (notification.Events.Count == 0)
+                {
+                    <div class="no-events">Keine anstehenden Termine</div>
+                }
+                else
+                {
+                    @foreach (var ev in notification.Events)
+                    {
+                        <div class="event-row" @onclick="() => NavigateToEvent(ev.Id)">
+                            <div class="event-title">@ev.Title</div>
+                            <div class="event-date">
+                                @ev.Start.ToString("dd.MM.yyyy")
+                                @if (ev.HasTime && !ev.IsAllDay)
+                                {
+                                    <span class="event-time"> - @ev.Time.ToString(@"hh\:mm")</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+    else if (notification?.Type == NotificationType.EventReminder && notification.Events.Count > 0)
+    {
+        var ev = notification.Events[0];
+        <div class="notification-reminder @(isVisible ? "show" : "")" @onclick="() => NavigateToEvent(ev.Id)">
+            <button class="notification-close" @onclick="Dismiss" @onclick:stopPropagation="true">×</button>
+            <div class="notification-content">
+                <div class="notification-title">@ev.Title</div>
+                <div class="notification-info">
+                    @ev.Start.ToString("dd.MM.yyyy")
+                    @if (ev.HasTime && !ev.IsAllDay)
+                    {
+                        <span> - @ev.Time.ToString(@"hh\:mm")</span>
+                    }
+                </div>
+                <div class="notification-countdown">@GetCountdownText(ev)</div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private NotificationData? notification;
+    private bool isVisible = false;
+
+    public void Show(NotificationData data)
+    {
+        System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_COMPONENT] Show aufgerufen - Type: {data.Type}, Events: {data.Events.Count}");
+        notification = data;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    private void Dismiss()
+    {
+        isVisible = false;
+        StateHasChanged();
+    }
+
+    private void NavigateToEvent(int eventId)
+    {
+        Dismiss();
+        Navigation.NavigateTo($"/Kalender?eventId={eventId}");
+    }
+
+    private string GetCountdownText(CalendarEvent ev)
+    {
+        DateTime eventDateTime;
+        
+        if (ev.HasTime && !ev.IsAllDay)
+        {
+            eventDateTime = ev.Start.Date + ev.Time;
+        }
+        else
+        {
+            eventDateTime = ev.Start.Date;
+        }
+
+        var timeUntil = eventDateTime - DateTime.Now;
+
+        if (timeUntil.TotalMinutes < 60)
+            return $"in {(int)timeUntil.TotalMinutes} Minuten";
+        else if (timeUntil.TotalHours < 24)
+            return $"in {(int)timeUntil.TotalHours} Stunden";
+        else
+            return $"in {(int)timeUntil.TotalDays} Tagen";
+    }
+
+    public void Dispose()
+    {
+        // Cleanup - aktuell nichts zu tun
+    }
+}

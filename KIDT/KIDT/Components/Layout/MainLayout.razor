@@ -4,6 +4,14 @@
    *@
 
 @inherits LayoutComponentBase
+@using KIDT.Services
+@using KIDT.Components.UI
+@inject NavigationManager Navigation
+@inject AppNotificationService AppNotificationService
+@implements IDisposable
+
+@* Notification-Komponente (über allem, außerhalb Layout) *@
+<NotificationComponent @ref="notificationComponent" />
 
 <div class="layout"> @* Root-Container für Layout *@
     @* CSS-Klasse für Sidebar bestimmen *@
@@ -38,20 +46,77 @@
     </div>
 
     <div class="content"> @* Hauptinhalt rechts von Sidebar, die Content-Box*@
-        <header>
-            <h3>Header</h3> @* Placeholder *@
-        </header>
-        <main> @* Haupt-Bereich von Chat-Seite in Content-Box *@
+        @if (!IsKalenderPage) @* Header nur anzeigen wenn NICHT auf Kalender-Seite *@
+        {
+            <header>
+                <h3>Header</h3> @* Placeholder *@
+            </header>
+        }
+        <main class="@(IsKalenderPage ? "no-header" : "")"> @* Haupt-Bereich, CSS-Klasse für Kalender-Seite *@
             @Body @* Rendert die aktuell aktive Page-Komponente *@
         </main>
-        <footer>
-            <h3>Footer</h3> @* Placeholder *@
-        </footer>
     </div>
 </div>
 
 @code {
     private bool isCollapsed = false; // Start: Sidebar breit
+    private NotificationComponent? notificationComponent;
+    private bool hasRendered = false;
+
+    private bool IsKalenderPage => Navigation.Uri.Contains("/kalender", StringComparison.OrdinalIgnoreCase); // Check: Ist aktuelle Seite Kalender?
+
+    protected override void OnInitialized() // Wird beim Laden der Komponente aufgerufen
+    {
+        System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] OnInitialized - Registriere Event-Handler...");
+        Navigation.LocationChanged += OnLocationChanged; // Event-Handler für URL-Änderungen
+        AppNotificationService.OnNotificationRequested += HandleNotification; // Event für Benachrichtigungen
+        AppNotificationService.Start(); // Timer starten
+        System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] OnInitialized abgeschlossen - Service gestartet");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !hasRendered)
+        {
+            hasRendered = true;
+            System.Diagnostics.Debug.WriteLine($"[MAINLAYOUT] OnAfterRenderAsync firstRender - notificationComponent is null? {notificationComponent == null}");
+            await Task.Delay(3000); // 3 Sekunden warten bis UI stabil ist
+            System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] Rufe ShowStartupNotificationAsync auf...");
+
+            try
+            {
+                await AppNotificationService.ShowStartupNotificationAsync(); // Zeige Startup-Benachrichtigung
+                System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] ShowStartupNotificationAsync abgeschlossen");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MAINLAYOUT] FEHLER: {ex.Message}");
+            }
+        }
+    }
+
+    private void HandleNotification(KIDT.Models.NotificationData notification)
+    {
+        System.Diagnostics.Debug.WriteLine($"[MAINLAYOUT] HandleNotification aufgerufen - Type: {notification.Type}, Events: {notification.Events.Count}");
+        InvokeAsync(() =>
+        {
+            System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] Rufe notificationComponent.Show auf...");
+            notificationComponent?.Show(notification);
+            StateHasChanged();
+            System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] notificationComponent.Show abgeschlossen");
+        });
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) // Wird bei Navigation aufgerufen
+    {
+        StateHasChanged(); // UI neu rendern wenn URL sich ändert
+    }
+
+    public void Dispose() // Aufräumen beim Entfernen der Komponente
+    {
+        Navigation.LocationChanged -= OnLocationChanged; // Event-Handler entfernen
+        AppNotificationService.OnNotificationRequested -= HandleNotification; // Event-Handler entfernen
+    }
 
     private void ToggleSidebar() // Methode zum Umschalten der Sidebar
     {

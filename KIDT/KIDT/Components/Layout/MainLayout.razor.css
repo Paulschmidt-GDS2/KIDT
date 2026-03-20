@@ -1,9 +1,9 @@
-/* === LAYOUT-STRUKTUR === */
+ï»¿/* === LAYOUT-STRUKTUR === */
 
-/* Root-Container für Layout */
+/* Root-Container fÃ¼r Layout */
 .layout {
     display: flex; /* Sidebar und Content-Box nebeneinander */
-    height: 98vh; /* Fast volle Viewport-Höhe */
+    height: 98vh; /* Fast volle Viewport-HÃ¶he */
 }
 
 /* === SIDEBAR === */
@@ -12,16 +12,16 @@
 .sidebar {
     background: #848877; /* Dunkler Hintergrund */
     color: #84804d; /* Textfarbe */
-    display: flex; /* Flexbox für vertikale Anordnung */
+    display: flex; /* Flexbox fÃ¼r vertikale Anordnung */
     flex-direction: column; /* Kinder vertikal stapeln */
     align-items: flex-start; /* Links ausrichten */
     transition: width 0.3s ease; /* Sanfter Breitenwechsel */
-    height: 99vh; /* Fast volle Viewport-Höhe */
+    height: 99vh; /* Fast volle Viewport-HÃ¶he */
     padding: 10px 6px 10px 10px; /* Innenabstand oben/rechts/unten/links */
     row-gap: 6px; /* Vertikaler Abstand zwischen Items */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸer */
 @media (min-width: 1400px) {
     .sidebar {
         padding: 13px 8px 13px 13px; /* 10px * 1.3 = 13px, 6px * 1.3 = 7.8px ? 8px */
@@ -39,7 +39,7 @@
     width: 35px; /* Schmale Breite wenn eingeklappt */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größere Sidebar-Breiten */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸere Sidebar-Breiten */
 @media (min-width: 1400px) {
     .sidebar.expanded {
         width: 260px; /* 200px * 1.3 = 260px */
@@ -63,10 +63,10 @@
     /* Icon im Toggle-Button */
     .toggle-btn img {
         width: 24px; /* Icon-Breite */
-        height: 24px; /* Icon-Höhe */
+        height: 24px; /* Icon-HÃ¶he */
     }
 
-/* Fullscreen-Modus: Proportional 1.3x größere Toggle-Icons */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸere Toggle-Icons */
 @media (min-width: 1400px) {
     .toggle-btn img {
         width: 31px; /* 24px * 1.3 = 31.2px ? 31px */
@@ -86,18 +86,18 @@ nav {
     color: white; /* Textfarbe */
     text-decoration: none; /* Keine Unterstreichung */
     padding: .5rem; /* Innenabstand */
-    margin: .25rem 0; /* Vertikaler Außenabstand */
+    margin: .25rem 0; /* Vertikaler AuÃŸenabstand */
     border-radius: 4px; /* Leicht abgerundete Ecken */
-    transition: all 0.3s ease; /* Sanfte Übergänge */
+    transition: all 0.3s ease; /* Sanfte ÃœbergÃ¤nge */
 }
 
     /* Icon in Navigations-Buttons */
     .nav-btn img {
         width: 20px; /* Icon-Breite */
-        height: 20px; /* Icon-Höhe */
+        height: 20px; /* Icon-HÃ¶he */
     }
 
-/* Fullscreen-Modus: Proportional 1.3x größere Nav-Icons */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸere Nav-Icons */
 @media (min-width: 1400px) {
     .nav-btn img {
         width: 26px; /* 20px * 1.3 = 26px */
@@ -113,11 +113,11 @@ nav {
     transition: opacity 0.3s ease, margin 0.3s ease; /* Sanftes Ein-/Ausblenden */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größerer Nav-Text */
+/* Fullscreen-Modus: Proportional 1.3x grÃ¶ÃŸerer Nav-Text */
 @media (min-width: 1400px) {
     .nav-btn span {
         margin-left: 16px; /* 12px * 1.3 = 15.6px ? 16px */
-        font-size: 19px; /* Basis 15px * 1.3 = 19.5px ? 19px (schätzt Standard-Schrift) */
+        font-size: 19px; /* Basis 15px * 1.3 = 19.5px ? 19px (schÃ¤tzt Standard-Schrift) */
     }
 }
 
@@ -126,7 +126,7 @@ nav {
     opacity: 0; /* Unsichtbar machen */
     margin-left: 0; /* Kein Abstand */
     width: 0; /* Keine Breite */
-    overflow: hidden; /* Überfluss verstecken */
+    overflow: hidden; /* Ã¼berfluss verstecken */
 }
 
 /* === CONTENT-BEREICH === */
@@ -134,49 +134,21 @@ nav {
 /* Rechter Hauptinhalt-Bereich */
 .content {
     flex: 1; /* Nimmt verbleibenden Platz ein */
-    height: 100vh; /* Volle Viewport-Höhe */
-    overflow-y: auto; /* Vertikaler Scroll */
-    position: relative; /* Für absolute Positionierung von Kindern */
-    display: flex; /* Flexbox für Layout */
+    height: 100vh; /* Volle Viewport-HÃ¶he */
+    overflow: hidden; /* KEIN Scroll - nur innere Bereiche scrollen */
+    position: relative; /* fÃ¼r absolute Positionierung von Kindern */
+    display: flex; /* Flexbox fÃ¼r Layout */
     flex-direction: column; /* Kinder vertikal stapeln */
     padding: 10px; /* Innenabstand */
-    margin-right: 3px; /* Rechter Außenabstand */
+    margin-right: 3px; /* Rechter AuÃŸenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
-    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
 }
-
-    /* Scrollbar-Breite */
-    .content::-webkit-scrollbar {
-        width: 10px; /* Scrollbar-Breite */
-        height: 10px; /* Scrollbar-Höhe */
-    }
-
-    /* Scrollbar-Hintergrund */
-    .content::-webkit-scrollbar-track {
-        background: transparent; /* Transparenter Hintergrund */
-        border-radius: 8px; /* Abgerundete Ecken */
-    }
-
-    /* Scrollbar-Griff*/
-    .content::-webkit-scrollbar-thumb {
-        background: #0D0E0C; /* Halbdurchsichtiger Griff */
-        border-radius: 8px; /* Abgerundete Ecken */
-        border: 2px solid transparent; /* Transparenter Rahmen */
-        background-clip: padding-box; /* Hintergrund nur im Padding-Bereich */
-    }
-
-        /* Scrollbar-Griff beim Hover */
-        .content::-webkit-scrollbar-thumb:hover {
-            background: #0E0F0D; /* Extrem subtil heller beim Hover (kaum sichtbar) */
-            background-clip: padding-box; /* Hintergrund nur im Padding-Bereich */
-        }
 
 /* === CONTENT-LAYOUT-BEREICHE === */
 
 /* Kopfbereich */
 header {
-    flex: 0 0 10%; /* Fixe Höhe 10% */
+    flex: 0 0 10%; /* Fixe HÃ¶he 10% */
     background: #6C7061; /* Dunkler Hintergrund */
     border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
     border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
@@ -186,35 +158,36 @@ header {
     text-align: center; /* Text zentrieren */
 }
 
-    /* Überschrift im Header */
+    /* Ã¼berschrift im Header */
     header h3 {
         padding: 10px; /* Innenabstand */
     }
 
 /* Hauptinhalt-Bereich */
 main {
-    flex: 1; /* Nimmt verfügbaren Platz ein */
+    flex: 1; /* Nimmt verfÃ¼gbaren Platz ein */
     background: #6C7061; /* Dunkler Hintergrund */
     text-align: center; /* Text zentrieren */
-    position: relative; /* Für absolute Positionierung von Kindern */
+    position: relative; /* fÃ¼r absolute Positionierung von Kindern */
     border-left: 3px solid #0D0E0C; /* Dunkle Linie links */
     border-right: 3px solid #0D0E0C; /* Dunkle Linie rechts */
-}
-
-/* Fußbereich */
-footer {
-    flex: 0 0 5%; /* Fixe Höhe 5% */
-    background: #6C7061; /* Dunkler Hintergrund */
-    color: #fff; /* Weiße Textfarbe */
+    border-bottom: 3px solid #0D0E0C; /* Dunkle Linie unten */
     border-bottom-left-radius: 10px; /* Untere linke Ecke abrunden */
     border-bottom-right-radius: 10px; /* Untere rechte Ecke abrunden */
-    border-bottom: 3px solid #0D0E0C; /* Dunkle Linie unten */
-    border-left: 3px solid #0D0E0C; /* Dunkle Linie links */
-    border-right: 3px solid #0D0E0C; /* Dunkle Linie rechts */
-    text-align: center; /* Text zentrieren */
+    overflow: hidden; /* KEIN Scroll - nur innere Bereiche scrollen */
+    min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
 }
-/* Gemeinsame Styles für Header/Main/Footer */
-header, main, footer {
-    margin: 0; /* Kein Außenabstand */
+
+/* Main ohne Header (Kalender-Seite): runde Ecken auch oben */
+main.no-header {
+    border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
+    border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
+    border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
+}
+
+/* Gemeinsame Styles fÃ¼r Header/Main */
+header, main {
+    margin: 0; /* Kein AuÃŸenabstand */
     padding: 0; /* Kein Innenabstand */
 }
+

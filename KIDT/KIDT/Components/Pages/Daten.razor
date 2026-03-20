@@ -1,11 +1,11 @@
-@* Daten-Seite: Zeigt Chats und Dokumente in Tabs *@
+ï»¿@* Daten-Seite: Zeigt Chats und Dokumente in Tabs *@
 @page "/daten"
 @using KIDT.Models
 @inject KIDT.Database.ChatDbService ChatDb
 @inject KIDT.Database.DocumentDbService DocDb
 @inject NavigationManager Navigation
 
-<div class="page-container"> @* Hauptcontainer für gesamte Seite *@
+<div class="page-container"> @* Hauptcontainer fÃ¼r gesamte Seite *@
     <div class="tab-navigation"> @* Tab-Navigation oben *@
         <button class="tab-button @(currentTab == "Chats" ? "active" : "")" @onclick='() => currentTab = "Chats"'>Chats</button>
         <button class="tab-button @(currentTab == "Dokumente" ? "active" : "")" @onclick='() => currentTab = "Dokumente"'>Dokumente</button>
@@ -22,17 +22,17 @@
         }
         else
         {
-            <div class="data-grid"> @* Grid-Container für Chat-Cards *@
+            <div class="data-grid"> @* Grid-Container fÃ¼r Chat-Cards *@
                 @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
                 {
                     <div class="chat-card"> @* Chat-Card *@
-                        <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" disabled="@isDeleting" title="Chat löschen" aria-label="Chat löschen"> @* Lösch-Button (disabled während Löschvorgang) *@
-                            <img src="images/remove.png" alt="Löschen" />
+                        <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" disabled="@isDeleting" title="Chat lÃ¶schen" aria-label="Chat lÃ¶schen"> @* LÃ¶sch-Button (disabled wÃ¤hrend LÃ¶schvorgang) *@
+                            <img src="images/remove.png" alt="LÃ¶schen" />
                         </button>
-                        <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich für OpenChat *@
+                        <div class="card-content" @onclick="@(() => OpenChat(chat.Id))"> @* Klickbarer Bereich fÃ¼r OpenChat *@
                             <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
                             
-                            @if (chat.LinkedDocuments.Count > 0) @* Check: Hat dieser Chat verknüpfte Dokumente? *@
+                            @if (chat.LinkedDocuments.Count > 0) @* Check: Hat dieser Chat verknÃ¼pfte Dokumente? *@
                             {
                                 <div class="card-file-preview"> @* File-Vorschau mit Thumbnail *@
                                     @if (!string.IsNullOrEmpty(chat.LinkedDocuments[0].ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
@@ -69,7 +69,7 @@
     }
     else if (currentTab == "Dokumente") @* Dokumente-Tab *@
     {
-        <div class="data-container-documents"> @* Hauptcontainer für Explorer-Ansicht *@
+        <div class="data-container-documents"> @* Hauptcontainer fÃ¼r Explorer-Ansicht *@
         @if (isLoadingDocuments) @* Zeige Loading-Indikator *@
         {
             <div class="loading-container">
@@ -89,7 +89,7 @@
                 {
                     @foreach (var doc in Documents) @* Durchlaufe alle Dokumente *@
                     {
-                        <div class="document-row" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true"> @* Klick öffnet Dokument *@
+                        <div class="document-row" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true"> @* Klick Ã¶ffnet Dokument *@
                             <div class="document-thumbnail"> @* Thumbnail/Icon Bereich *@
                                 @if (!string.IsNullOrEmpty(doc.ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
                                 {
@@ -102,10 +102,10 @@
                             </div>
                             <div class="document-info"> @* Info-Bereich *@
                                 <div class="document-name">@doc.FileName</div> @* Dateiname *@
-                                <div class="document-meta">@doc.FileType.ToUpper() • @GetFormattedDate(doc.UploadedAt)</div> @* Typ und Datum *@
+                                <div class="document-meta">@doc.FileType.ToUpper() â€¢ @GetFormattedDate(doc.UploadedAt)</div> @* Typ und Datum *@
                             </div>
-                            <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument löschen" aria-label="Dokument löschen"> @* Lösch-Button (stopPropagation verhindert doppeltes Event) *@
-                                <img src="images/remove.png" alt="Löschen" />
+                            <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument lÃ¶schen" aria-label="Dokument lÃ¶schen"> @* LÃ¶sch-Button (stopPropagation verhindert doppeltes Event) *@
+                                <img src="images/remove.png" alt="LÃ¶schen" />
                             </button>
                         </div>
                     }
@@ -120,32 +120,32 @@
 private string currentTab = "Chats"; // Aktueller Tab (Chats oder Dokumente)
 private List<Conversation> Chats = new List<Conversation>(); // Liste aller Chats
 private List<Document> Documents = new List<Document>(); // Liste aller Dokumente
-private bool isDeleting = false; // Flag: Verhindert mehrfaches Löschen gleichzeitig (Chats)
-private bool isDeletingDocument = false; // Flag: Verhindert mehrfaches Löschen gleichzeitig (Dokumente)
-private bool isLoadingChats = true; // Flag: Zeigt Loading-State für Chats an
-private bool isLoadingDocuments = true; // Flag: Zeigt Loading-State für Dokumente an
+private bool isDeleting = false; // Flag: Verhindert mehrfaches LÃ¶schen gleichzeitig (Chats)
+private bool isDeletingDocument = false; // Flag: Verhindert mehrfaches LÃ¶schen gleichzeitig (Dokumente)
+private bool isLoadingChats = true; // Flag: Zeigt Loading-State fÃ¼r Chats an
+private bool isLoadingDocuments = true; // Flag: Zeigt Loading-State fÃ¼r Dokumente an
 
 protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
 {
     await Task.Yield(); // Gibt UI-Thread frei
     
     Chats = await ChatDb.LoadAllConversationsAsync(); // Lade alle Conversations aus DB (bereits sortiert!)
-    isLoadingChats = false; // Loading für Chats beendet
+    isLoadingChats = false; // Loading fÃ¼r Chats beendet
     StateHasChanged(); // UI aktualisieren
     
     Documents = await DocDb.GetAllDocumentsAsync(); // Lade alle Dokumente aus DB (bereits sortiert!)
-    isLoadingDocuments = false; // Loading für Dokumente beendet
+    isLoadingDocuments = false; // Loading fÃ¼r Dokumente beendet
     StateHasChanged(); // UI aktualisieren
 }
 
-private void OpenChat(int chatId) // Öffnet einen Chat
+private void OpenChat(int chatId) // Ã–ffnet einen Chat
 {
     Navigation.NavigateTo("/chat/" + chatId); // Navigiere zu Chat mit ID
 }
 
-private async Task DeleteChat(int chatId) // Löscht einen Chat
+private async Task DeleteChat(int chatId) // LÃ¶scht einen Chat
 {
-    if (isDeleting) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+    if (isDeleting) return; // Verhindert mehrfache gleichzeitige LÃ¶sch-Operationen
     
     isDeleting = true; // Setze Flag
     
@@ -153,29 +153,29 @@ private async Task DeleteChat(int chatId) // Löscht einen Chat
     Chats = Chats.Where(c => c.Id != chatId).ToList();
     StateHasChanged(); // UI sofort aktualisieren
     
-    // 2. DANN: Lösche aus DB im Hintergrund
+    // 2. DANN: LÃ¶sche aus DB im Hintergrund
     try
     {
         await Task.Run(async () =>
         {
-            await ChatDb.DeleteConversationAsync(chatId); // DB-Löschung im Hintergrund
+            await ChatDb.DeleteConversationAsync(chatId); // DB-LÃ¶schung im Hintergrund
         });
     }
     catch (Exception ex)
     {
-        // Bei Fehler: Chat wieder hinzufügen (Rollback)
-        System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}");
-        // Chat ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint er wieder
+        // Bei Fehler: Chat wieder hinzufÃ¼gen (Rollback)
+        System.Diagnostics.Debug.WriteLine($"Fehler beim LÃ¶schen: {ex.Message}");
+        // Chat ist schon aus UI entfernt, aber nicht aus DB - beim nÃ¤chsten Laden erscheint er wieder
     }
     finally
     {
-        isDeleting = false; // Flag zurücksetzen
+        isDeleting = false; // Flag zurÃ¼cksetzen
     }
 }
 
-private async Task DeleteDocument(int documentId) // Löscht ein Dokument
+private async Task DeleteDocument(int documentId) // LÃ¶scht ein Dokument
 {
-    if (isDeletingDocument) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+    if (isDeletingDocument) return; // Verhindert mehrfache gleichzeitige LÃ¶sch-Operationen
     
     isDeletingDocument = true; // Setze Flag
     
@@ -183,29 +183,29 @@ private async Task DeleteDocument(int documentId) // Löscht ein Dokument
     Documents = Documents.Where(d => d.Id != documentId).ToList();
     StateHasChanged(); // UI sofort aktualisieren
     
-    // 2. DANN: Lösche aus DB im Hintergrund
+    // 2. DANN: LÃ¶sche aus DB im Hintergrund
     try
     {
         await Task.Run(async () =>
         {
-            await DocDb.DeleteDocumentAsync(documentId); // DB-Löschung im Hintergrund
+            await DocDb.DeleteDocumentAsync(documentId); // DB-LÃ¶schung im Hintergrund
         });
     }
     catch (Exception ex)
     {
-        // Bei Fehler: Dokument wieder hinzufügen (Rollback)
-        System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Dokuments: {ex.Message}");
-        // Dokument ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint es wieder
+        // Bei Fehler: Dokument wieder hinzufÃ¼gen (Rollback)
+        System.Diagnostics.Debug.WriteLine($"Fehler beim LÃ¶schen des Dokuments: {ex.Message}");
+        // Dokument ist schon aus UI entfernt, aber nicht aus DB - beim nÃ¤chsten Laden erscheint es wieder
     }
     finally
     {
-        isDeletingDocument = false; // Flag zurücksetzen
+        isDeletingDocument = false; // Flag zurÃ¼cksetzen
     }
 }
 
 private string GetFormattedDate(DateTime createdAt) // Formatiert Datum korrekt
 {
-    if (createdAt.Year < 2000) // Check: Ist Datum ungültig (0001 oder ähnlich)?
+    if (createdAt.Year < 2000) // Check: Ist Datum ungÃ¼ltig (0001 oder Ã¤hnlich)?
     {
         return "Unbekanntes Datum"; // Zeige Fallback
     }
@@ -219,7 +219,7 @@ private string GetFormattedDate(DateTime createdAt) // Formatiert Datum korrekt
 }
 
 
-private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-Anwendung
+private async Task OpenDocument(int documentId) // Ã–ffne Dokument in Standard-Anwendung
 {
     try
     {
@@ -247,7 +247,7 @@ private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-An
             await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
         }
         
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Ã–ffne Datei in Standard-App
     }
     catch { } // Fehler ignorieren (silent fail)
 }

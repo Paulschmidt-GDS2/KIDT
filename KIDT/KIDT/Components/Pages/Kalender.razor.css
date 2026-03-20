@@ -1,0 +1,690 @@
+/* === KALENDER.RAZOR - ALLE STYLES KONSOLIDIERT === */
+
+/* === PAGE-CONTAINER === */
+
+/* Hauptcontainer für Kalender-Seite */
+.page-container {
+    height: 100%; /* Füllt gesamte Höhe */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    overflow: hidden; /* Verhindert Scrollen außerhalb */
+}
+
+/* === TOOLBAR === */
+
+/* Toolbar mit Navigation und Ansichts-Auswahl */
+.calendar-toolbar {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    justify-content: space-between; /* Platz zwischen den Bereichen */
+    align-items: center; /* Vertikal zentrieren */
+    padding: 8px 24px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border-bottom: 2px solid #0D0E0C; /* Unterer Rahmen */
+    flex-shrink: 0; /* Verhindert Schrumpfen */
+}
+
+/* Linker Toolbar-Bereich: Navigation */
+.toolbar-left {
+    display: flex; /* Flexbox für horizontale Buttons */
+    gap: 8px; /* Abstand zwischen Buttons */
+}
+
+/* Mittlerer Toolbar-Bereich: Titel */
+.toolbar-center { 
+    flex: 1; 
+    text-align: center; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+}
+
+/* Titel-Text */
+.view-title {
+    font-size: 20px; /* Schriftgröße */
+    font-weight: 600; /* Fettgedruckt */
+    color: #0D0E0C; /* Textfarbe */
+}
+
+/* Rechter Toolbar-Bereich: Ansichts-Auswahl */
+.toolbar-right {
+    display: flex; /* Flexbox für Select */
+}
+
+/* Button-Gruppe für Ansichts-Auswahl */
+.view-buttons {
+    display: flex;
+    border: 2px solid #0D0E0C;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.view-button {
+    padding: 6px 14px;
+    background: transparent;
+    border: none;
+    border-right: 2px solid #0D0E0C;
+    color: #0D0E0C;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.view-button:last-child {
+    border-right: none;
+}
+
+.view-button:hover {
+    background: rgba(132, 136, 119, 0.2);
+}
+
+.view-button.active {
+    background: #0D0E0C;
+    color: #848877;
+}
+
+/* Navigations-Button */
+.nav-button {
+    padding: 8px 16px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 14px; /* Kompaktere Schriftgröße */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: background 0.2s ease; /* Smooth Hintergrund-Übergang */
+}
+
+/* Nav-Button beim Hover */
+.nav-button:hover {
+    background: rgba(132, 136, 119, 0.2); /* Leicht heller Hintergrund */
+}
+
+/* Heute-Button extra Styling */
+.today-button {
+    font-weight: 500; /* Mittleres Gewicht */
+}
+
+/* === KALENDER-CONTAINER === */
+
+/* Hauptcontainer für Kalender - kein Scroll mehr */
+.calendar-container {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    overflow: hidden; /* Kein Scroll mehr */
+    padding: 8px; /* Noch stärker reduzierter Innenabstand */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+    display: flex; /* Flexbox für Zentrierung */
+    justify-content: center; /* Horizontal zentrieren */
+    align-items: flex-start; /* Oben ausrichten */
+}
+
+/* === MONATSANSICHT === */
+
+/* Grid für Monatsansicht: 7 Spalten (Mo-So), 6 Zeilen - OPTIMIERT FÜR KEIN SCROLLEN */
+.month-grid {
+    display: grid; /* CSS Grid aktivieren */
+    grid-template-columns: repeat(7, 1fr); /* 7 gleichgroße Spalten */
+    grid-template-rows: auto repeat(6, 1fr); /* Header + 6 gleichgroße Zeilen */
+    gap: 2px; /* Noch kompakterer Abstand zwischen Zellen */
+    width: 100%; /* Volle Breite */
+    max-width: 1600px; /* Größere max-Breite */
+    height: calc(100vh - 120px); /* Weiter optimierte Höhe ohne Header - passt perfekt ohne Scrollen */
+}
+
+/* Wochentag-Header (Mo, Di, Mi, ...) */
+.weekday-header {
+    font-weight: 600; /* Fettgedruckt */
+    padding: 4px; /* Noch kompakterer Innenabstand */
+    text-align: center; /* Text zentrieren */
+    background: transparent; /* Kein Hintergrund */
+    border-bottom: 2px solid #0D0E0C; /* Unterer Rahmen */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 14px; /* Größere Schriftgröße für bessere Lesbarkeit */
+}
+
+/* Einzelne Tageszelle */
+.day-cell {
+    padding: 2px; /* Noch kompakterer Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: background 0.2s ease; /* Smooth Hintergrund-Übergang */
+    overflow: hidden; /* Verhindert Content-Overflow */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    min-height: 0; /* Wichtig für Grid-Größe */
+}
+
+/* Tageszelle beim Hover */
+.day-cell:hover {
+    background: rgba(132, 136, 119, 0.1); /* Sehr leicht heller Hintergrund */
+}
+
+/* Tageszellen außerhalb des aktuellen Monats */
+.day-cell.other-month {
+    opacity: 0.4; /* Leicht transparent */
+}
+
+/* Tagesnummer in Zelle */
+.day-number {
+    font-size: 15px; /* Größere Schriftgröße für bessere Lesbarkeit */
+    font-weight: 600; /* Fettgedruckt */
+    color: #0D0E0C; /* Textfarbe */
+    margin-bottom: 2px; /* Reduzierter Abstand nach unten */
+    flex-shrink: 0; /* Verhindert Schrumpfen */
+}
+
+/* Termin-Vorschau in Zelle */
+.events-preview {
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 1px; /* Noch kompakterer Abstand zwischen Terminen */
+    flex: 1; /* Nimmt verfügbaren Platz */
+    overflow: hidden; /* Verhindert Overflow */
+}
+
+/* Einzelner Termin in Vorschau */
+.event-item {
+    background: #848877; /* Standard-Hintergrund (wird dynamisch überschrieben) */
+    color: #0D0E0C; /* Dunkle Textfarbe */
+    border: 1px solid #0D0E0C; /* Dunkler Rahmen für bessere Sichtbarkeit */
+    padding: 2px 4px; /* Noch kompakterer Innenabstand */
+    border-radius: 2px; /* Kleinere abgerundete Ecken */
+    font-size: 11px; /* Größere Schriftgröße für bessere Lesbarkeit */
+    font-weight: 500; /* Mittleres Gewicht für bessere Lesbarkeit */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+    text-overflow: ellipsis; /* Auslassungspunkte bei Überfluss */
+    overflow: hidden; /* Überfluss verstecken */
+    cursor: pointer; /* Zeiger-Cursor für Klick */
+    transition: transform 0.1s ease; /* Smooth Transform */
+}
+
+/* Event-Item beim Hover */
+.event-item:hover {
+    transform: scale(1.05); /* Leicht vergrößern */
+}
+
+/* Titel in Event-Item (fett) */
+.event-title-text {
+    font-weight: 700;
+    margin-right: 6px;
+}
+
+/* Uhrzeit in Event-Item (normal) */
+.event-time-text {
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+/* Anzeige für weitere Termine */
+.more {
+    font-size: 11px; /* Schriftgröße */
+    color: #0D0E0C; /* Textfarbe */
+    font-style: italic; /* Kursiv */
+    margin-top: 2px; /* Abstand nach oben */
+}
+
+/* === WOCHENANSICHT === */
+
+/* Container für Wochenansicht */
+.week-view {
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    width: 100%; /* Volle Breite */
+    max-width: 1200px; /* Maximale Breite */
+}
+
+/* Header mit Wochentagen */
+.week-header {
+    display: grid; /* CSS Grid aktivieren */
+    grid-template-columns: repeat(7, 1fr); /* 7 gleichgroße Spalten */
+    gap: 8px; /* Abstand zwischen Spalten */
+    margin-bottom: 4px; /* Abstand nach unten */
+}
+
+/* Einzelner Wochentag-Header */
+.week-day-header {
+    padding: 6px; /* Kompakterer Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border-bottom: 2px solid #0D0E0C; /* Unterer Rahmen */
+    text-align: center; /* Text zentrieren */
+    font-weight: 600; /* Fettgedruckt */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+}
+
+/* Body mit Tagesfeldern */
+.week-body {
+    display: grid; /* CSS Grid aktivieren */
+    grid-template-columns: repeat(7, 1fr); /* 7 gleichgroße Spalten */
+    gap: 8px; /* Abstand zwischen Feldern */
+}
+
+/* Einzelnes Tagesfeld in Wochenansicht */
+.week-day {
+    min-height: 200px; /* Mindesthöhe */
+    padding: 6px; /* Kompakterer Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: background 0.2s ease; /* Smooth Hintergrund-Übergang */
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 8px; /* Abstand zwischen Elementen */
+}
+
+/* Tagesfeld beim Hover */
+.week-day:hover {
+    background: rgba(132, 136, 119, 0.1); /* Sehr leicht heller Hintergrund */
+}
+
+/* === TAGESANSICHT === */
+
+/* Container für Tagesansicht */
+.day-view {
+    width: 100%; /* Volle Breite */
+    max-width: 600px; /* Maximale Breite */
+    padding: 24px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+}
+
+/* Titel der Tagesansicht */
+.day-title {
+    font-size: 20px; /* Schriftgröße */
+    font-weight: 600; /* Fettgedruckt */
+    color: #0D0E0C; /* Textfarbe */
+    margin-bottom: 16px; /* Abstand nach unten */
+}
+
+/* Container für Termine des Tages */
+.day-events {
+    display: flex; /* Flexbox aktivieren */
+    flex-direction: column; /* Kinder vertikal stapeln */
+    gap: 8px; /* Abstand zwischen Terminen */
+    margin-bottom: 16px; /* Abstand nach unten */
+}
+
+/* Termin in Tagesansicht */
+.day-events .event-item {
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+    padding: 8px 12px; /* Innenabstand */
+    font-weight: 500; /* Mittleres Gewicht */
+}
+
+/* Inline-Bereich zum Hinzufügen von Terminen */
+.add-event-inline {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    gap: 8px; /* Abstand zwischen Input und Button */
+    margin-top: 16px; /* Abstand nach oben */
+}
+
+/* Input-Feld für neuen Termin */
+.event-input {
+    flex: 1; /* Nimmt verfügbaren Platz ein */
+    padding: 8px 12px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+}
+
+/* Hinzufügen-Button */
+.add-button {
+    padding: 8px 16px; /* Innenabstand */
+    background: #0D0E0C; /* Dunkler Hintergrund */
+    border: none; /* Kein Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    color: #848877; /* Helle Textfarbe */
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
+}
+
+/* Hinzufügen-Button beim Hover */
+.add-button:hover {
+    opacity: 0.8; /* Leicht transparent */
+}
+
+/* === DIALOG === */
+
+/* Dialog-Backdrop (Overlay) */
+.dialog-backdrop {
+    position: fixed; /* Fixierte Position */
+    left: 0; /* Am linken Rand */
+    top: 0; /* Am oberen Rand */
+    right: 0; /* Am rechten Rand */
+    bottom: 0; /* Am unteren Rand */
+    background: rgba(13, 14, 12, 0.7); /* Dunkler Hintergrund mit Transparenz */
+    display: flex; /* Flexbox aktivieren */
+    align-items: center; /* Vertikal zentrieren */
+    justify-content: center; /* Horizontal zentrieren */
+    z-index: 1000; /* Über anderen Elementen */
+}
+
+/* Dialog-Fenster */
+.dialog {
+    background: #848877; /* Heller Hintergrund */
+    padding: 24px; /* Innenabstand */
+    border-radius: 8px; /* Abgerundete Ecken */
+    width: 400px; /* Feste Breite */
+    max-width: 90%; /* Max 90% der Viewport-Breite */
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); /* Schatten */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+}
+
+/* Edit-Dialog größer als Standard-Dialog */
+.edit-dialog {
+    width: 450px;
+    max-width: 90%;
+}
+
+/* Dialog-Titel */
+.dialog-title {
+    font-size: 18px; /* Schriftgröße */
+    font-weight: 600; /* Fettgedruckt */
+    color: #0D0E0C; /* Textfarbe */
+    margin-bottom: 16px; /* Abstand nach unten */
+}
+
+/* Dialog-Datum-Anzeige */
+.dialog-date {
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+    color: #0D0E0C; /* Textfarbe */
+    margin-bottom: 12px; /* Abstand nach unten */
+}
+
+/* Input-Gruppe */
+.dialog-input-group {
+    margin-bottom: 12px;
+}
+
+/* Dialog-Input-Feld */
+.dialog-input {
+    width: 100%; /* Volle Breite */
+    padding: 8px 12px; /* Innenabstand */
+    background: transparent; /* Kein Hintergrund */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    color: #0D0E0C; /* Textfarbe */
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+    box-sizing: border-box; /* Padding in Breite einrechnen */
+}
+
+/* Zeit-Gruppe */
+.dialog-time-group {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Checkbox-Wrapper */
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Checkbox */
+.time-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #0D0E0C;
+}
+
+/* Checkbox-Label */
+.checkbox-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Zeit-Input-Wrapper */
+.time-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Input-Label */
+.input-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+}
+
+/* Zeit-Input */
+.time-input {
+    padding: 8px 12px;
+    background: transparent;
+    border: 2px solid #0D0E0C;
+    border-radius: 6px;
+    color: #0D0E0C;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: "Courier New", Courier, monospace;
+}
+
+/* Zeit-Input beim Focus */
+.time-input:focus {
+    outline: none;
+    border-color: #0D0E0C;
+}
+
+/* Farbauswahl im Dialog */
+.dialog-color-section {
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+/* Label für Farbauswahl */
+.color-picker-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+    margin-bottom: 8px;
+}
+
+.dialog-color-picker {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Farbauswahl-Button */
+.color-option {
+    width: 32px;
+    height: 32px;
+    border: 2px solid #0D0E0C;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.1s ease, border-width 0.1s ease;
+}
+
+/* Farbauswahl-Button beim Hover */
+.color-option:hover {
+    transform: scale(1.15);
+    border-width: 3px;
+}
+
+/* Ausgewählte Farbe */
+.color-option.selected {
+    border-width: 3px;
+    box-shadow: 0 0 0 2px #848877, 0 0 0 4px #0D0E0C;
+}
+
+/* Dialog-Aktionen (Buttons) */
+.dialog-actions {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    justify-content: flex-end; /* Rechts ausrichten */
+    gap: 8px; /* Abstand zwischen Buttons */
+    margin-top: 16px;
+}
+
+/* Dialog-Button */
+.dialog-button {
+    padding: 8px 16px; /* Innenabstand */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 3px; /* Kleinere abgerundete Ecken */
+    font-size: 13px; /* Etwas kleinere Schriftgröße */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: background 0.2s ease, color 0.2s ease; /* Smooth Übergänge */
+}
+
+/* Speichern-Button */
+.save-button {
+    background: #0D0E0C; /* Dunkler Hintergrund */
+    color: #848877; /* Helle Textfarbe */
+}
+
+/* Speichern-Button beim Hover */
+.save-button:hover {
+    opacity: 0.8; /* Leicht transparent */
+}
+
+/* Löschen-Button */
+.delete-button {
+    background: transparent;
+    color: #0D0E0C;
+    border: 2px solid #0D0E0C;
+}
+
+/* Löschen-Button beim Hover */
+.delete-button:hover {
+    background: rgba(255, 0, 0, 0.1);
+    border-color: #8B0000;
+    color: #8B0000;
+}
+
+/* Abbrechen-Button */
+.cancel-button {
+    background: transparent; /* Kein Hintergrund */
+    color: #0D0E0C; /* Textfarbe */
+}
+
+/* Abbrechen-Button beim Hover */
+.cancel-button:hover {
+    background: rgba(13, 14, 12, 0.1); /* Sehr leicht dunkler Hintergrund */
+}
+
+/* === FARBSYSTEM FÜR EVENTS === */
+
+/* Farbpalette - 8 gut unterscheidbare Farben */
+.event-color-0 { background: #848877 !important; } /* Standard - Oliv */
+.event-color-1 { background: #A8C5DD !important; } /* Hellblau */
+.event-color-2 { background: #F4C2B8 !important; } /* Lachs */
+.event-color-3 { background: #C3E5A4 !important; } /* Hellgrün */
+.event-color-4 { background: #F7DC9F !important; } /* Gelb */
+.event-color-5 { background: #D4B5E8 !important; } /* Lila */
+.event-color-6 { background: #FFB6C1 !important; } /* Rosa */
+.event-color-7 { background: #B0D9B0 !important; } /* Mint */
+
+/* === EVENT-CARDS (Kalender-Termine im Chat) === */
+
+/* Grid für gefundene Termine */
+.found-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+    width: 100%;
+}
+
+/* Einzelne Event-Card - KOMPAKT und RECHTECKIG */
+.event-card-chat {
+    background: #E8E6D9;
+    border-radius: 4px;
+    padding: 8px 10px;
+    border-left: 6px solid #848877;
+    cursor: default;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 65px;
+    position: relative;
+}
+
+.event-card-chat:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+}
+
+/* Farben für Event-Cards (entsprechend Kalender ColorIndex) */
+.event-card-chat.event-color-0 { border-left-color: #848877; }
+.event-card-chat.event-color-1 { border-left-color: #4A90E2; }
+.event-card-chat.event-color-2 { border-left-color: #E89B9B; }
+.event-card-chat.event-color-3 { border-left-color: #7EC47E; }
+.event-card-chat.event-color-4 { border-left-color: #F4D03F; }
+.event-card-chat.event-color-5 { border-left-color: #A569BD; }
+.event-card-chat.event-color-6 { border-left-color: #EC7063; }
+.event-card-chat.event-color-7 { border-left-color: #48C9B0; }
+
+/* Top-Bereich mit Datum/Zeit und Löschen-Button */
+.event-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* Event-Card Header (Datum + Zeit) - KOMPAKT */
+.event-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: #5A5A5A;
+    line-height: 1.2;
+    flex: 1;
+}
+
+.event-date-chat {
+    font-weight: bold;
+}
+
+.event-time-chat {
+    font-style: italic;
+}
+
+/* Event-Titel - KOMPAKT */
+.event-title-chat {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #0D0E0C;
+    line-height: 1.3;
+    flex: 1;
+}
+
+/* Kleiner Löschen-Button rechts - gut proportioniert */
+.delete-event-btn-small {
+    background: transparent;
+    color: #0D0E0C;
+    border: 1px solid #0D0E0C;
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: "Courier New", Courier, monospace;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Löschen-Button beim Hover - ROT wie im Kalender */
+.delete-event-btn-small:hover {
+    background: rgba(255, 0, 0, 0.1);
+    border-color: #8B0000;
+    color: #8B0000;
+}

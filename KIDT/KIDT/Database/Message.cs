@@ -1,15 +1,16 @@
-using System;
+ï»¿using System;
 
 namespace KIDT.Models;
 
-public class Message // Klasse für eine Nachricht
+public class Message // Klasse fÃ¼r eine Nachricht
 {
-    public int Id { get; set; } // Primärschlüssel (wird automatisch hochgezählt)
-    public int ConversationId { get; set; } // Foreign Key: Zu welchem Chat gehört diese Nachricht?
+    public int Id { get; set; } // PrimÃ¤rschlÃ¼ssel (wird automatisch hochgezÃ¤hlt)
+    public int ConversationId { get; set; } // Foreign Key: Zu welchem Chat gehÃ¶rt diese Nachricht?
     public bool IsUser { get; set; } // true = User, false = Assistant
     public string Text { get; set; } = string.Empty; // Nachrichtentext (nie null)
     public DateTime Timestamp { get; set; } // Wann wurde Nachricht gesendet?
-    public string? DocumentIdsJson { get; set; } // JSON-String mit Dokument-IDs (z.B. "[1,2,3]") - für search_documents-Results
-    
-    public Conversation? Conversation { get; set; } // Navigation: Zugehöriger Chat (nullable!)
+    public string? DocumentIdsJson { get; set; } // JSON-String mit Dokument-IDs (z.B. "[1,2,3]") - fÃ¼r search_documents-Results
+    public string? EventIdsJson { get; set; } // JSON-String mit Event-IDs (z.B. "[1,2,3]") - fÃ¼r list_calendar_events-Results
+
+    public Conversation? Conversation { get; set; } // Navigation: ZugehÃ¶riger Chat (nullable!)
 }

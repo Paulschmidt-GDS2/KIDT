@@ -7,6 +7,7 @@
     <base href="/" />
     <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/calendar-components.css" />
     <link rel="stylesheet" href="_content/Radzen.Blazor/css/material-base.css" />
     <link rel="stylesheet" href="KIDT.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
@@ -35,7 +36,7 @@
                     textarea.style.height = 'auto';
                 }
             },
-            
+
             setupEnterHandler: function(elementId, dotnetHelper) {
                 const textarea = document.getElementById(elementId);
                 if (textarea) {
@@ -45,6 +46,36 @@
                             dotnetHelper.invokeMethodAsync('OnEnterPressed'); // Rufe Blazor-Methode auf
                         }
                     });
+                }
+            }
+        };
+
+        // Auto-Scroll Helper für Chat-Nachrichten
+        window.chatScrollHelper = {
+            userHasScrolledUp: false, // Flag: Hat User manuell hochgescrollt?
+            messagesElement: null, // Referenz auf .messages Element
+
+            init: function(messagesElement) {
+                this.messagesElement = messagesElement;
+                this.userHasScrolledUp = false;
+
+                // Event-Listener für User-Scroll
+                messagesElement.addEventListener('scroll', () => {
+                    const isAtBottom = messagesElement.scrollHeight - messagesElement.scrollTop <= messagesElement.clientHeight + 50;
+                    this.userHasScrolledUp = !isAtBottom; // User hat hochgescrollt wenn nicht am Ende
+                });
+            },
+
+            scrollToBottom: function() {
+                if (!this.userHasScrolledUp && this.messagesElement) {
+                    this.messagesElement.scrollTop = this.messagesElement.scrollHeight; // Scroll zum Ende
+                }
+            },
+
+            forceScrollToBottom: function() {
+                if (this.messagesElement) {
+                    this.messagesElement.scrollTop = this.messagesElement.scrollHeight; // Scroll zum Ende (erzwungen)
+                    this.userHasScrolledUp = false; // Reset Flag
                 }
             }
         };

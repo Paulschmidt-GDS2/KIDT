@@ -1,19 +1,19 @@
-namespace KIDT.Services;
+ï»¿namespace KIDT.Services;
 
 /// <summary>
-/// Event-Service für Kommunikation zwischen MainLayout und Home-Komponente
+/// Event-Service fÃ¼r Kommunikation zwischen MainLayout und Home-Komponente
 /// </summary>
 public static class ChatEventService
 {
-    // Event das ausgelöst wird wenn "Neuer Chat" geklickt wird
-    public static event Action OnNewChatRequested = null!;
+    // Event das ausgelÃ¶st wird wenn "Neuer Chat" geklickt wird
+    public static event Action OnNewChatRequested = null!; // Wird vor Verwendung immer gesetzt (null! unterdrÃ¼ckt Warnung)
 
-    // Methode zum Auslösen des Events (von MainLayout aufgerufen)
+    // Methode zum AuslÃ¶sen des Events (von MainLayout aufgerufen)
     public static void TriggerNewChat()
     {
         if (OnNewChatRequested != null) // Check: Gibt es Listener?
         {
-            OnNewChatRequested.Invoke(); // Ja -> Löse Event aus (alle Listener werden benachrichtigt)
+            OnNewChatRequested.Invoke(); // Ja -> LÃ¶se Event aus (alle Listener werden benachrichtigt)
         }
     }
 }

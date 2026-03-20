@@ -1,0 +1,397 @@
+/* === CALENDAR COMPONENTS - Gemeinsame Styles für Kalender-Komponenten === */
+/* Enthält Event-Cards, Dialogs und andere kalender-bezogene UI-Elemente */
+
+/* === EVENT-CARDS (Kalender-Termine im Chat) === */
+
+/* Grid für gefundene Termine */
+.found-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+    width: 100%;
+}
+
+/* Einzelne Event-Card - KOMPAKT und RECHTECKIG */
+.event-card-chat {
+    background: #E8E6D9;
+    border-radius: 4px;
+    padding: 10px 12px;
+    border-left: 6px solid #848877;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 70px;
+    position: relative;
+}
+
+.event-card-chat:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+}
+
+/* Farben für Event-Cards (entsprechend Kalender ColorIndex) */
+.event-card-chat.event-color-0 { border-left-color: #848877; }
+.event-card-chat.event-color-1 { border-left-color: #4A90E2; }
+.event-card-chat.event-color-2 { border-left-color: #E89B9B; }
+.event-card-chat.event-color-3 { border-left-color: #7EC47E; }
+.event-card-chat.event-color-4 { border-left-color: #F4D03F; }
+.event-card-chat.event-color-5 { border-left-color: #A569BD; }
+.event-card-chat.event-color-6 { border-left-color: #EC7063; }
+.event-card-chat.event-color-7 { border-left-color: #48C9B0; }
+
+/* Top-Bereich mit Datum/Zeit und Löschen-Button */
+.event-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+/* Event-Card Header (Datum + Zeit) - KOMPAKT */
+.event-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: #5A5A5A;
+    line-height: 1.2;
+    flex: 1;
+    gap: 12px;
+}
+
+.event-date-chat {
+    font-weight: bold;
+}
+
+.event-time-chat {
+    font-style: italic;
+}
+
+/* Event-Titel - KOMPAKT */
+.event-title-chat {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #0D0E0C;
+    line-height: 1.3;
+    flex: 1;
+}
+
+/* Kleiner Löschen-Button rechts - gut proportioniert */
+.delete-event-btn-small {
+    background: transparent;
+    color: #0D0E0C;
+    border: 1px solid #0D0E0C;
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: "Courier New", Courier, monospace;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Löschen-Button beim Hover - ROT wie im Kalender */
+.delete-event-btn-small:hover {
+    background: rgba(255, 0, 0, 0.1);
+    border-color: #8B0000;
+    color: #8B0000;
+}
+
+/* === DIALOG/MODAL (für Termin-Bearbeitung) === */
+
+/* Dialog-Backdrop (Overlay) */
+.dialog-backdrop {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(13, 14, 12, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+/* Dialog-Fenster */
+.dialog {
+    background: #848877;
+    padding: 24px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border: 2px solid #0D0E0C;
+}
+
+/* Edit-Dialog größer */
+.edit-dialog {
+    width: 450px;
+    max-width: 90%;
+}
+
+/* Dialog-Titel */
+.dialog-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0D0E0C;
+    margin-bottom: 16px;
+}
+
+/* Dialog-Datum-Anzeige */
+.dialog-date {
+    font-size: 13px;
+    color: #0D0E0C;
+    margin-bottom: 12px;
+}
+
+/* Input-Gruppe */
+.dialog-input-group {
+    margin-bottom: 12px;
+}
+
+/* Dialog-Input-Feld */
+.dialog-input {
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: 2px solid #0D0E0C;
+    border-radius: 3px;
+    color: #0D0E0C;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+/* Zeit-Gruppe */
+.dialog-time-group {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Checkbox-Wrapper */
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Checkbox */
+.time-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #0D0E0C;
+}
+
+/* Checkbox-Label */
+.checkbox-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Zeit-Input-Wrapper */
+.time-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Input-Label */
+.input-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+}
+
+/* Zeit-Input */
+.time-input {
+    padding: 8px 12px;
+    background: transparent;
+    border: 2px solid #0D0E0C;
+    border-radius: 6px;
+    color: #0D0E0C;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: "Courier New", Courier, monospace;
+}
+
+/* Zeit-Input beim Focus */
+.time-input:focus {
+    outline: none;
+    border-color: #0D0E0C;
+}
+
+/* Farbauswahl im Dialog */
+.dialog-color-section {
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+/* Label für Farbauswahl */
+.color-picker-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0D0E0C;
+    margin-bottom: 8px;
+}
+
+.dialog-color-picker {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Farbauswahl-Button */
+.color-option {
+    width: 32px;
+    height: 32px;
+    border: 2px solid #0D0E0C;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.1s ease, border-width 0.1s ease;
+}
+
+/* Farbauswahl-Button beim Hover */
+.color-option:hover {
+    transform: scale(1.15);
+    border-width: 3px;
+}
+
+/* Ausgewählte Farbe */
+.color-option.selected {
+    border-width: 3px;
+    box-shadow: 0 0 0 2px #848877, 0 0 0 4px #0D0E0C;
+}
+
+/* Dialog-Aktionen (Buttons) */
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+/* Dialog-Button */
+.dialog-button {
+    padding: 8px 16px;
+    border: 2px solid #0D0E0C;
+    border-radius: 3px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Speichern-Button */
+.save-button {
+    background: #0D0E0C;
+    color: #848877;
+}
+
+/* Speichern-Button beim Hover */
+.save-button:hover {
+    opacity: 0.8;
+}
+
+/* Löschen-Button */
+.delete-button {
+    background: transparent;
+    color: #0D0E0C;
+    border: 2px solid #0D0E0C;
+}
+
+/* Löschen-Button beim Hover */
+.delete-button:hover {
+    background: rgba(255, 0, 0, 0.1);
+    border-color: #8B0000;
+    color: #8B0000;
+}
+
+/* Abbrechen-Button */
+.cancel-button {
+    background: transparent;
+    color: #0D0E0C;
+}
+
+/* Abbrechen-Button beim Hover */
+.cancel-button:hover {
+    background: rgba(13, 14, 12, 0.1);
+}
+
+/* === REMINDER-SEKTION (für Dialoge) === */
+
+/* Reminder-Sektion im Dialog */
+.dialog-reminder-section {
+    margin-top: 16px; /* Abstand nach oben */
+    margin-bottom: 16px; /* Abstand nach unten */
+}
+
+/* Überschrift für Reminder-Sektion */
+.reminder-label-header {
+    font-size: 14px; /* Schriftgröße */
+    font-weight: 600; /* Fettgedruckt */
+    margin-bottom: 12px; /* Abstand nach unten */
+    color: #0D0E0C; /* Textfarbe */
+    text-transform: uppercase; /* Großbuchstaben */
+    letter-spacing: 0.5px; /* Buchstabenabstand */
+}
+
+/* Chip-Style Button-Liste */
+.reminder-buttons {
+    display: flex; /* Flexbox aktivieren */
+    flex-wrap: wrap; /* Buttons umbrechen bei Platzmangel */
+    gap: 8px; /* Abstand zwischen Buttons */
+}
+
+/* Einzelner Reminder-Button (Chip-Style) */
+.reminder-btn {
+    padding: 8px 16px; /* Innenabstand */
+    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border-radius: 20px; /* Stark abgerundete Ecken (Chip-Style) */
+    background: transparent; /* Transparenter Hintergrund */
+    color: #0D0E0C; /* Textfarbe */
+    cursor: pointer; /* Zeiger-Cursor */
+    transition: all 0.2s ease; /* Smooth Übergänge */
+    white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+/* Reminder-Button beim Hover */
+.reminder-btn:hover {
+    background: rgba(13, 14, 12, 0.1); /* Leicht dunkler Hintergrund */
+    transform: translateY(-2px); /* Leicht nach oben verschieben */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Schatten */
+}
+
+/* Aktiver Reminder-Button */
+.reminder-btn.active {
+    background: #0D0E0C; /* Dunkler Hintergrund */
+    color: #848877; /* Helle Textfarbe */
+    border-color: #0D0E0C; /* Dunkler Rahmen */
+}
+
+/* Aktiver Reminder-Button beim Hover */
+.reminder-btn.active:hover {
+    background: #1a1b19; /* Etwas heller beim Hover */
+    transform: translateY(-2px); /* Leicht nach oben verschieben */
+}
+
+/* Status-Anzeige: Erinnerung wurde bereits angezeigt */
+.reminder-status-shown {
+    margin-top: 10px; /* Abstand nach oben */
+    padding: 8px 12px; /* Innenabstand */
+    background: rgba(38, 176, 80, 0.12); /* Hellgrüner Hintergrund */
+    border-left: 3px solid #26b050; /* Grüner linker Rahmen */
+    border-radius: 4px; /* Abgerundete Ecken */
+    font-size: 12px; /* Kleinere Schriftgröße */
+    color: #0D0E0C; /* Textfarbe */
+}

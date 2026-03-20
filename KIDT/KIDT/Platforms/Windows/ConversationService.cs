@@ -1,4 +1,4 @@
-using Microsoft.SemanticKernel;
+ï»¿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text;
@@ -6,24 +6,24 @@ using System.Text;
 namespace KIDT.Services;
 
 /// <summary>
-/// Spezialisierter Service für natürliche Konversation.
-/// Nutzt phi3:mini für schnelle, freundliche Gespräche.
+/// Spezialisierter Service fÃ¼r natÃ¼rliche Konversation.
+/// Nutzt phi3:mini fÃ¼r schnelle, freundliche GesprÃ¤che.
 /// </summary>
-public class ConversationService : IAsyncDisposable // Konversations-Service mit asynchroner Aufräumung
+public class ConversationService : IAsyncDisposable // Konversations-Service mit asynchroner AufrÃ¤umung
 {
-    private Kernel? kernel; // Semantic Kernel-Instanz für KI (wird später initialisiert)
-    private IChatCompletionService? chatService; // Chat-Service von Ollama (wird später initialisiert)
+    private Kernel kernel = null!; // Semantic Kernel-Instanz fÃ¼r KI (wird in InitializeAsync initialisiert)
+    private IChatCompletionService chatService = null!; // Chat-Service von Ollama (wird in InitializeAsync initialisiert)
     private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
     private string systemInstructions = string.Empty; // System-Instructions (werden bei jedem Call neu verwendet)
 
-    public async Task InitializeAsync() // Lädt phi3:mini, lädt Instructions aus MD-Datei
+    public async Task InitializeAsync() // LÃ¤dt phi3:mini, lÃ¤dt Instructions aus MD-Datei
     {
         if (this.isInitialized) return; // Wenn schon initialisiert -> raus
 
         try
         {
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
-            builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
+            builder.Services.AddOpenAIChatCompletion( // FÃ¼ge Chat-Completion hinzu
                 modelId: "phi3:mini",
                 apiKey: null,
                 endpoint: new Uri("http://localhost:11434/v1")
@@ -57,19 +57,19 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         try
         {
-            var chatHistory = new ChatHistory(); // Erstelle frische Chat-History für jeden Call
-            chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+            var chatHistory = new ChatHistory(); // Erstelle frische Chat-History fÃ¼r jeden Call
+            chatHistory.AddSystemMessage(this.systemInstructions); // FÃ¼ge System-Instructions hinzu
 
             if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
             {
-                chatHistory.AddSystemMessage($"Bisheriger Gesprächsverlauf:\n{recentContext}");
+                chatHistory.AddSystemMessage($"Bisheriger GesprÃ¤chsverlauf:\n{recentContext}");
             }
 
             chatHistory.AddUserMessage(userMessage);
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
-                Temperature = 0.5, // Mittlere Temperatur = ausgewogen zwischen Präzision und Kreativität
+                Temperature = 0.5, // Mittlere Temperatur = ausgewogen zwischen PrÃ¤zision und KreativitÃ¤t
                 MaxTokens = maxTokens // Dynamisch: Kurze Fragen = kurze Antworten
             };
 
@@ -82,7 +82,8 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             string assistantMessage;
             if (response.Content != null) // Wenn Response einen Content hat
             {
-                assistantMessage = EnsureUtf8(response.Content);
+                assistantMessage = response.Content;
+                assistantMessage = CleanLlmResponse(assistantMessage); // Bereinige Antwort von Debug-Informationen
             }
             else // Kein Content
             {
@@ -97,7 +98,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         }
     }
 
-    public async IAsyncEnumerable<string> SendStreamAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit STREAMING (Token für Token!)
+    public async IAsyncEnumerable<string> SendStreamAsync(string userMessage, int maxTokens, string recentContext) // Sendet Nachricht mit STREAMING (Token fÃ¼r Token!)
     {
         if (!this.isInitialized) // Wenn Service noch nicht initialisiert ist
         {
@@ -106,21 +107,20 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         if (this.kernel == null || this.chatService == null) // Wenn Kernel oder Chat-Service null sind
         {
-            yield return "Fehler: Konversations-Service nicht initialisiert."; // Fehler als Stream zurückgeben
+            yield return "Fehler: Konversations-Service nicht initialisiert."; // Fehler als Stream zurÃ¼ckgeben
             yield break; // Stream beenden
         }
 
         var chatHistory = new ChatHistory(); // Erstelle frische Chat-History
 
-        // WICHTIG: System-Message mit klarer Trennung
-        chatHistory.AddSystemMessage($"{this.systemInstructions}\n\n=== ENDE DER INSTRUCTIONS (NICHT AUSGEBEN) ===\n\nAntwort nur auf die folgende User-Nachricht:");
+        chatHistory.AddSystemMessage(this.systemInstructions); // FÃ¼ge System-Instructions hinzu (OHNE gefÃ¤hrliche Marker!)
 
         if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
         {
-            chatHistory.AddSystemMessage($"Kontext aus früherem Gespräch:\n{recentContext}");
+            chatHistory.AddSystemMessage($"Bisheriger GesprÃ¤chsverlauf:\n{recentContext}");
         }
 
-        chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
+        chatHistory.AddUserMessage(userMessage);
 
         var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
         {
@@ -128,30 +128,230 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             MaxTokens = maxTokens // Token-Limit
         };
 
-        // STREAMING: GetStreamingChatMessageContentsAsync gibt Token für Token zurück!
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === SENDING TO PHI3:MINI ===");
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] User Message: {userMessage}");
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Max Tokens: {maxTokens}");
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Has Context: {!string.IsNullOrEmpty(recentContext)}");
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] System Instructions Length: {this.systemInstructions.Length} chars");
+
+        // STREAMING: Token fÃ¼r Token, aber sammle fÃ¼r Post-Processing
+        StringBuilder fullResponse = new StringBuilder();
+        bool hasStartedOutput = false;
+
         await foreach (var chunk in this.chatService.GetStreamingChatMessageContentsAsync(
             chatHistory,
             executionSettings: settings,
             kernel: this.kernel))
         {
-            if (chunk.Content != null) // Wenn Chunk Content hat
+            if (chunk.Content != null)
             {
-                yield return chunk.Content; // Gib Chunk DIREKT zurück (kein EnsureUtf8 mehr!)
+                fullResponse.Append(chunk.Content);
+
+                // Wenn noch nicht ausgegeben: PrÃ¼fe ob wir echten Content haben (keine Quotes am Anfang)
+                if (!hasStartedOutput)
+                {
+                    string currentText = fullResponse.ToString().TrimStart();
+
+                    // Ãœberspringe fÃ¼hrende Quotes
+                    if (currentText.StartsWith("\""))
+                    {
+                        continue; // Sammle weiter
+                    }
+
+                    hasStartedOutput = true;
+                }
+
+                // Gib Chunk DIREKT aus (echtes Streaming!)
+                if (hasStartedOutput)
+                {
+                    yield return chunk.Content;
+                }
             }
         }
+
+        string rawResponse = fullResponse.ToString();
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === RAW RESPONSE FROM PHI3:MINI ===");
+        System.Diagnostics.Debug.WriteLine(rawResponse);
+        System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === END RAW RESPONSE ===");
     }
 
-    private string EnsureUtf8(string text) // Stellt sicher dass Text korrekt als UTF-8 behandelt wird
-    {
-        if (string.IsNullOrEmpty(text)) return text; // Leerer Text -> direkt zurück
-
-        // Da Ollama API bereits UTF-8 zurückgibt, einfach den Text direkt zurückgeben
-        // Frühere Konvertierung hatte Encoding-Probleme verursacht
-        return text;
-    }
-
-    public ValueTask DisposeAsync() // Räumt Ressourcen auf (aktuell leer)
+    public ValueTask DisposeAsync() // RÃ¤umt Ressourcen auf (aktuell leer)
     {
         return ValueTask.CompletedTask; // Aktuell nichts zu tun
+    }
+
+    private static string CleanLlmResponse(string response) // Bereinigt LLM-Antworten von Debug-Informationen
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return response;
+        }
+
+        response = response.Trim();
+
+        // Entferne AnfÃ¼hrungszeichen am Anfang/Ende (einfach und schnell)
+        if (response.StartsWith("\"") && response.EndsWith("\"") && response.Length > 2)
+        {
+            response = response.Substring(1, response.Length - 2);
+        }
+
+        // Entferne Emojis (nur gÃ¤ngigste Unicode-Bereiche, VEREINFACHT)
+        // Verzichte auf komplexen Regex - zu langsam!
+        response = response
+            .Replace("âœ…", "")
+            .Replace("âŒ", "")
+            .Replace("ðŸŽ‰", "")
+            .Replace("âš ï¸", "")
+            .Replace("âœ“", "")
+            .Replace("â†’", "");
+
+        // Entferne bekannte Debug-Marker
+        string[] debugMarkers = new[]
+        {
+            "=== Input:",
+            "=== Output:",
+            "DENSE_CATEGORIES",
+            "### QUERY REPORT",
+            "As a solution",
+            "--- Begin of code"
+        };
+
+        bool hasDebugContent = false;
+        foreach (var marker in debugMarkers)
+        {
+            if (response.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                hasDebugContent = true;
+                break;
+            }
+        }
+
+        if (!hasDebugContent)
+        {
+            return response.Trim();
+        }
+
+        // Suche nach echtem Text nach Debug-Bereich
+        string[] lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        StringBuilder cleanedResponse = new StringBuilder();
+        bool skipMode = false;
+
+        foreach (string line in lines)
+        {
+            string trimmedLine = line.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.All(c => c == '='))
+            {
+                continue;
+            }
+
+            bool isDebugLine = false;
+            foreach (var marker in debugMarkers)
+            {
+                if (trimmedLine.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                {
+                    isDebugLine = true;
+                    skipMode = true;
+                    break;
+                }
+            }
+
+            if (!isDebugLine && !skipMode)
+            {
+                cleanedResponse.AppendLine(line);
+            }
+            else if (!isDebugLine && skipMode && trimmedLine.Length > 10)
+            {
+                skipMode = false;
+                cleanedResponse.AppendLine(line);
+            }
+        }
+
+        string cleaned = cleanedResponse.ToString().Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Hallo! Wie kann ich dir helfen?" : cleaned;
+    }
+
+    private static bool ShouldSkipDebugContent(string currentText) // PrÃ¼ft ob aktueller Text noch Debug-Informationen enthÃ¤lt
+    {
+        string[] debugMarkers = new[]
+        {
+            "=== Input:",
+            "DENSE_CATEGORIES",
+            "### QUERY REPORT",
+            "As a solution",
+            "--- Begin of code"
+        };
+
+        foreach (var marker in debugMarkers)
+        {
+            if (currentText.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                return true; // Debug-Content erkannt
+            }
+        }
+
+        return false; // Kein Debug-Content
+    }
+
+    private static bool ContainsDebugMarker(string text) // PrÃ¼ft ob Text Debug-Marker enthÃ¤lt
+    {
+        string[] debugMarkers = new[]
+        {
+            "=== Input:",
+            "=== Output:",
+            "DENSE_CATEGORIES",
+            "### QUERY REPORT",
+            "As a solution",
+            "--- Begin of code"
+        };
+
+        foreach (var marker in debugMarkers)
+        {
+            if (text.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string ExtractRealTextFromBuffer(string buffer) // Extrahiert echten Text aus Buffer nach Debug-Bereich
+    {
+        string[] lines = buffer.Split(new[] { '\n', '\r' }, StringSplitOptions.None);
+        StringBuilder realText = new StringBuilder();
+        bool foundDebugEnd = false;
+
+        foreach (string line in lines)
+        {
+            string trimmedLine = line.Trim();
+
+            // Ãœberspringe leere Zeilen oder Trennlinien
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.All(c => c == '=' || c == '-'))
+            {
+                continue;
+            }
+
+            // PrÃ¼fe ob Zeile Debug-Marker enthÃ¤lt
+            bool isDebugLine = false;
+            string[] debugMarkers = new[] { "===", "DENSE_CATEGORIES", "QUERY REPORT", "Input:", "Output:", "As a solution", "Begin of code" };
+            foreach (var marker in debugMarkers)
+            {
+                if (trimmedLine.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                {
+                    isDebugLine = true;
+                    foundDebugEnd = true;
+                    break;
+                }
+            }
+
+            // Wenn es keine Debug-Zeile ist und wir Debug-Ende gefunden haben
+            if (!isDebugLine && foundDebugEnd && trimmedLine.Length > 3)
+            {
+                realText.AppendLine(line); // FÃ¼ge echten Text hinzu
+            }
+        }
+
+        return realText.ToString().Trim();
     }
 }

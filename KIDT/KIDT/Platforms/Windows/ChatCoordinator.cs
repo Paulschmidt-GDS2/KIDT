@@ -1,28 +1,59 @@
-using System.Diagnostics;
+ï»¿using System.Diagnostics;
 using KIDT.Database;
 using KIDT.Models;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace KIDT.Services;
 
+/// <summary>
+/// ARCHITEKTUR-ÃœBERSICHT:
+/// 
+/// User-Nachricht
+///      â†“
+/// [ROUTER (GPT-4 via Azure OpenAI + MCP-Tools)]
+///      â†“
+///      â”œâ”€ Function Call erkannt? (search_documents, list_calendar_events, etc.)
+///      â”‚   â†’ Tool wird DIREKT ausgefÃ¼hrt (KEIN weiteres LLM!)
+///      â”‚   â†’ Direkte Antwort an User (z.B. "3 Dokumente gefunden")
+///      â”‚
+///      â””â”€ Kein Tool? â†’ JSON-Routing-Entscheidung
+///          â†“
+///          â”œâ”€ Intent: "conversation"
+///          â”‚   â†’ ConversationService (phi3:mini via Ollama)
+///          â”‚   â†’ Schnelle, kurze Antworten (Small Talk, einfache Fragen)
+///          â”‚
+///          â””â”€ Intent: "dataAnalysis"
+///              â†’ DataAnalysisService (qwen2.5:7b via Ollama)
+///              â†’ Text-Analyse von Dateien/Dokumenten (KEINE Tools!)
+/// 
+/// WARUM SO?
+/// - GPT-4: Bestes Function Calling (Tool-Orchestrierung)
+/// - phi3:mini: Schnell & klein fÃ¼r Small Talk
+/// - qwen2.5:7b: PrÃ¤zise fÃ¼r Text-Analyse
+/// 
+/// Tools werden NUR im Router gehandhabt, damit:
+/// 1. Dokument-Suche VOR Analyse passiert
+/// 2. Ein zentraler Punkt fÃ¼r alle Tool-Calls (leichter zu debuggen)
+/// 3. Analyse-Modelle fokussieren sich NUR auf Text-Verarbeitung
+/// </summary>
 public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, Conversation, DataAnalysis und File-Upload (wird von Home.razor verwendet)
 {
-    private DataAnalysisService dataAnalysis; // Service für Datenanalyse (komplexe Anfragen mit mehr Token)
-    private ConversationService conversation; // Service für Konversation (normale Chat-Anfragen)
-    private FileService fileService; // Service für File-Upload und Text-Extraktion (PDF, TXT etc.)
+    private DataAnalysisService dataAnalysis; // Service fÃ¼r Datenanalyse (komplexe Anfragen mit mehr Token)
+    private ConversationService conversation; // Service fÃ¼r Konversation (normale Chat-Anfragen)
+    private FileService fileService; // Service fÃ¼r File-Upload und Text-Extraktion (PDF, TXT etc.)
     private RouterService router; // Router: Entscheidet ob Conversation oder DataAnalysis + handhabt MCP-Tools
-    private readonly IServiceProvider serviceProvider; // Service Provider für DB-Services (Dependency Injection)
+    private readonly IServiceProvider serviceProvider; // Service Provider fÃ¼r DB-Services (Dependency Injection)
     private bool isInitialized = false; // Flag: Wurden Services initialisiert? (verhindert doppelte Initialisierung)
-    private string currentFileName = string.Empty; // Aktuell angehängte Datei (Dateiname)
-    private string currentFileContent = string.Empty; // Aktuell angehängte Datei (extrahierter Text-Content)
+    private string currentFileName = string.Empty; // Aktuell angehÃ¤ngte Datei (Dateiname)
+    private string currentFileContent = string.Empty; // Aktuell angehÃ¤ngte Datei (extrahierter Text-Content)
 
     public ChatCoordinator(IServiceProvider serviceProvider) // Konstruktor: Wird beim App-Start aufgerufen (Dependency Injection)
     {
-        this.serviceProvider = serviceProvider; // Service Provider speichern für DB-Zugriff
-        this.dataAnalysis = null!; // Wird in InitializeAsync erstellt (null! = compiler-beruhigend)
-        this.conversation = null!; // Wird in InitializeAsync erstellt
-        this.fileService = null!; // Wird in InitializeAsync erstellt
-        this.router = null!; // Wird in InitializeAsync erstellt
+        this.serviceProvider = serviceProvider; // Service Provider speichern fÃ¼r DB-Zugriff
+        this.dataAnalysis = new DataAnalysisService();
+        this.conversation = new ConversationService();
+        this.fileService = new FileService();
+        this.router = new RouterService(serviceProvider);
     }
 
     public async Task InitializeAsync() // Initialisiere alle Services
@@ -36,7 +67,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             this.fileService = new FileService(); // Erstelle File-Service
             this.router = new RouterService(this.serviceProvider); // Erstelle Router-Service
 
-            await this.router.InitializeAsync(); // Router lädt API-Key aus Datei
+            await this.router.InitializeAsync(); // Router lÃ¤dt API-Key aus Datei
 
             this.isInitialized = true; // Markiere als erfolgreich initialisiert
         }
@@ -46,7 +77,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         }
     }
 
-    public async Task<ChatResponse> SendAsync(string userMessage, int conversationId) // Verarbeite User-Nachricht und gib Antwort zurück
+    public async Task<ChatResponse> SendAsync(string userMessage, int conversationId) // Verarbeite User-Nachricht und gib Antwort zurÃ¼ck
     {
         if (!this.isInitialized) // Services noch nicht initialisiert?
         {
@@ -55,11 +86,11 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
 
         try
         {
-            using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für Datenbank-Zugriff
+            using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope fÃ¼r Datenbank-Zugriff
             var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Hole ChatDbService
             var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService
 
-            bool hasFile = false; // Standardmäßig: Keine Datei angehängt
+            bool hasFile = false; // StandardmÃ¤ÃŸig: Keine Datei angehÃ¤ngt
             if (!string.IsNullOrEmpty(this.currentFileName)) // Dateiname vorhanden?
             {
                 hasFile = true;
@@ -67,17 +98,33 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
 
             RouterResponse routerResponse = await this.router.ProcessAsync(userMessage, hasFile, conversationId); // Router verarbeitet Nachricht
 
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] === ROUTER RESPONSE ===");
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] ShouldRoute: {routerResponse.ShouldRoute}");
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] TargetService: {routerResponse.TargetService}");
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] ToolWasUsed: {routerResponse.ToolWasUsed}");
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] Reason: {routerResponse.Reason}");
+            if (routerResponse.DirectResponse != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[COORDINATOR] DirectResponse: {routerResponse.DirectResponse}");
+            }
+
             if (!routerResponse.ShouldRoute) // Router gibt direkte Antwort?
             {
                 ChatResponse response = new ChatResponse(); // Erstelle neue ChatResponse
-                response.Message = routerResponse.DirectResponse ?? "Dokument wurde verarbeitet."; // Setze Nachricht
+                string responseMessage = "Dokument wurde verarbeitet.";
+                if (routerResponse.DirectResponse != null)
+                {
+                    responseMessage = routerResponse.DirectResponse;
+                }
+                response.Message = responseMessage; // Setze Nachricht
                 response.FoundDocuments = routerResponse.FoundDocuments; // Setze gefundene Dokumente
+                response.FoundEvents = routerResponse.FoundEvents; // Setze gefundene Termine
                 return response;
             }
 
-            string result; // Variable für Antwort vom Service
+            string result; // Variable fÃ¼r Antwort vom Service
 
-            if (routerResponse.TargetService == "dataAnalysis") // Router hat DataAnalysis gewählt?
+            if (routerResponse.TargetService == "dataAnalysis") // Router hat DataAnalysis gewÃ¤hlt?
             {
                 await this.dataAnalysis.InitializeAsync(docDbService, conversationId); // Initialisiere DataAnalysis
 
@@ -91,7 +138,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                 string enhancedMessage = userMessage; // Start mit Original-Nachricht
                 if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
                 {
-                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
+                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // FÃ¼ge System-Info hinzu
                 }
 
                 result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service
@@ -102,9 +149,9 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                     fullChatHistory // Chat-History
                 );
             }
-            else // Router hat Conversation gewählt
+            else // Router hat Conversation gewÃ¤hlt
             {
-                string fullChatHistory = string.Empty; // Variable für Chat-History
+                string fullChatHistory = string.Empty; // Variable fÃ¼r Chat-History
 
                 if (conversationId > 0) // Bestehender Chat?
                 {
@@ -114,7 +161,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                 string enhancedMessage = userMessage; // Start mit Original-Nachricht
                 if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
                 {
-                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
+                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // FÃ¼ge System-Info hinzu
                 }
 
                 result = await this.conversation.SendAsync( // Sende an Conversation-Service
@@ -127,6 +174,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             ChatResponse finalResponse = new ChatResponse(); // Erstelle neue ChatResponse
             finalResponse.Message = result; // Setze Antwort vom Service
             finalResponse.FoundDocuments = routerResponse.FoundDocuments; // Setze gefundene Dokumente
+            finalResponse.FoundEvents = routerResponse.FoundEvents; // Setze gefundene Termine
             return finalResponse;
         }
         catch (Exception ex)
@@ -134,7 +182,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             if (ex.Message.StartsWith("Router-Fehler:")) // Router-Fehler?
             {
                 ChatResponse errorResponse = new ChatResponse(); // Erstelle Fehler-Response
-                errorResponse.Message = $"KI-Dienste nicht erreichbar. Versuche es später.\n\nDetails: {ex.Message}";
+                errorResponse.Message = $"KI-Dienste nicht erreichbar. Versuche es spÃ¤ter.\n\nDetails: {ex.Message}";
                 return errorResponse;
             }
 
@@ -152,11 +200,11 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             await InitializeAsync(); // Initialisiere jetzt
         }
 
-        using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für Datenbank-Zugriff
+        using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope fÃ¼r Datenbank-Zugriff
         var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Hole ChatDbService
         var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService
 
-        bool hasFile = false; // Standardmäßig: Keine Datei angehängt
+        bool hasFile = false; // StandardmÃ¤ÃŸig: Keine Datei angehÃ¤ngt
         if (!string.IsNullOrEmpty(this.currentFileName)) // Dateiname vorhanden?
         {
             hasFile = true;
@@ -166,19 +214,26 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
 
         if (!routerResponse.ShouldRoute) // Router gibt direkte Antwort? (z.B. Dokument-Suche)
         {
+            string responseText = "Dokument wurde verarbeitet.";
+            if (routerResponse.DirectResponse != null)
+            {
+                responseText = routerResponse.DirectResponse;
+            }
+
             yield return new ChatStreamChunk // Sende finale Antwort als Stream-Chunk
             {
-                TextChunk = routerResponse.DirectResponse ?? "Dokument wurde verarbeitet.",
+                TextChunk = responseText,
                 IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments
+                FoundDocuments = routerResponse.FoundDocuments,
+                FoundEvents = routerResponse.FoundEvents
             };
             yield break; // Stream beenden
         }
 
-        // Streaming nur für Conversation (DataAnalysis erstmal ohne)
-        if (routerResponse.TargetService == "conversation") // Conversation gewählt?
+        // Streaming nur fÃ¼r Conversation (DataAnalysis erstmal ohne)
+        if (routerResponse.TargetService == "conversation") // Conversation gewÃ¤hlt?
         {
-            string fullChatHistory = string.Empty; // Variable für Chat-History
+            string fullChatHistory = string.Empty; // Variable fÃ¼r Chat-History
 
             if (conversationId > 0) // Bestehender Chat?
             {
@@ -188,17 +243,18 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             string enhancedMessage = userMessage; // Start mit Original-Nachricht
             if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
             {
-                enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
+                enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // FÃ¼ge System-Info hinzu
             }
 
-            // STREAMING: Sende Token für Token an Home.razor!
+            // STREAMING: Sende Token fÃ¼r Token an Home.razor!
             await foreach (var chunk in this.conversation.SendStreamAsync(enhancedMessage, routerResponse.MaxTokens, fullChatHistory))
             {
-                yield return new ChatStreamChunk // Sende Chunk zurück
+                yield return new ChatStreamChunk // Sende Chunk zurÃ¼ck
                 {
                     TextChunk = chunk,
                     IsComplete = false,
-                    FoundDocuments = routerResponse.FoundDocuments
+                    FoundDocuments = routerResponse.FoundDocuments,
+                    FoundEvents = routerResponse.FoundEvents
                 };
             }
 
@@ -207,7 +263,8 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             {
                 TextChunk = string.Empty,
                 IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments
+                FoundDocuments = routerResponse.FoundDocuments,
+                FoundEvents = routerResponse.FoundEvents
             };
         }
         else // DataAnalysis -> Fallback auf Non-Streaming (erstmal)
@@ -224,7 +281,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             string enhancedMessage = userMessage; // Start mit Original-Nachricht
             if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
             {
-                enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
+                enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // FÃ¼ge System-Info hinzu
             }
 
             string result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service
@@ -239,7 +296,8 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             {
                 TextChunk = result,
                 IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments
+                FoundDocuments = routerResponse.FoundDocuments,
+                FoundEvents = routerResponse.FoundEvents
             };
         }
     }
@@ -262,8 +320,8 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             if (this.currentFileContent.StartsWith("Fehler:")) // Text-Extraktion fehlgeschlagen?
             {
                 string errorMessage = this.currentFileContent; // Speichere Fehlermeldung
-                this.currentFileName = string.Empty; // Lösche Dateiname
-                this.currentFileContent = string.Empty; // Lösche Content
+                this.currentFileName = string.Empty; // LÃ¶sche Dateiname
+                this.currentFileContent = string.Empty; // LÃ¶sche Content
                 return errorMessage;
             }
 
@@ -271,41 +329,42 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         }
         catch (Exception ex)
         {
-            this.currentFileName = string.Empty; // Lösche Dateiname
-            this.currentFileContent = string.Empty; // Lösche Content
+            this.currentFileName = string.Empty; // LÃ¶sche Dateiname
+            this.currentFileContent = string.Empty; // LÃ¶sche Content
             return $"Fehler beim Hochladen: {ex.Message}";
         }
     }
 
-    public void ClearFile() // Entferne angehängte Datei
+    public void ClearFile() // Entferne angehÃ¤ngte Datei
     {
-        this.currentFileName = string.Empty; // Lösche Dateiname
-        this.currentFileContent = string.Empty; // Lösche Datei-Inhalt
+        this.currentFileName = string.Empty; // LÃ¶sche Dateiname
+        this.currentFileContent = string.Empty; // LÃ¶sche Datei-Inhalt
     }
 
-    public string GetCurrentFileName() // Gib aktuellen Dateinamen zurück
+    public string GetCurrentFileName() // Gib aktuellen Dateinamen zurÃ¼ck
     {
-        return this.currentFileName; // Gib Dateiname zurück
+        return this.currentFileName; // Gib Dateiname zurÃ¼ck
     }
 
-    public async ValueTask DisposeAsync() // Räume alle Services auf
+    public async ValueTask DisposeAsync() // RÃ¤ume alle Services auf
     {
         if (this.dataAnalysis != null) // DataAnalysis-Service existiert?
         {
-            await this.dataAnalysis.DisposeAsync(); // Räume DataAnalysis-Service auf
+            await this.dataAnalysis.DisposeAsync(); // RÃ¤ume DataAnalysis-Service auf
         }
 
         if (this.conversation != null) // Conversation-Service existiert?
         {
-            await this.conversation.DisposeAsync(); // Räume Conversation-Service auf
+            await this.conversation.DisposeAsync(); // RÃ¤ume Conversation-Service auf
         }
     }
 }
 
-// Klasse für Streaming-Chunks (enthält Text-Teil + Status ob komplett)
+// Klasse fÃ¼r Streaming-Chunks (enthÃ¤lt Text-Teil + Status ob komplett)
 public class ChatStreamChunk
 {
     public string TextChunk { get; set; } = string.Empty; // Text-Teil (ein oder mehrere Tokens)
     public bool IsComplete { get; set; } = false; // Ist Stream komplett?
     public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei Dokument-Suche)
+    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>(); // Gefundene Termine (bei Kalender-Tools)
 }
