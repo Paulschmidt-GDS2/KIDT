@@ -11,10 +11,10 @@ namespace KIDT.Services;
 /// /// RouterService: Analysiert User-Nachrichten und entscheidet, ob sie an Conversation-Agent, DataAnalysis-Agent oder Dokumenten-Suche weitergeleitet werden.
 /// </summary>
 
-public class RouterService 
+public class RouterService
 {
-    private readonly IServiceProvider serviceProvider; // Service Provider für Dependency Injection (DocDbService)
-    private string apiKey = string.Empty; // Azure OpenAI API Key (wird bei InitializeAsync geladen)
+    private readonly IServiceProvider serviceProvider;
+    private string apiKey = string.Empty;
 
     public RouterService(IServiceProvider serviceProvider)
     {
@@ -48,7 +48,7 @@ public class RouterService
             // SCHRITT 1: Erstelle Kernel mit MCP-Tools für Function Calling
             var builder = Kernel.CreateBuilder();
             builder.Services.AddAzureOpenAIChatCompletion( // Azure OpenAI hinzufügen
-                deploymentName: "gpt-4.1-deployment", 
+                deploymentName: "gpt-4.1-deployment",
                 endpoint: "https://ts-openai-testing.openai.azure.com/",
                 apiKey: this.apiKey.Trim()
             );
@@ -56,7 +56,7 @@ public class RouterService
             var kernel = builder.Build(); // Kernel erstellen
 
             McpToolsRegistry.RegisterTools(kernel, docDbService, calendarService, conversationId); // Registriere MCP-Tools (search_documents, add_document_to_chat, list_calendar_events, create_calendar_event, delete_calendar_event)
-            
+
             var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service für LLM-Anfragen
             var chatHistory = new ChatHistory(); // Chat-History erstellen (System + User)
 
@@ -110,7 +110,7 @@ public class RouterService
                 Temperature = 0.1, // Niedrige Temperature für deterministisches Verhalten
                 MaxTokens = 1000 // Maximale Antwort-Länge
             };
-            
+
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Sende Anfrage mit Function Calling...");
             System.Diagnostics.Debug.WriteLine($"[ROUTER] User Message: {userMessage}");
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Has File: {hasFile}");
@@ -131,48 +131,48 @@ public class RouterService
             System.Diagnostics.Debug.WriteLine($"[ROUTER] === GPT-4 RAW RESPONSE ===");
             System.Diagnostics.Debug.WriteLine(responseText);
             System.Diagnostics.Debug.WriteLine($"[ROUTER] === END RAW RESPONSE ===");
-            
+
             int itemCount = 0; // Variable für Item-Count
             if (response.Items != null) // Response hat Items?
             {
                 itemCount = response.Items.Count; // Setze Item-Count
             }
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Response Items: {itemCount}");
-            
+
             // SCHRITT 2: Prüfe ob LLM Tool-Calls ausführen möchte
             List<Document> foundDocuments = new List<Document>(); // Liste für gefundene Dokumente
             bool hasToolCalls = false; // Flag: Wurde Tool aufgerufen?
-            
-            
+
+
             if (response.Items != null) // LLM hat Items zurückgegeben?
             {
                 foreach (var item in response.Items) // Durchlaufe alle Items
                 {
                     System.Diagnostics.Debug.WriteLine($"[ROUTER] Item-Typ: {item.GetType().Name}");
-                    
+
                     if (item is Microsoft.SemanticKernel.FunctionCallContent functionCall) // Ist Item ein Function-Call?
                     {
                         hasToolCalls = true; // Flag: Tool wurde aufgerufen
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] ? Tool-Call erkannt: {functionCall.FunctionName}");
-                        
+
                         try
                         {
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Plugin: {functionCall.PluginName}, Function: {functionCall.FunctionName}");
-                            
+
                             var function = kernel.Plugins.GetFunction(functionCall.PluginName, functionCall.FunctionName); // Hole registrierte Function
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Function gefunden, führe aus...");
-                            
+
                             var result = await function.InvokeAsync(kernel, functionCall.Arguments); // Führe Tool manuell aus mit Arguments
-                            
+
                             var resultText = result.ToString(); // Tool-Result zu String konvertieren
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool Result: {resultText}");
-                            
-                            
+
+
                             // search_documents Tool wurde aufgerufen
                             if (functionCall.FunctionName == "search_documents") // War Tool search_documents?
                             {
                                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Parsing JSON...");
-                var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // Parse JSON-Result
+                                var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // Parse JSON-Result
                                 bool hasToolResult = false; // Flag für ToolResult vorhanden
                                 bool hasDocIds = false; // Flag für DocumentIds vorhanden
                                 if (toolResult != null) // ToolResult vorhanden?
@@ -239,14 +239,14 @@ public class RouterService
                                     {
                                         List<string> fileNames = new List<string>(); // Erstelle Liste für Dateinamen
                                         foreach (Document d in foundDocuments) // Gehe durch alle gefundenen Dokumente
-                                                                {
-                                                                    string docFileName = string.Empty; // Initialisiere Dateiname
-                                                                    if (d.FileName != null) // Dateiname vorhanden?
-                                                                    {
-                                                                        docFileName = d.FileName; // Übernehme Dateiname
-                                                                    }
-                                                                    fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
-                                                                }
+                                        {
+                                            string docFileName = string.Empty; // Initialisiere Dateiname
+                                            if (d.FileName != null) // Dateiname vorhanden?
+                                            {
+                                                docFileName = d.FileName; // Übernehme Dateiname
+                                            }
+                                            fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
+                                        }
                                         string fileNamesList = string.Join(", ", fileNames); // Verbinde Dateinamen mit Komma
                                         message = $"{toolResultFound} Dokument(e) gefunden: {fileNamesList}";
                                     }
@@ -254,10 +254,10 @@ public class RouterService
                                     {
                                         message = "Keine Dokumente gefunden.";
                                     }
-                                    
-                                    
+
+
                                     System.Diagnostics.Debug.WriteLine($"[ROUTER] Returning: {message}");
-                                    
+
                                     RouterResponse searchResponse = new RouterResponse(); // Erstelle neue RouterResponse
                                     searchResponse.ShouldRoute = false; // Kein Routing nötig
                                     searchResponse.DirectResponse = message;
@@ -567,7 +567,7 @@ public class RouterService
                                     {
                                         errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
                                     }
-                                    
+
                                     RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
                                     addErrorResponse.ShouldRoute = false; // Kein Routing nötig
                                     addErrorResponse.DirectResponse = errorMessage;
@@ -588,19 +588,19 @@ public class RouterService
                     }
                 }
             }
-            
+
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tools aufgerufen: {hasToolCalls}");
-            
+
             // SCHRITT 3: Keine Tools aufgerufen ? Fallback auf JSON-basiertes Intent-Routing
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Keine Tools genutzt, prüfe Intent-JSON...");
-            
+
             if (responseText.TrimStart().StartsWith("{")) // Response ist JSON?
             {
                 try
                 {
                     var routingJson = JsonSerializer.Deserialize<RoutingResponseJson>(responseText, // Parse JSON-Response
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitive
-                    
+
                     if (routingJson != null && routingJson.needsRouting == true) // Routing nötig?
                     {
                         string targetService = "conversation"; // Standardmäßig Conversation
@@ -608,15 +608,15 @@ public class RouterService
                         {
                             targetService = "dataAnalysis";
                         }
-                        
+
                         int maxTokens = 500; // Standard Token-Limit für Conversation (reicht für kurze UND lange Antworten)
                         if (targetService == "dataAnalysis") // DataAnalysis gewählt?
                         {
                             maxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
                         }
-                        
+
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
-                        
+
                         RouterResponse intentResponse = new RouterResponse(); // Erstelle neue RouterResponse
                         intentResponse.ShouldRoute = true; // Routing nötig
                         intentResponse.DirectResponse = null;
@@ -643,15 +643,15 @@ public class RouterService
             if (fallbackIntent.Intent == "document_search") // Intent ist Dokumenten-Suche?
             {
                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback-Suche: '{fallbackIntent.SearchQuery}'");
-                
+
                 string searchQuery = string.Empty; // Variable für Such-Query
                 if (fallbackIntent.SearchQuery != null) // Such-Query vorhanden?
                 {
                     searchQuery = fallbackIntent.SearchQuery; // Setze Such-Query
                 }
-                
+
                 var documents = await docDbService.SearchDocumentsAsync(searchQuery); // Suche in Datenbank
-                
+
                 string message; // Variable für Nachricht
                 if (documents.Count > 0) // Dokumente gefunden?
                 {
@@ -672,7 +672,7 @@ public class RouterService
                 {
                     message = "Keine Dokumente gefunden.";
                 }
-                
+
                 RouterResponse fallbackSearchResponse = new RouterResponse(); // Erstelle neue RouterResponse
                 fallbackSearchResponse.ShouldRoute = false; // Kein Routing nötig
                 fallbackSearchResponse.DirectResponse = message;
@@ -683,25 +683,25 @@ public class RouterService
                 fallbackSearchResponse.ToolWasUsed = true; // Tool-ähnlich (DB-Suche)
                 return fallbackSearchResponse;
             }
-            
+
             // Normales Intent-Routing (Conversation oder DataAnalysis)
             string finalTargetService = "conversation"; // Standardmäßig Conversation
             if (fallbackIntent.Intent == "dataAnalysis") // Intent ist DataAnalysis?
             {
                 finalTargetService = "dataAnalysis";
             }
-            
+
             int finalMaxTokens = 500; // Standard Token-Limit für Conversation
             if (finalTargetService == "dataAnalysis") // DataAnalysis gewählt?
             {
                 finalMaxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
             }
-            
+
             RouterResponse finalResponse = new RouterResponse(); // Erstelle neue RouterResponse
             finalResponse.ShouldRoute = true; // Routing nötig
-            finalResponse.DirectResponse = null; 
-            finalResponse.TargetService = finalTargetService; 
-            finalResponse.MaxTokens = finalMaxTokens; 
+            finalResponse.DirectResponse = null;
+            finalResponse.TargetService = finalTargetService;
+            finalResponse.MaxTokens = finalMaxTokens;
             finalResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
             finalResponse.Reason = $"Intent-Routing (Fallback): {fallbackIntent.Intent}";
             finalResponse.ToolWasUsed = false; // Keine Tools
@@ -721,12 +721,12 @@ public class RouterService
             endpoint: "https://ts-openai-testing.openai.azure.com/",
             apiKey: this.apiKey.Trim()
         );
-        
+
         var kernel = builder.Build(); // Kernel erstellen
         var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service
-        
+
         var chatHistory = new ChatHistory();
-        string systemPrompt = 
+        string systemPrompt =
             "Du bist ein Intent-Klassifizierer. Analysiere die User-Nachricht und gib NUR JSON zur\u00fcck:\n\n" +
             "Intents:\n" +
             "- 'document_search': User fragt nach Dokumenten (z.B. 'Hast du Dokumente \u00fcber X?')\n" +
@@ -739,16 +739,16 @@ public class RouterService
             "{\"intent\": \"document_search\", \"searchQuery\": \"Python\"}\n" +
             "{\"intent\": \"document_add\", \"documentId\": 5}\n" +
             "{\"intent\": \"conversation\"}";
-        
+
         chatHistory.AddSystemMessage(systemPrompt); // F\u00fcge System-Prompt hinzu
         chatHistory.AddUserMessage(userMessage); // F\u00fcge User-Nachricht hinzu
-        
+
         var settings = new OpenAIPromptExecutionSettings // Execution-Settings
         {
             Temperature = 0.1, // Niedrige Temperature für deterministisches Verhalten
             MaxTokens = 200 // Maximale Antwort-Länge
         };
-        
+
         var response = await chatService.GetChatMessageContentAsync(chatHistory, settings, kernel); // Sende Anfrage an LLM
 
         string jsonResponse = "{}"; // Standard: Leeres JSON
@@ -760,11 +760,11 @@ public class RouterService
         System.Diagnostics.Debug.WriteLine($"[ROUTER] === ClassifyIntentAsync RAW RESPONSE ===");
         System.Diagnostics.Debug.WriteLine(jsonResponse);
         System.Diagnostics.Debug.WriteLine($"[ROUTER] === END CLASSIFY RESPONSE ===");
-        
+
         var intent = JsonSerializer.Deserialize<IntentJson>(jsonResponse, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Parse JSON
-        
+
         IntentResult result = new IntentResult(); // Erstelle neues IntentResult
-        
+
         if (intent != null && intent.intent != null) // Intent vorhanden?
         {
             result.Intent = intent.intent;
@@ -773,12 +773,12 @@ public class RouterService
         {
             result.Intent = "conversation";
         }
-        
+
         if (intent != null)
         {
             result.SearchQuery = intent.searchQuery;
         }
-        
+
         if (intent != null && intent.documentId != null) // Dokument-ID vorhanden?
         {
             result.DocumentId = intent.documentId.Value;
@@ -787,7 +787,7 @@ public class RouterService
         {
             result.DocumentId = 0;
         }
-        
+
         return result;
     }
 
@@ -795,89 +795,89 @@ public class RouterService
 
     private class RoutingResponseJson // JSON-Klasse: Intent-basiertes Routing-Response
     {
-        public bool needsRouting { get; set; } // Routing nötig?
-        public string? intent { get; set; } // Intent (z.B. "conversation", "dataAnalysis")
+        public bool needsRouting { get; set; }
+        public string? intent { get; set; }
     }
 
     private class SearchResultJson // JSON-Klasse: Ergebnis von search_documents Tool
     {
-        public int found { get; set; } // Anzahl gefundener Dokumente
-        public List<int>? documentIds { get; set; } // Liste der Dokument-IDs
-        public string? message { get; set; } // Optionale Nachricht
+        public int found { get; set; }
+        public List<int>? documentIds { get; set; }
+        public string? message { get; set; }
     }
 
     private class AddDocumentResultJson // JSON-Klasse: Ergebnis von add_document_to_chat Tool
     {
-        public bool success { get; set; } // Erfolgreich hinzugefügt?
-        public int documentId { get; set; } // Dokument-ID
-        public string? fileName { get; set; } // Dateiname
-        public string? message { get; set; } // Optionale Nachricht
+        public bool success { get; set; }
+        public int documentId { get; set; }
+        public string? fileName { get; set; }
+        public string? message { get; set; }
     }
 
     private class IntentJson // JSON-Klasse: Intent-Klassifizierung per GPT-4
     {
-        public string? intent { get; set; } // Intent (z.B. "document_search", "conversation")
-        public string? searchQuery { get; set; } // Such-Query (bei document_search)
-        public int? documentId { get; set; } // Dokument-ID (bei document_add)
+        public string? intent { get; set; }
+        public string? searchQuery { get; set; }
+        public int? documentId { get; set; }
     }
 
     private class IntentResult // Klasse: Ergebnis von ClassifyIntentAsync
     {
-        public string Intent { get; set; } = "conversation"; // Intent (Standard: "conversation")
-        public string? SearchQuery { get; set; } // Such-Query (oder null)
-        public int DocumentId { get; set; } // Dokument-ID (Standard: 0)
+        public string Intent { get; set; } = "conversation";
+        public string? SearchQuery { get; set; }
+        public int DocumentId { get; set; }
     }
 
     private class CalendarListResultJson // JSON-Klasse: Ergebnis von list_calendar_events Tool
     {
-        public int found { get; set; } // Anzahl gefundener Termine
-        public List<CalendarEventJson>? events { get; set; } // Liste der Termine
-        public string? message { get; set; } // Optionale Nachricht
+        public int found { get; set; }
+        public List<CalendarEventJson>? events { get; set; }
+        public string? message { get; set; }
     }
 
     private class CalendarEventJson // JSON-Klasse: Einzelner Termin in list_calendar_events
     {
-        public int id { get; set; } // Termin-ID
-        public string date { get; set; } = string.Empty; // Datum formatiert
-        public string title { get; set; } = string.Empty; // Titel
-        public string time { get; set; } = string.Empty; // Uhrzeit oder "Ganztägig"
-        public int color { get; set; } // Farbindex
+        public int id { get; set; }
+        public string date { get; set; } = string.Empty;
+        public string title { get; set; } = string.Empty;
+        public string time { get; set; } = string.Empty;
+        public int color { get; set; }
     }
 
     private class CalendarCreateResultJson // JSON-Klasse: Ergebnis von create_calendar_event Tool
     {
-        public bool success { get; set; } // Erfolgreich erstellt?
-        public string? message { get; set; } // Nachricht
-        public int eventId { get; set; } // ID des neuen Termins
+        public bool success { get; set; }
+        public string? message { get; set; }
+        public int eventId { get; set; }
     }
 
     private class CalendarDeleteResultJson // JSON-Klasse: Ergebnis von delete_calendar_event Tool
     {
-        public bool success { get; set; } // Erfolgreich gelöscht?
-        public bool needsClarification { get; set; } // Mehrere Termine gefunden? Nachfragen nötig?
-        public string? message { get; set; } // Nachricht
-        public int eventId { get; set; } // ID des gelöschten Termins
-        public List<CalendarEventJson>? events { get; set; } // Liste der Termine (bei Mehrdeutigkeit)
+        public bool success { get; set; }
+        public bool needsClarification { get; set; }
+        public string? message { get; set; }
+        public int eventId { get; set; }
+        public List<CalendarEventJson>? events { get; set; }
     }
 
     private class CalendarUpdateResultJson // JSON-Klasse: Ergebnis von update_calendar_event Tool
     {
-        public bool success { get; set; } // Erfolgreich aktualisiert?
-        public bool needsClarification { get; set; } // Mehrere Termine gefunden? Nachfragen nötig?
-        public string? message { get; set; } // Nachricht
-        public int eventId { get; set; } // ID des aktualisierten Termins
-        public List<CalendarEventJson>? events { get; set; } // Liste der Termine (bei Mehrdeutigkeit)
+        public bool success { get; set; }
+        public bool needsClarification { get; set; }
+        public string? message { get; set; }
+        public int eventId { get; set; }
+        public List<CalendarEventJson>? events { get; set; }
     }
 }
 
 public class RouterResponse // Klasse: Response des RouterService (wird an ChatCoordinator zurückgegeben)
 {
-    public bool ShouldRoute { get; set; } // Soll zu anderem Service geroutet werden?
-    public string? DirectResponse { get; set; } // Direkte Antwort an User (wenn kein Routing)
-    public string TargetService { get; set; } = string.Empty; // Ziel-Service ("conversation" oder "dataAnalysis")
-    public int MaxTokens { get; set; } // Token-Limit für Ziel-Service
-    public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei Dokument-Suche)
-    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>(); // Gefundene Termine (bei Kalender-Tools)
-    public string Reason { get; set; } = string.Empty; // Grund für Routing/Direktantwort
-    public bool ToolWasUsed { get; set; } // Wurde Tool verwendet?
+    public bool ShouldRoute { get; set; }
+    public string? DirectResponse { get; set; }
+    public string TargetService { get; set; } = string.Empty;
+    public int MaxTokens { get; set; }
+    public List<Document> FoundDocuments { get; set; } = new List<Document>();
+    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
+    public string Reason { get; set; } = string.Empty;
+    public bool ToolWasUsed { get; set; }
 }

@@ -33,7 +33,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
         {
             try
             {
-                object? toolInstance = null; // Instanz der Tool-Klasse
+                object? toolInstance = null;
 
                 // Versuche verschiedene Constructor-Signaturen (DocumentTools, CalendarTools haben unterschiedliche Parameter)
                 var docConstructor = toolType.GetConstructor(new[] { typeof(DocumentDbService), typeof(int) }); // Constructor für DocumentTools

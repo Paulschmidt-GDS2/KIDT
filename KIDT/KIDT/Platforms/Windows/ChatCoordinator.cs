@@ -38,18 +38,18 @@ namespace KIDT.Services;
 /// </summary>
 public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, Conversation, DataAnalysis und File-Upload (wird von Home.razor verwendet)
 {
-    private DataAnalysisService dataAnalysis; // Service für Datenanalyse (komplexe Anfragen mit mehr Token)
-    private ConversationService conversation; // Service für Konversation (normale Chat-Anfragen)
-    private FileService fileService; // Service für File-Upload und Text-Extraktion (PDF, TXT etc.)
-    private RouterService router; // Router: Entscheidet ob Conversation oder DataAnalysis + handhabt MCP-Tools
-    private readonly IServiceProvider serviceProvider; // Service Provider für DB-Services (Dependency Injection)
-    private bool isInitialized = false; // Flag: Wurden Services initialisiert? (verhindert doppelte Initialisierung)
-    private string currentFileName = string.Empty; // Aktuell angehängte Datei (Dateiname)
-    private string currentFileContent = string.Empty; // Aktuell angehängte Datei (extrahierter Text-Content)
+    private DataAnalysisService dataAnalysis;
+    private ConversationService conversation;
+    private FileService fileService;
+    private RouterService router;
+    private readonly IServiceProvider serviceProvider;
+    private bool isInitialized = false;
+    private string currentFileName = string.Empty;
+    private string currentFileContent = string.Empty;
 
     public ChatCoordinator(IServiceProvider serviceProvider) // Konstruktor: Wird beim App-Start aufgerufen (Dependency Injection)
     {
-        this.serviceProvider = serviceProvider; // Service Provider speichern für DB-Zugriff
+        this.serviceProvider = serviceProvider;
         this.dataAnalysis = new DataAnalysisService();
         this.conversation = new ConversationService();
         this.fileService = new FileService();
@@ -360,11 +360,10 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
     }
 }
 
-// Klasse für Streaming-Chunks (enthält Text-Teil + Status ob komplett)
-public class ChatStreamChunk
+public class ChatStreamChunk // Klasse für Streaming-Chunks (enthält Text-Teil + Status ob komplett)
 {
-    public string TextChunk { get; set; } = string.Empty; // Text-Teil (ein oder mehrere Tokens)
-    public bool IsComplete { get; set; } = false; // Ist Stream komplett?
-    public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei Dokument-Suche)
-    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>(); // Gefundene Termine (bei Kalender-Tools)
+    public string TextChunk { get; set; } = string.Empty;
+    public bool IsComplete { get; set; } = false;
+    public List<Document> FoundDocuments { get; set; } = new List<Document>();
+    public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
 }

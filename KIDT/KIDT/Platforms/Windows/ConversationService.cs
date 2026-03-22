@@ -11,10 +11,10 @@ namespace KIDT.Services;
 /// </summary>
 public class ConversationService : IAsyncDisposable // Konversations-Service mit asynchroner Aufräumung
 {
-    private Kernel kernel = null!; // Semantic Kernel-Instanz für KI (wird in InitializeAsync initialisiert)
-    private IChatCompletionService chatService = null!; // Chat-Service von Ollama (wird in InitializeAsync initialisiert)
-    private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
-    private string systemInstructions = string.Empty; // System-Instructions (werden bei jedem Call neu verwendet)
+    private Kernel kernel = null!;
+    private IChatCompletionService chatService = null!;
+    private bool isInitialized = false;
+    private string systemInstructions = string.Empty;
 
     public async Task InitializeAsync() // Lädt phi3:mini, lädt Instructions aus MD-Datei
     {
@@ -269,89 +269,5 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         string cleaned = cleanedResponse.ToString().Trim();
         return string.IsNullOrWhiteSpace(cleaned) ? "Hallo! Wie kann ich dir helfen?" : cleaned;
-    }
-
-    private static bool ShouldSkipDebugContent(string currentText) // Prüft ob aktueller Text noch Debug-Informationen enthält
-    {
-        string[] debugMarkers = new[]
-        {
-            "=== Input:",
-            "DENSE_CATEGORIES",
-            "### QUERY REPORT",
-            "As a solution",
-            "--- Begin of code"
-        };
-
-        foreach (var marker in debugMarkers)
-        {
-            if (currentText.Contains(marker, StringComparison.OrdinalIgnoreCase))
-            {
-                return true; // Debug-Content erkannt
-            }
-        }
-
-        return false; // Kein Debug-Content
-    }
-
-    private static bool ContainsDebugMarker(string text) // Prüft ob Text Debug-Marker enthält
-    {
-        string[] debugMarkers = new[]
-        {
-            "=== Input:",
-            "=== Output:",
-            "DENSE_CATEGORIES",
-            "### QUERY REPORT",
-            "As a solution",
-            "--- Begin of code"
-        };
-
-        foreach (var marker in debugMarkers)
-        {
-            if (text.Contains(marker, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string ExtractRealTextFromBuffer(string buffer) // Extrahiert echten Text aus Buffer nach Debug-Bereich
-    {
-        string[] lines = buffer.Split(new[] { '\n', '\r' }, StringSplitOptions.None);
-        StringBuilder realText = new StringBuilder();
-        bool foundDebugEnd = false;
-
-        foreach (string line in lines)
-        {
-            string trimmedLine = line.Trim();
-
-            // Überspringe leere Zeilen oder Trennlinien
-            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.All(c => c == '=' || c == '-'))
-            {
-                continue;
-            }
-
-            // Prüfe ob Zeile Debug-Marker enthält
-            bool isDebugLine = false;
-            string[] debugMarkers = new[] { "===", "DENSE_CATEGORIES", "QUERY REPORT", "Input:", "Output:", "As a solution", "Begin of code" };
-            foreach (var marker in debugMarkers)
-            {
-                if (trimmedLine.Contains(marker, StringComparison.OrdinalIgnoreCase))
-                {
-                    isDebugLine = true;
-                    foundDebugEnd = true;
-                    break;
-                }
-            }
-
-            // Wenn es keine Debug-Zeile ist und wir Debug-Ende gefunden haben
-            if (!isDebugLine && foundDebugEnd && trimmedLine.Length > 3)
-            {
-                realText.AppendLine(line); // Füge echten Text hinzu
-            }
-        }
-
-        return realText.ToString().Trim();
     }
 }

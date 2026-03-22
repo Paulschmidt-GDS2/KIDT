@@ -37,12 +37,12 @@
                         <span class="blinking-cursor">_</span>
                     }
                     else if (msg.IsUser)
-     @* Wenn User-Nachricht *@
+                    @* Wenn User-Nachricht *@
                     {
                         @msg.Text
                     }
                     else
-     @* Wenn Assistent-Nachricht *@
+                    @* Wenn Assistent-Nachricht *@
                     {
                         <span class="typewriter">@msg.DisplayText</span>
 
@@ -164,7 +164,7 @@
                     @for (int i = 0; i < editAvailableColors.Length; i++)
                     {
                         var colorIndex = i;
-                        <div class="color-option @(editColorIndex == colorIndex ? "selected" : "")" 
+                        <div class="color-option @(editColorIndex == colorIndex ? "selected" : "")"
                              style="background: @editAvailableColors[colorIndex];"
                              @onclick="() => editColorIndex = colorIndex">
                         </div>
@@ -175,22 +175,38 @@
             <div class="dialog-reminder-section">
                 <div class="reminder-label-header">Erinnerung</div>
                 <div class="reminder-buttons">
-                    <button type="button" class="reminder-btn @(editReminderMinutes == null ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = null">Keine</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 5 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 5">5 Min</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 15 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 15">15 Min</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 30 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 30">30 Min</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 60 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 60">1 Stunde</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 120 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 120">2 Stunden</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 1440 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 1440">1 Tag</button>
-                    <button type="button" class="reminder-btn @(editReminderMinutes == 10080 ? "active" : "")" 
-                            @onclick="() => editReminderMinutes = 10080">1 Woche</button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == null ? "active" : "")"
+                            @onclick="() => editReminderMinutes = null">
+                        Keine
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 5 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 5">
+                        5 Min
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 15 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 15">
+                        15 Min
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 30 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 30">
+                        30 Min
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 60 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 60">
+                        1 Stunde
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 120 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 120">
+                        2 Stunden
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 1440 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 1440">
+                        1 Tag
+                    </button>
+                    <button type="button" class="reminder-btn @(editReminderMinutes == 10080 ? "active" : "")"
+                            @onclick="() => editReminderMinutes = 10080">
+                        1 Woche
+                    </button>
                 </div>
                 @if (editReminderMinutes != null && editingEvent != null && editingEvent.ReminderShown)
                 {
@@ -209,32 +225,32 @@
 
 @code {
     [Parameter]
-    public int ChatId { get; set; } // Parameter: Chat-ID aus URL
+    public int ChatId { get; set; }
 
     // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
     private class ChatMessage // Klasse für eine Chat-Nachricht
     {
-        public string Text { get; set; } = string.Empty; // Nachrichtentext (nicht mehr angezeigt)
-        public bool IsUser { get; set; } // true = Benutzer, false = Assistent
-        public bool IsLoading { get; set; } // true = Loading-Animation, false = normale Nachricht
-        public string DisplayText { get; set; } = string.Empty; // Angezeigter Text (mit Typewriter)
-        public List<Document> FoundDocuments { get; set; } = new List<Document>(); // Gefundene Dokumente (bei search_documents)
-        public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>(); // Gefundene Termine (bei list_calendar_events)
+        public string Text { get; set; } = string.Empty;
+        public bool IsUser { get; set; }
+        public bool IsLoading { get; set; } 
+        public string DisplayText { get; set; } = string.Empty;
+        public List<Document> FoundDocuments { get; set; } = new List<Document>();
+        public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
     }
 
-    private List<ChatMessage> Messages = new(); // Liste aller Nachrichten
-    private int currentConversationId; // Datenbank: Aktuelle Chat-ID
-    private bool isSaving = false; // Flag: Verhindert Neuer-Chat während Speicherung läuft
-    private ElementReference textareaRef; // Referenz zum textarea-Element für direkten DOM-Zugriff
-    private ElementReference messagesRef; // Referenz zum .messages-Element für Auto-Scroll
+    private List<ChatMessage> Messages = new();
+    private int currentConversationId;
+    private bool isSaving = false; 
+    private ElementReference textareaRef;
+    private ElementReference messagesRef;
 
     // Eingabe: wächst stufenweise pro Zeile
-    private const int MaxRows = 19; // maximale Zeilenanzahl ca. 10cm
-    private const int Cols = 60;    // angenommene Zeichenbreite pro Zeile
-    private int rows = 1;           // aktuelle Zeilenanzahl des Textareas
+    private const int MaxRows = 19;
+    private const int Cols = 60;    
+    private int rows = 1;
 
     private string inputText = string.Empty;
-    private string InputText // Property für Textfeld-Synchronisation
+    private string InputText 
     {
         get { return inputText; } // liefert aktuellen Text zurück
         set // Setter: Wird bei jeder Eingabe aufgerufen
@@ -245,7 +261,7 @@
         }
     }
 
-    private string UploadedFileName = string.Empty; // Aktuell angehängte Datei (leer = keine Datei)
+    private string UploadedFileName = string.Empty;
     private int currentDocumentId = 0; // ID des aktuell verknüpften Dokuments (0 = keins)
 
     // Edit-Dialog Variablen
@@ -491,10 +507,10 @@
             IsLoading = false
         };
 
-        string fullMessage = string.Empty; // Variable für vollständige Nachricht (für DB-Speicherung)
-        List<Document> foundDocuments = new List<Document>(); // Liste für gefundene Dokumente
-        List<CalendarEvent> foundEvents = new List<CalendarEvent>(); // Liste für gefundene Events
-        bool firstChunkReceived = false; // Flag: Wurde erster Chunk empfangen?
+        string fullMessage = string.Empty;
+        List<Document> foundDocuments = new List<Document>();
+        List<CalendarEvent> foundEvents = new List<CalendarEvent>();
+        bool firstChunkReceived = false;
 
         // STREAMING: Empfange Token für Token!
         await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave))
@@ -741,12 +757,12 @@
                 }
                 catch (FormatException) // Fallback falls nicht Base64
                 {
-                    await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+                    await File.WriteAllTextAsync(tempPath, doc.FileContent);
                 }
             }
             else // Text-Dateien direkt schreiben
             {
-                await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
+                await File.WriteAllTextAsync(tempPath, doc.FileContent);
             }
 
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App

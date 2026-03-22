@@ -9,8 +9,8 @@ namespace KIDT.Services.McpTools;
 [McpServerToolType] // Markiert Klasse als MCP-Tool-Container (wird von MCP-Server registriert)
 public class DocumentTools // MCP-Tools: search_documents und add_document_to_chat (werden per Function Calling vom LLM aufgerufen)
 {
-    private readonly DocumentDbService docDbService; // Service für Dokument-DB-Operationen
-    private readonly int conversationId; // Aktuelle Conversation-ID (für add_document_to_chat)
+    private readonly DocumentDbService docDbService;
+    private readonly int conversationId;
 
     public DocumentTools(DocumentDbService documentDbService, int currentConversationId) // Konstruktor: Wird bei RegisterTools aufgerufen (Dependency Injection)
     {
@@ -23,53 +23,53 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff
         [Description("Der Suchbegriff (wird in Dateiname und Textinhalt gesucht)")] string searchQuery)
     {
-        var documents = await this.docDbService.SearchDocumentsAsync(searchQuery); // Suche in DB (case-insensitive)
-        
+        var documents = await this.docDbService.SearchDocumentsAsync(searchQuery); // Suche in DB (case-insensitive, Dateiname + ExtractedText)
+
         if (documents.Count == 0) // Keine Dokumente gefunden?
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: 0 gefunden
-            { 
-                found = 0, 
-                documentIds = new List<int>(), 
-                message = $"Keine Dokumente gefunden für '{searchQuery}'" 
+            {
+                found = 0,
+                documentIds = new List<int>(),
+                message = $"Keine Dokumente gefunden für '{searchQuery}'"
             });
         }
-        
+
         var result = new // Erstelle JSON-Result mit Dokument-Infos
         {
             found = documents.Count, // Anzahl gefundener Dokumente
-            documentIds = new List<int>() // Liste der IDs
+            documentIds = new List<int>() // Liste der IDs (für add_document_to_chat)
         };
 
-        foreach (Document d in documents)
+        foreach (Document d in documents) // Durchlaufe alle gefundenen Dokumente
         {
-            result.documentIds.Add(d.Id);
+            result.documentIds.Add(d.Id); // Füge ID zur Liste hinzu
         }
 
-        var documentList = new List<object>();
-        foreach (Document d in documents)
+        var documentList = new List<object>(); // Initialisiere Liste für Detail-Objekte
+        foreach (Document d in documents) // Durchlaufe alle gefundenen Dokumente
         {
-            bool hasThumbnail = false;
-            if (!string.IsNullOrEmpty(d.ThumbnailBase64))
+            bool hasThumbnail = false; // Flag: Hat Dokument Thumbnail?
+            if (!string.IsNullOrEmpty(d.ThumbnailBase64)) // Thumbnail vorhanden?
             {
-                hasThumbnail = true;
+                hasThumbnail = true; // Setze Flag
             }
 
-            documentList.Add(new
+            documentList.Add(new // Füge Dokument-Info zur Liste hinzu
             {
-                id = d.Id,
-                fileName = d.FileName,
-                fileType = d.FileType,
-                uploadedAt = d.UploadedAt.ToString("dd.MM.yyyy HH:mm"),
-                hasThumbnail = hasThumbnail
+                id = d.Id, // Dokument-ID
+                fileName = d.FileName, // Dateiname
+                fileType = d.FileType, // Dateityp (z.B. "pdf", "txt")
+                uploadedAt = d.UploadedAt.ToString("dd.MM.yyyy HH:mm"), // Formatierter Upload-Zeitstempel
+                hasThumbnail = hasThumbnail // Hat Thumbnail? (bool)
             });
         }
 
-        var finalResult = new
+        var finalResult = new // Erstelle finales Result-Objekt
         {
-            found = documents.Count,
-            documentIds = result.documentIds,
-            documents = documentList
+            found = documents.Count, // Anzahl gefundener Dokumente
+            documentIds = result.documentIds, // Liste der IDs
+            documents = documentList // Liste mit Detail-Objekten
         };
 
         return JsonSerializer.Serialize(finalResult); // Gib JSON zurück
@@ -80,65 +80,65 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     public async Task<string> AddDocumentToChat( // Tool: Fügt Dokument zum aktuellen Chat hinzu (erstellt Link in ConversationDocuments-Tabelle)
         [Description("Die ID des hinzuzufügenden Dokuments (aus search_documents)")] int documentId)
     {
-        bool alreadyLinked = await this.docDbService.IsDocumentLinkedAsync(documentId, this.conversationId); // Prüfe ob bereits hinzugefügt
-        
+        bool alreadyLinked = await this.docDbService.IsDocumentLinkedAsync(documentId, this.conversationId); // Prüfe ob bereits verknüpft
+
         if (alreadyLinked) // Bereits hinzugefügt?
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Bereits hinzugefügt
-            { 
-                success = false, 
-                message = "Dokument ist bereits hinzugefügt", 
+            {
+                success = false,
+                message = "Dokument ist bereits hinzugefügt",
                 documentId
             });
         }
-        
-        bool success = await this.docDbService.LinkDocumentToConversationAsync(documentId, this.conversationId); // Erstelle Link in DB
-        
+
+        bool success = await this.docDbService.LinkDocumentToConversationAsync(documentId, this.conversationId); // Erstelle Link in ConversationDocuments-Tabelle
+
         if (!success) // Hinzufügen fehlgeschlagen? (sollte nicht passieren)
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Fehler
-            { 
-                success = false, 
+            {
+                success = false,
                 message = "Hinzufügen fehlgeschlagen",
                 documentId
             });
         }
-        
-        var document = await this.docDbService.GetDocumentByIdAsync(documentId); // Lade volles Dokument aus DB
-        
+
+        var document = await this.docDbService.GetDocumentByIdAsync(documentId); // Lade volles Dokument aus DB (für Details)
+
         if (document == null) // Dokument nicht gefunden? (sollte nicht passieren)
         {
             return JsonSerializer.Serialize(new  // Gib JSON zurück: Nicht gefunden
-            { 
+            {
                 success = false,
-                message = "Dokument nicht gefunden", 
-                documentId 
+                message = "Dokument nicht gefunden",
+                documentId
             });
         }
-        
+
         var result = new // Erstelle JSON-Result mit Erfolg
         {
-            success = true,
-            message = $"Dokument '{document.FileName}' wurde hinzugefügt",
-            documentId = documentId, 
-            fileName = document.FileName, 
-            fileType = document.FileType,
-            extractedTextLength = 0
+            success = true, // Erfolg-Flag
+            message = $"Dokument '{document.FileName}' wurde hinzugefügt", // Human-readable Message
+            documentId = documentId, // Dokument-ID
+            fileName = document.FileName, // Dateiname
+            fileType = document.FileType, // Dateityp
+            extractedTextLength = 0 // Länge des extrahierten Texts (Initial: 0)
         };
 
-        if (document.ExtractedText != null)
+        if (document.ExtractedText != null) // Extrahierter Text vorhanden?
         {
-            result = new
+            result = new // Erstelle neues Result mit echter Text-Länge
             {
-                success = true,
-                message = $"Dokument '{document.FileName}' wurde hinzugefügt",
-                documentId = documentId,
-                fileName = document.FileName,
-                fileType = document.FileType,
-                extractedTextLength = document.ExtractedText.Length
+                success = true, // Erfolg-Flag
+                message = $"Dokument '{document.FileName}' wurde hinzugefügt", // Human-readable Message
+                documentId = documentId, // Dokument-ID
+                fileName = document.FileName, // Dateiname
+                fileType = document.FileType, // Dateityp
+                extractedTextLength = document.ExtractedText.Length // Länge des extrahierten Texts
             };
         }
-        
+
         return JsonSerializer.Serialize(result); // Gib JSON zurück
     }
 }

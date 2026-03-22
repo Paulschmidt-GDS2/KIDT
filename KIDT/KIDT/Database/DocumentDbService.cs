@@ -7,7 +7,7 @@ namespace KIDT.Database;
 
 public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search + Linking zu Conversations)
 {
-    private readonly ChatDbContext db; // EF Core Datenbank-Context (Dependency Injection)
+    private readonly ChatDbContext db;
 
     public DocumentDbService(ChatDbContext dbContext)
     {
@@ -56,7 +56,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
     {
         var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        
+
         allDocuments.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
         return allDocuments; // Gib sortierte Liste zurück
     }
@@ -85,19 +85,19 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
 
         var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        
+
         var filtered = new List<Document>(); // Erstelle leere Liste für Ergebnis
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             string lowerFileName = d.FileName.ToLower(); // Dateiname in Kleinbuchstaben
             string lowerText = d.ExtractedText.ToLower(); // Text in Kleinbuchstaben
-            
+
             if (lowerFileName.Contains(lowerSearchTerm) || lowerText.Contains(lowerSearchTerm)) // Suchbegriff gefunden?
             {
                 filtered.Add(d);
             }
         }
-        
+
         filtered.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
         return filtered;
     }
@@ -158,7 +158,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
     public async Task<bool> IsDocumentLinkedAsync(int documentId, int conversationId) // Prüfe ob Dokument mit Chat verknüpft ist
     {
         var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        
+
         foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
             if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
@@ -166,7 +166,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -174,7 +174,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
     {
         var query = this.db.ConversationDocuments.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allLinks = await query.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        
+
         var documentIds = new List<int>(); // Erstelle leere Liste für Dokument-IDs
         foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
@@ -183,10 +183,10 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
                 documentIds.Add(cd.DocumentId);
             }
         }
-        
+
         var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
         var result = new List<Document>(); // Erstelle leere Liste für Ergebnis
-        
+
         foreach (int docId in documentIds) // Gehe durch alle gefundenen Dokument-IDs
         {
             foreach (Document d in allDocuments) // Gehe durch alle Dokumente
@@ -198,7 +198,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
                 }
             }
         }
-        
+
         result.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
         return result;
     }

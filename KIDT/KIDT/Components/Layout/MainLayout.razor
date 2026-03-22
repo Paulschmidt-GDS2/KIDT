@@ -49,7 +49,10 @@
         @if (!IsKalenderPage) @* Header nur anzeigen wenn NICHT auf Kalender-Seite *@
         {
             <header>
-                <h3>Header</h3> @* Placeholder *@
+                <div class="header-content">
+                    <img src="images/KIDT-Logo.png" alt="KIDT Logo" class="header-logo" />
+                    <h3 class="header-title">KI-gestützter Dokumenten- und Terminmanager</h3>
+                </div>
             </header>
         }
         <main class="@(IsKalenderPage ? "no-header" : "")"> @* Haupt-Bereich, CSS-Klasse für Kalender-Seite *@

@@ -13,12 +13,12 @@ namespace KIDT.Services;
 /// </summary>
 public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse mit asynchroner Aufräumung
 {
-    private Kernel kernel = null!; // Semantic Kernel-Instanz für KI (wird in InitializeAsync initialisiert)
-    private IChatCompletionService chatService = null!; // Chat-Service von Ollama (wird in InitializeAsync initialisiert)
-    private string systemInstructions = string.Empty; // System-Instructions aus data-analysis-instructions.md
-    private bool isInitialized = false; // Flag: Verhindert mehrfache Initialisierung
-    private DocumentDbService docDbService = null!; // Service für Dokumenten-Zugriff (wird in InitializeAsync initialisiert)
-    private int currentConversationId = 0; // Aktuelle Conversation-ID
+    private Kernel kernel = null!;
+    private IChatCompletionService chatService = null!;
+    private string systemInstructions = string.Empty;
+    private bool isInitialized = false; 
+    private DocumentDbService docDbService = null!;
+    private int currentConversationId = 0;
 
     public async Task InitializeAsync(DocumentDbService documentDbService, int conversationId) // Initialisiere Service
     {

@@ -155,13 +155,54 @@ header {
     border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
     border-left: 3px solid #0D0E0C; /* Dunkle Linie links */
     border-right: 3px solid #0D0E0C; /* Dunkle Linie rechts */
-    text-align: center; /* Text zentrieren */
+    display: flex; /* Flexbox für Zentrierung */
+    align-items: center; /* Vertikal zentrieren */
+    justify-content: center; /* Horizontal zentrieren */
 }
 
-    /* überschrift im Header */
-    header h3 {
-        padding: 10px; /* Innenabstand */
+/* Header-Inhalt Container */
+.header-content {
+    display: flex; /* Flexbox für Logo und Text */
+    align-items: center; /* Vertikal zentrieren */
+    gap: 10px; /* Abstand zwischen Logo und Text */
+}
+
+/* Logo im Header */
+.header-logo {
+    height: 50px; /* Logo-Höhe */
+    width: auto; /* Breite automatisch */
+    display: block; /* Block-Element für bessere Kontrolle */
+}
+
+/* Titel im Header */
+.header-title {
+    margin: 0; /* Kein Margin */
+    padding: 0; /* Kein Padding */
+    color: #0D0E0C; /* */
+    padding-top: 11px; /* Leichter Abstand nach oben für optische Balance */
+    font-family: "Courier New", Courier, monospace; /* Schriftart wie im Rest der App */
+    font-weight: bold; /* Fett */
+    font-size: 22px; /* Etwas größere Schriftgröße */
+    letter-spacing: 0.5px; /* Leichter Buchstabenabstand für bessere Lesbarkeit */
+}
+
+/* Fullscreen-Modus: Proportional 1.3x größer */
+@media (min-width: 1400px) {
+    .header-content {
+        gap: 16px; /* 20px * 1.3 = 26px */
     }
+
+    .header-logo {
+        height: 65px; /* 50px * 1.3 = 65px */
+    }
+
+    .header-title {
+        font-size: 29px; /* 22px * 1.3 = 28.6px ≈ 29px */
+        padding-top: 10px; /* 8px * 1.3 = 10.4px ≈ 10px */
+        letter-spacing: 0.65px; /* 0.5px * 1.3 = 0.65px */
+    }
+}
+
 
 /* Hauptinhalt-Bereich */
 main {
@@ -178,12 +219,12 @@ main {
     min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
 }
 
-/* Main ohne Header (Kalender-Seite): runde Ecken auch oben */
-main.no-header {
-    border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
-    border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
-    border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
-}
+    /* Main ohne Header (Kalender-Seite): runde Ecken auch oben */
+    main.no-header {
+        border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
+        border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
+        border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
+    }
 
 /* Gemeinsame Styles für Header/Main */
 header, main {
@@ -191,3 +232,98 @@ header, main {
     padding: 0; /* Kein Innenabstand */
 }
 
+/* === BENACHRICHTIGUNGEN === */
+
+/* Container für Benachrichtigungen */
+.notifications-container {
+    position: absolute; /* Absolut positioniert über dem Inhalt */
+    top: 70px; /* Abstand vom oberen Bildschirmrand */
+    right: 10px; /* Abstand vom rechten Bildschirmrand */
+    z-index: 1000; /* Über anderen Inhalten schwebend */
+    display: flex; /* Flexbox für Anordnung der Benachrichtigungen */
+    flex-direction: column; /* Stapeln der Benachrichtigungen */
+    gap: 10px; /* Abstand zwischen den Benachrichtigungen */
+}
+
+/* Allgemeiner Stil für Benachrichtigungen */
+.notification {
+    background: #43483d; /* Dunkler Hintergrund für Benachrichtigung */
+    color: #e0e0e0; /* Helle Textfarbe */
+    padding: 10px 15px; /* Innenabstand */
+    border-radius: 8px; /* Abgerundete Ecken */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Schatten für Tiefe */
+    display: flex; /* Flexbox für Inhalt */
+    flex-direction: column; /* Inhalt vertikal anordnen */
+    position: relative; /* Für absolute Positionierung von Icons */
+}
+
+/* Icon in der Benachrichtigung */
+.notification-icon {
+    position: absolute; /* Absolut positioniert innerhalb der Benachrichtigung */
+    top: 10px; /* Abstand vom oberen Rand der Benachrichtigung */
+    left: 10px; /* Abstand vom linken Rand der Benachrichtigung */
+    width: 24px; /* Breite des Icons */
+    height: 24px; /* Höhe des Icons */
+}
+
+/* Titel der Benachrichtigung */
+.notification-title {
+    font-weight: bold; /* Fette Schrift für den Titel */
+    margin-bottom: 5px; /* Abstand nach unten */
+}
+
+/* Inhalt der Benachrichtigung */
+.notification-content {
+    font-size: 14px; /* Schriftgröße des Inhalts */
+    line-height: 1.4; /* Zeilenhöhe für bessere Lesbarkeit */
+}
+
+/* Aktionen in der Benachrichtigung (z.B. Buttons) */
+.notification-actions {
+    margin-top: 10px; /* Abstand nach oben */
+    display: flex; /* Flexbox für Anordnung der Aktionen */
+    gap: 10px; /* Abstand zwischen den Aktionen */
+}
+
+/* Schließen-Button für Benachrichtigung */
+.notification-close {
+    background: none; /* Kein Hintergrund */
+    border: none; /* Kein Rahmen */
+    color: #e0e0e0; /* Helle Farbe für den Button */
+    cursor: pointer; /* Zeiger-Cursor */
+    position: absolute; /* Absolut positioniert innerhalb der Benachrichtigung */
+    top: 10px; /* Abstand vom oberen Rand */
+    right: 10px; /* Abstand vom rechten Rand */
+    font-size: 16px; /* Schriftgröße des Buttons */
+}
+
+/* === SPEZIFISCHE BENACHRICHTIGUNGEN === */
+
+/* Startup-Übersicht */
+.notification-startup {
+    background: #2d3436; /* Etwas hellerer Hintergrund */
+    border-left: 5px solid #00b894; /* Grüner blitzer auf der linken Seite */
+}
+
+/* Event-Erinnerung */
+.notification-event {
+    background: #2d3436; /* Etwas hellerer Hintergrund */
+    border-left: 5px solid #e17055; /* Roter blitzer auf der linken Seite */
+}
+
+/* Farben für Textinhalt je nach Typ */
+.notification-startup .notification-content,
+.notification-event .notification-content {
+    color: #dfe6e9; /* Helle Farbe für den Inhalt */
+}
+
+/* === BEISPIEL-CONTENT FÜR ENTWICKLUNG === */
+
+/* Dummy-Inhalt für Entwicklungszwecke */
+.development-sample {
+    background: #fff; /* Weißer Hintergrund */
+    color: #333; /* Dunkle Textfarbe */
+    padding: 20px; /* Innenabstand */
+    border-radius: 8px; /* Abgerundete Ecken */
+    margin-top: 10px; /* Abstand nach oben */
+}

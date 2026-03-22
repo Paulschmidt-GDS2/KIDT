@@ -107,8 +107,8 @@
                     }
                 </div>
                 <div class="add-event-inline">
-                    <input class="event-input" placeholder="Neuer Termin" @bind="newEventText" />
-                    <button class="add-button" @onclick="() => AddEventForDate(DisplayDay)">hinzufügen</button>
+                    <input class="event-input" placeholder="Neuer Termin" @bind="newEventText" @onkeydown="@(e => { if (e.Key == "Enter") OnDayClick(DisplayDay); })" />
+                    <button class="add-button" @onclick="() => OnDayClick(DisplayDay)">hinzufügen</button>
                 </div>
             </div>
         }
@@ -264,27 +264,27 @@
 </div>
 
 @code {
-    private string currentView = "Month"; // Aktuelle Ansicht: "Month" | "Week" | "Day"
-    private DateTime selectedDate = DateTime.Today; // Aktuell fokussiertes Datum
-    private DateTime DisplayMonth => new DateTime(selectedDate.Year, selectedDate.Month, 1); // Erster Tag des angezeigten Monats
-    private DateTime DisplayDay => selectedDate.Date; // Angezeigter Tag in Tagesansicht
-    private List<DateTime> MonthCells = new(); // 42 Zellen für Monats-Grid (6 Wochen)
-    private List<DateTime> WeekDays = new(); // 7 Tage für Wochenansicht
-    private string[] DayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" }; // Wochentag-Kürzel
-    private CultureInfo germanCulture = new CultureInfo("de-DE"); // Deutsche Kultur für Datums-Formatierung
+    private string currentView = "Month";
+    private DateTime selectedDate = DateTime.Today;
+    private DateTime DisplayMonth => new DateTime(selectedDate.Year, selectedDate.Month, 1);
+    private DateTime DisplayDay => selectedDate.Date;
+    private List<DateTime> MonthCells = new();
+    private List<DateTime> WeekDays = new();
+    private string[] DayNames = new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
+    private CultureInfo germanCulture = new CultureInfo("de-DE");
 
-    private Dictionary<DateTime, List<CalendarEvent>> events = new(); // Termine nach Datum gruppiert (Cache)
-    private string[] availableColors = new[] { "#848877", "#A8C5DD", "#F4C2B8", "#C3E5A4", "#F7DC9F", "#D4B5E8", "#FFB6C1", "#B0D9B0" }; // 8 Farben
+    private Dictionary<DateTime, List<CalendarEvent>> events = new();
+    private string[] availableColors = new[] { "#848877", "#A8C5DD", "#F4C2B8", "#C3E5A4", "#F7DC9F", "#D4B5E8", "#FFB6C1", "#B0D9B0" };
 
-    private bool showAddDialog = false; // Zeigt Dialog-Zustand an
-    private bool showEditDialog = false; // Zeigt Edit-Dialog an
-    private DateTime dialogDate = DateTime.Today; // Datum für neuen Termin
-    private string newEventText = string.Empty; // Eingabefeld für Termintitel
-    private int selectedColorIndex = 0; // Ausgewählte Farbe für neuen Termin
-    private CalendarEvent editingEvent = new CalendarEvent(); // Event das gerade bearbeitet wird (Initialisiere mit neuem Objekt)
-    private bool isAllDay = true; // Ganztägig-Option
-    private string selectedTime = "09:00"; // Ausgewählte Uhrzeit
-    private int? newEventReminderMinutes = null; // Erinnerungszeit für neuen Termin
+    private bool showAddDialog = false;
+    private bool showEditDialog = false;
+    private DateTime dialogDate = DateTime.Today;
+    private string newEventText = string.Empty;
+    private int selectedColorIndex = 0;
+    private CalendarEvent editingEvent = new CalendarEvent();
+    private bool isAllDay = true;
+    private string selectedTime = "09:00";
+    private int? newEventReminderMinutes = null;
 
     protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
@@ -531,6 +531,7 @@
         newEvent.IsAllDay = isAllDay;
         newEvent.Time = time;
         newEvent.HasTime = hasTime;
+        newEvent.ReminderMinutesBefore = newEventReminderMinutes; // Erinnerung hinzufügen
 
         await CalendarService.AddEventAsync(newEvent); // In Datenbank speichern
         await LoadEventsAsync(); // Termine neu laden
@@ -538,6 +539,7 @@
         newEventText = string.Empty; // Eingabefeld leeren
         selectedColorIndex = 0; // Farbe zurücksetzen
         isAllDay = true; // Zurücksetzen
+        newEventReminderMinutes = null; // Erinnerung zurücksetzen
     }
 
     private List<CalendarEvent> GetEventsForDate(DateTime date) // Liefert alle Termine für ein Datum

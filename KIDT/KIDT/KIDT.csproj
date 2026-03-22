@@ -45,6 +45,35 @@
     
     <!-- Prompt Files -->
     <MauiAsset Include="Prompts\*.md" />
+    <Compile Remove="Database\Migrations\**" />
+    <Compile Remove="Data\**" />
+    <Compile Remove="Docs\**" />
+    <Compile Remove="Migrations\**" />
+    <Compile Remove="Tests\**" />
+    <Compile Remove="wwwroot\js\**" />
+    <Content Remove="Database\Migrations\**" />
+    <Content Remove="Data\**" />
+    <Content Remove="Docs\**" />
+    <Content Remove="Migrations\**" />
+    <Content Remove="Tests\**" />
+    <Content Remove="wwwroot\js\**" />
+    <EmbeddedResource Remove="Database\Migrations\**" />
+    <EmbeddedResource Remove="Data\**" />
+    <EmbeddedResource Remove="Docs\**" />
+    <EmbeddedResource Remove="Migrations\**" />
+    <EmbeddedResource Remove="Tests\**" />
+    <EmbeddedResource Remove="wwwroot\js\**" />
+    <MauiXaml Remove="Database\Migrations\**" />
+    <MauiXaml Remove="Data\**" />
+    <MauiXaml Remove="Docs\**" />
+    <MauiXaml Remove="Migrations\**" />
+    <MauiXaml Remove="Tests\**" />
+    <None Remove="Database\Migrations\**" />
+    <None Remove="Data\**" />
+    <None Remove="Docs\**" />
+    <None Remove="Migrations\**" />
+    <None Remove="Tests\**" />
+    <None Remove="wwwroot\js\**" />
     
     <!-- OpenAI API Key -->
     <None Include="openai-api-key.txt" CopyToOutputDirectory="PreserveNewest" />
@@ -73,12 +102,27 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Database\Migrations\" />
-    <Folder Include="Data\" />
-    <Folder Include="Docs\" />
-    <Folder Include="Migrations\" />
-    <Folder Include="Tests\" />
-    <Folder Include="wwwroot\js\" />
+    <PRIResource Remove="wwwroot\js\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PRIResource Remove="Data\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PRIResource Remove="Database\Migrations\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PRIResource Remove="Docs\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PRIResource Remove="Migrations\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PRIResource Remove="Tests\**" />
   </ItemGroup>
 
 </Project>

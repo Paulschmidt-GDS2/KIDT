@@ -79,10 +79,10 @@ public class ChatDbService // Service für Datenbank-Zugriff
     public async Task<List<Message>> LoadMessagesAsync(int conversationId) // Nachrichten laden
     {
         var query = this.db.Messages.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
-        
+
         var filtered = new List<Message>(); // Erstelle leere Liste für Ergebnis
         var allMessages = await query.ToListAsync(); // Lade alle Nachrichten aus Datenbank
-        
+
         foreach (Message m in allMessages) // Gehe durch alle Nachrichten
         {
             if (m.ConversationId == conversationId) // Gehört Nachricht zu diesem Chat?
@@ -90,7 +90,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 filtered.Add(m); // Füge zur gefilterten Liste hinzu
             }
         }
-        
+
         filtered.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp)); // Sortiere nach Zeitstempel
         return filtered;
     }
@@ -131,7 +131,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
         var allConversations = await this.db.Conversations
             .AsNoTracking()
             .ToListAsync(); // Lade alle Conversations aus Datenbank (OHNE Include!)
-        
+
         foreach (Conversation c in allConversations) // Gehe durch alle Conversations
         {
             // Lade verknüpfte Dokumente via ConversationDocuments (getrennte Query!)
@@ -147,9 +147,9 @@ public class ChatDbService // Service für Datenbank-Zugriff
                     conversationDocs.Add(cd); // Füge hinzu
                 }
             }
-            
+
             c.LinkedDocuments = new List<Document>(); // Initialisiere Liste
-            
+
             foreach (var cd in conversationDocs) // Gehe durch alle Verknüpfungen
             {
                 var allDocuments = await this.db.Documents
@@ -175,7 +175,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 }
             }
         }
-        
+
         allConversations.Sort((a, b) => b.CreatedAt.CompareTo(a.CreatedAt)); // Sortiere nach Datum (neueste zuerst)
         return allConversations; // Gib sortierte Liste zurück
     }
@@ -183,7 +183,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
     public async Task UpdateConversationTitleAsync(int conversationId) // Aktualisiere Chat-Titel
     {
         var allMessages = await this.db.Messages.ToListAsync(); // Lade alle Nachrichten aus Datenbank
-        
+
         var userMessages = new List<Message>(); // Erstelle leere Liste für User-Nachrichten
         foreach (Message m in allMessages) // Gehe durch alle Nachrichten
         {
@@ -192,7 +192,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 userMessages.Add(m);
             }
         }
-        
+
         userMessages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp)); // Sortiere nach Zeitstempel
 
         Message firstUserMessage = new Message(); // Initialisiere mit neuem Objekt
@@ -248,9 +248,9 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 messages.Add(m);
             }
         }
-        
+
         this.db.Messages.RemoveRange(messages); // Lösche alle Nachrichten
-        
+
         // Lösche ConversationDocuments-Verknüpfungen (Documents selbst bleiben erhalten!)
         var allConversationDocs = await this.db.ConversationDocuments.ToListAsync(); // Lade alle ConversationDocuments
         var conversationDocs = new List<ConversationDocument>(); // Erstelle leere Liste
@@ -261,7 +261,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 conversationDocs.Add(cd); // Füge hinzu
             }
         }
-        
+
         this.db.ConversationDocuments.RemoveRange(conversationDocs); // Lösche Verknüpfungen
 
         var allConversations = await this.db.Conversations.ToListAsync();
@@ -281,7 +281,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
         {
             this.db.Conversations.Remove(conv);
         }
-        
+
         await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
     }
 }
