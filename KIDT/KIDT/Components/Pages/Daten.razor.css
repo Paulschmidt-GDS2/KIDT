@@ -132,7 +132,7 @@
     flex-direction: column; /* Kinder vertikal stapeln */
     gap: 12px; /* Abstand zwischen Elementen */
     min-height: 280px; /* größere MindestHöhe für Preview */
-    max-height: 400px; /* Maximale Höhe (verhindert zu gro×e Boxen) */
+    max-height: 420px; /* Erhöhte maximale Höhe (mehr Platz für Datum) */
     max-width: 320px; /* Maximale Breite pro Box (verhindert zu breite Boxen) */
     width: 100%; /* Nutzt verfügbaren Platz im Grid */
     box-sizing: border-box; /* Padding in Breite einrechnen */
@@ -146,7 +146,7 @@
         padding: 21px; /* 16px * 1.3 = 21px */
         gap: 16px; /* 12px * 1.3 = 16px */
         min-height: 364px; /* 280px * 1.3 = 364px */
-        max-height: 520px; /* 400px * 1.3 = 520px */
+        max-height: 546px; /* 420px * 1.3 = 546px */
         max-width: 416px; /* 320px * 1.3 = 416px */
     }
 }
@@ -208,19 +208,19 @@
 
 /* === CARD-CONTENT === */
 
-/* Klickbarer Bereich für Chat ×ffnen */
+/* Klickbarer Bereich für Chat öffnen */
 .card-content {
     cursor: pointer; /* Zeiger-Cursor */
     display: flex; /* Flexbox aktivieren */
     flex-direction: column; /* Kinder vertikal stapeln */
-    gap: 12px; /* Abstand zwischen Elementen */
+    gap: 8px; /* Reduzierter Abstand zwischen Elementen (weniger Platz zwischen Dateiname und Datum) */
     flex: 1; /* Nimmt verfügbaren Platz ein */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
 @media (min-width: 1400px) {
     .card-content {
-        gap: 16px; /* 12px * 1.3 = 15.6px ? 16px */
+        gap: 10px; /* 8px * 1.3 = 10.4px → 10px */
     }
 }
 
@@ -331,14 +331,14 @@
     font-size: 12px; /* Schriftgröße */
     opacity: 0.6; /* Leicht transparent */
     text-align: center; /* Zentriert */
-    padding-top: 8px; /* Abstand nach oben */
+    padding-top: 4px; /* Reduzierter Abstand nach oben (spart Platz) */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
 @media (min-width: 1400px) {
     .card-date {
-        font-size: 16px; /* 12px * 1.3 = 15.6px ? 16px */
-        padding-top: 10px; /* 8px * 1.3 = 10.4px ? 10px */
+        font-size: 16px; /* 12px * 1.3 = 15.6px → 16px */
+        padding-top: 5px; /* 4px * 1.3 = 5.2px → 5px */
     }
 }
 

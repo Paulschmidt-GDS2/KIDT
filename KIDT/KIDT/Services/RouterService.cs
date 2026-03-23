@@ -42,6 +42,7 @@ public class RouterService
         using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für DB-Zugriff
         var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService für Dokument-Operationen
         var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>(); // Hole CalendarService für Kalender-Operationen
+        var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Hole ChatDbService für Chat-History-Zugriff
 
         try
         {
@@ -62,58 +63,76 @@ public class RouterService
 
             // Aktuelles Datum für relative Datumsangaben
             DateTime now = DateTime.Now;
-            string currentDate = now.ToString("yyyy-MM-dd"); // Format: 2025-01-15
-            string currentDateGerman = now.ToString("dd.MM.yyyy"); // Format: 15.01.2025
+            string currentDate = now.ToString("yyyy-MM-dd");
+            string currentDateGerman = now.ToString("dd.MM.yyyy");
             int currentYear = now.Year;
 
             string systemPrompt =
-                "Du bist ein Router-Agent mit Dokumenten- und Kalender-Tools.\n\n" +
-                $"WICHTIG: AKTUELLES DATUM: {currentDate} ({currentDateGerman}), Jahr: {currentYear}\n" +
-                "Nutze dieses Datum für relative Angaben wie 'heute', 'morgen', '20.03' (= 20.03.{currentYear})!\n\n" +
-                "KRITISCH WICHTIG: Du hast KEINE Informationen über Dokumente oder Termine!\n" +
-                "Du MUSST die Tools nutzen wenn User danach fragt!\n\n" +
-                "Verfügbare Tools:\n" +
-                "DOKUMENTE:\n" +
-                "- search_documents(query): Sucht Dokumente in Datenbank\n" +
-                "- add_document_to_chat(documentId): Fügt Dokument zum Chat hinzu\n\n" +
-                "KALENDER:\n" +
-                "- list_calendar_events(startDate?, endDate?): Listet Termine (optional mit Zeitraum)\n" +
-                "- create_calendar_event(date, title, isAllDay?, time?, colorIndex?, reminderMinutes?): Erstellt Termin\n" +
-                "- update_calendar_event(...): Aktualisiert Termin\n" +
-                "- delete_calendar_event(...): Löscht Termin\n\n" +
-                "REGELN FÜR TERMIN-ERSTELLUNG:\n" +
-                "PFLICHT-Parameter für create_calendar_event:\n" +
-                "  1. date (MUSS explizit genannt sein: 'heute', 'morgen', '20.03', etc.)\n" +
-                "  2. title (Name des Termins)\n" +
-                "  3. isAllDay ODER time (ganztägig oder Uhrzeit)\n\n" +
-                "Wenn IRGENDEIN Pflicht-Parameter fehlt → Route zu conversation!\n\n" +
-                "Beispiele:\n" +
-                "  'Erstelle Termin Paul' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Datum fehlt!)\n" +
-                "  'Neuer Termin heute' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Titel UND Zeit fehlt!)\n" +
-                "  'Termin Meeting heute' → {{\"needsRouting\": true, \"intent\": \"conversation\"}} (Zeit fehlt!)\n" +
-                "  'Meeting heute 14:00' → create_calendar_event(date='{currentDate}', title='Meeting', isAllDay=false, time='14:00')\n" +
-                "  'Zahnarzt morgen ganztägig' → create_calendar_event(date='<morgen berechnen>', title='Zahnarzt', isAllDay=true)\n\n" +
-                "ANDERE REGELN:\n" +
-                "- User fragt nach Dokumenten? → search_documents()\n" +
-                "- User will Dokument hinzufügen? → add_document_to_chat(id)\n" +
-                "- User fragt nach Terminen? → list_calendar_events()\n" +
-                "- User will Termin ändern? → update_calendar_event()\n" +
-                "- User will Termin löschen? → delete_calendar_event()\n" +
-                "- Normale Frage? → {{\"needsRouting\": true, \"intent\": \"conversation\"}}";
+                $"Router-Agent mit Tools. DATUM: {currentDate} ({currentDateGerman}), Jahr: {currentYear}\n\n" +
+                "Du hast KEINE Infos zu Dokumenten/Terminen - nutze Tools!\n\n" +
+                "TERMIN-ERSTELLUNG:\n" +
+                "Pflicht: Titel, Datum, Zeit (ganztaegig/Uhrzeit)\n" +
+                "Analysiere History: Was FEHLT?\n\n" +
+                "Titel-Erkennung:\n" +
+                "- 'Meeting' -> Titel DA\n" +
+                "- 'name ist Test3' -> Titel DA (Test3)\n" +
+                "- 'heißt Zahnarzt' -> Titel DA (Zahnarzt)\n" +
+                "- 'der termin soll Test4 heissen' -> Titel DA (Test4)\n\n" +
+                "Wenn Assistant fragt und User antwortet -> Info vorhanden!\n\n" +
+                "ALLE 3 da? -> create_calendar_event\n\n" +
+                "Infos fehlen? JSON:\n" +
+                "ALLE 3: {\"needsRouting\": true, \"intent\": \"conversation\", \"conversationTask\": \"askForAll\"}\n" +
+                "Nur TITEL: \"askForTitle\"\n" +
+                "Nur DATUM: \"askForDate\"\n" +
+                "Nur ZEIT: \"askForTime\"\n" +
+                "TITEL+DATUM: \"askForTitleAndDate\"\n" +
+                "TITEL+ZEIT: \"askForTitleAndTime\"\n" +
+                "DATUM+ZEIT: \"askForDateAndTime\"\n\n" +
+                "TOOLS: search_documents, add_document_to_chat, list_calendar_events, update_calendar_event, delete_calendar_event\n\n" +
+                "DU BIST ROUTER! Nur Tool-Calls oder JSON!\n" +
+                "KEINE eigenen Texte/Fragen/Erklärungen!";
 
             chatHistory.AddSystemMessage(systemPrompt); // Füge System-Prompt hinzu
-            chatHistory.AddUserMessage(userMessage); // Füge User-Nachricht hinzu
+
+            // WICHTIG: Lade vorherige Chat-History aus DB (Router braucht Kontext für Termin-Erstellung!)
+            // LIMIT: Nur letzte 10 Nachrichten laden (Token-Limit beachten!)
+            if (conversationId > 0) // Bestehender Chat?
+            {
+                var allMessages = await dbService.LoadMessagesAsync(conversationId); // Lade alle Nachrichten
+
+                // Nehme nur die letzten 10 Nachrichten (um Token-Limit nicht zu überschreiten)
+                var recentMessages = allMessages.Count > 10 
+                    ? allMessages.Skip(allMessages.Count - 10).ToList() 
+                    : allMessages;
+
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Lade {recentMessages.Count} vorherige Nachrichten aus DB (von {allMessages.Count} gesamt)...");
+
+                foreach (var msg in recentMessages) // Durchlaufe nur letzte 10 Nachrichten
+                {
+                    if (msg.IsUser) // User-Nachricht?
+                    {
+                        chatHistory.AddUserMessage(msg.Text); // Füge User-Message zur History hinzu
+                    }
+                    else // Assistant-Nachricht
+                    {
+                        chatHistory.AddAssistantMessage(msg.Text); // Füge Assistant-Message zur History hinzu
+                    }
+                }
+            }
+
+            chatHistory.AddUserMessage(userMessage); // Füge aktuelle User-Nachricht hinzu (NACH der History!)
 
             var executionSettings = new OpenAIPromptExecutionSettings // Execution-Settings für LLM-Anfrage
             {
                 ToolCallBehavior = ToolCallBehavior.EnableKernelFunctions, // Enable Function Calling (manuelles Handling!)
                 Temperature = 0.1, // Niedrige Temperature für deterministisches Verhalten
-                MaxTokens = 1000 // Maximale Antwort-Länge
+                MaxTokens = 2000 // Erhöhtes Limit: Kurzer Prompt = mehr Tokens für Tool-Calls/Antworten
             };
 
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Sende Anfrage mit Function Calling...");
             System.Diagnostics.Debug.WriteLine($"[ROUTER] User Message: {userMessage}");
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Has File: {hasFile}");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] ConversationId: {conversationId}");
             System.Diagnostics.Debug.WriteLine($"[ROUTER] System Prompt Length: {systemPrompt.Length} chars");
 
             var response = await chatService.GetChatMessageContentAsync( // Sende Anfrage an LLM
@@ -615,12 +634,20 @@ public class RouterService
                             maxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
                         }
 
+                        string conversationTask = string.Empty; // Variable für Conversation-Task
+                        if (routingJson.conversationTask != null) // Task vorhanden?
+                        {
+                            conversationTask = routingJson.conversationTask; // Setze Task
+                        }
+
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Conversation-Task: {conversationTask}");
 
                         RouterResponse intentResponse = new RouterResponse(); // Erstelle neue RouterResponse
                         intentResponse.ShouldRoute = true; // Routing nötig
                         intentResponse.DirectResponse = null;
                         intentResponse.TargetService = targetService;
+                        intentResponse.ConversationTask = conversationTask; // NEU: Setze Task
                         intentResponse.MaxTokens = maxTokens;
                         intentResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
                         intentResponse.Reason = $"Intent-Routing: {routingJson.intent}";
@@ -797,6 +824,7 @@ public class RouterService
     {
         public bool needsRouting { get; set; }
         public string? intent { get; set; }
+        public string? conversationTask { get; set; } // NEU: Task für Coordinator
     }
 
     private class SearchResultJson // JSON-Klasse: Ergebnis von search_documents Tool
@@ -875,6 +903,7 @@ public class RouterResponse // Klasse: Response des RouterService (wird an ChatC
     public bool ShouldRoute { get; set; }
     public string? DirectResponse { get; set; }
     public string TargetService { get; set; } = string.Empty;
+    public string ConversationTask { get; set; } = string.Empty; // NEU: Task für Coordinator ("askForTitle", "askForDate", "askForTime")
     public int MaxTokens { get; set; }
     public List<Document> FoundDocuments { get; set; } = new List<Document>();
     public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();

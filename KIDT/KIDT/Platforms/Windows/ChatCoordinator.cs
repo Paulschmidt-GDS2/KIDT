@@ -12,29 +12,38 @@ namespace KIDT.Services;
 ///      ↓
 /// [ROUTER (GPT-4 via Azure OpenAI + MCP-Tools)]
 ///      ↓
-///      ├─ Function Call erkannt? (search_documents, list_calendar_events, etc.)
+///      ├─ Function Call erkannt? (search_documents, list_calendar_events, create_calendar_event, etc.)
 ///      │   → Tool wird DIREKT ausgeführt (KEIN weiteres LLM!)
-///      │   → Direkte Antwort an User (z.B. "3 Dokumente gefunden")
+///      │   → Direkte Antwort an User (z.B. "Termin erstellt", "3 Dokumente gefunden")
 ///      │
 ///      └─ Kein Tool? → JSON-Routing-Entscheidung
 ///          ↓
 ///          ├─ Intent: "conversation"
 ///          │   → ConversationService (phi3:mini via Ollama)
 ///          │   → Schnelle, kurze Antworten (Small Talk, einfache Fragen)
+///          │   → ROUTER-DIRECTED TASKS: Router analysiert Chat-History, gibt Task zurück (was fehlt?)
+///          │   → ChatCoordinator fügt SYSTEM-Message hinzu → PHI3:MINI generiert natürliche Frage
 ///          │
 ///          └─ Intent: "dataAnalysis"
 ///              → DataAnalysisService (qwen2.5:7b via Ollama)
 ///              → Text-Analyse von Dateien/Dokumenten (KEINE Tools!)
 /// 
 /// WARUM SO?
-/// - GPT-4: Bestes Function Calling (Tool-Orchestrierung)
-/// - phi3:mini: Schnell & klein für Small Talk
+/// - GPT-4: Bestes Function Calling (Tool-Orchestrierung) + Chat-History-Analyse für fehlende Infos
+/// - phi3:mini: Schnell & klein für Small Talk + natürliche Frageformulierung (bekommt SYSTEM-Anweisungen)
 /// - qwen2.5:7b: Präzise für Text-Analyse
+/// 
+/// TERMIN-ERSTELLUNG (MULTI-FIELD-TASKS):
+/// - Router analysiert Chat-History: Was fehlt? (Titel, Datum, Zeit)
+/// - Gibt kombinierte Tasks zurück: "askForAll" (alle 3), "askForDateAndTime" (2 fehlen), etc.
+/// - ChatCoordinator mappt Task → SYSTEM-Message → PHI3:MINI fragt ALLE fehlenden Infos auf einmal
+/// - Effizienter als sequenziell (3 separate Fragen)!
 /// 
 /// Tools werden NUR im Router gehandhabt, damit:
 /// 1. Dokument-Suche VOR Analyse passiert
 /// 2. Ein zentraler Punkt für alle Tool-Calls (leichter zu debuggen)
 /// 3. Analyse-Modelle fokussieren sich NUR auf Text-Verarbeitung
+/// 4. State-Tracking im Router (GPT-4), nicht in kleinen Modellen (PHI3:MINI)
 /// </summary>
 public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, Conversation, DataAnalysis und File-Upload (wird von Home.razor verwendet)
 {
@@ -200,6 +209,19 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             await InitializeAsync(); // Initialisiere jetzt
         }
 
+        // VALIDIERUNG 1: Prüfe User-Input BEVOR Router aufgerufen wird
+        if (!IsValidUserInput(userMessage)) // Ungültiger User-Input? (Gibberish, Wiederholungen, etc.)
+        {
+            yield return new ChatStreamChunk // Sende Fehler-Nachricht zurück
+            {
+                TextChunk = "Deine Eingabe konnte nicht verarbeitet werden. Bitte formuliere deine Frage neu.", // Fehler-Text
+                IsComplete = true, // Stream ist komplett
+                FoundDocuments = new List<Document>(), // Keine Dokumente
+                FoundEvents = new List<CalendarEvent>() // Keine Events
+            };
+            yield break; // Stream beenden
+        }
+
         using var scope = this.serviceProvider.CreateScope(); // Erstelle neuen Service-Scope für Datenbank-Zugriff
         var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Hole ChatDbService
         var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Hole DocumentDbService
@@ -222,19 +244,18 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
 
             yield return new ChatStreamChunk // Sende finale Antwort als Stream-Chunk
             {
-                TextChunk = responseText,
-                IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments,
-                FoundEvents = routerResponse.FoundEvents
+                TextChunk = responseText, // Antwort-Text (z.B. "Termin erstellt")
+                IsComplete = true, // Stream ist komplett
+                FoundDocuments = routerResponse.FoundDocuments, // Gefundene Dokumente mitgeben
+                FoundEvents = routerResponse.FoundEvents // Gefundene Events mitgeben
             };
             yield break; // Stream beenden
         }
 
-        // Streaming nur für Conversation (DataAnalysis erstmal ohne)
-        if (routerResponse.TargetService == "conversation") // Conversation gewählt?
+        // CONVERSATION-SERVICE: Streaming für Conversation (phi3:mini fragt nach fehlenden Infos)
+        if (routerResponse.TargetService == "conversation")
         {
             string fullChatHistory = string.Empty; // Variable für Chat-History
-
             if (conversationId > 0) // Bestehender Chat?
             {
                 fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus Datenbank
@@ -246,58 +267,101 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                 enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
             }
 
-            // STREAMING: Sende Token für Token an Home.razor!
-            await foreach (var chunk in this.conversation.SendStreamAsync(enhancedMessage, routerResponse.MaxTokens, fullChatHistory))
+            // ROUTER-DIRECTED TASKS: Router analysiert Chat-History und gibt Task zurück (was fehlt?)
+            // PHI3:MINI bekommt SYSTEM-Message mit Anweisung und generiert natürliche Frage
+            if (!string.IsNullOrEmpty(routerResponse.ConversationTask)) // Router hat Task gegeben?
             {
-                yield return new ChatStreamChunk // Sende Chunk zurück
+                System.Diagnostics.Debug.WriteLine($"[COORDINATOR] Task: {routerResponse.ConversationTask}"); // Debug-Log
+
+                // MULTI-FIELD TASKS: Mehrere Infos auf einmal abfragen (effizienter!)
+                if (routerResponse.ConversationTask == "askForAll") // Alle 3 Infos fehlen (Titel, Datum, Zeit)?
                 {
-                    TextChunk = chunk,
-                    IsComplete = false,
-                    FoundDocuments = routerResponse.FoundDocuments,
-                    FoundEvents = routerResponse.FoundEvents
+                    enhancedMessage = "[SYSTEM: Frage nach Titel, Datum und Zeit.]\n\n" + enhancedMessage;
+                }
+                else if (routerResponse.ConversationTask == "askForTitleAndDate") // 2 Infos fehlen (Titel + Datum)?
+                {
+                    enhancedMessage = "[SYSTEM: Zeit vorhanden. Frage nach Titel und Datum.]\n\n" + enhancedMessage;
+                }
+                else if (routerResponse.ConversationTask == "askForTitleAndTime") // 2 Infos fehlen (Titel + Zeit)?
+                {
+                    enhancedMessage = "[SYSTEM: Datum vorhanden. Frage nach Titel und Zeit.]\n\n" + enhancedMessage;
+                }
+                else if (routerResponse.ConversationTask == "askForDateAndTime") // 2 Infos fehlen (Datum + Zeit)?
+                {
+                    enhancedMessage = "[SYSTEM: Titel vorhanden. Frage nach Datum und Zeit.]\n\n" + enhancedMessage;
+                }
+                // SINGLE-FIELD TASKS: Nur eine Info fehlt (seltener Fall, wenn User schon 2 von 3 angegeben hat)
+                else if (routerResponse.ConversationTask == "askForTitle") // Nur Titel fehlt?
+                {
+                    enhancedMessage = "[SYSTEM: Frage nach Titel.]\n\n" + enhancedMessage;
+                }
+                else if (routerResponse.ConversationTask == "askForDate") // Nur Datum fehlt?
+                {
+                    enhancedMessage = "[SYSTEM: Frage nach Datum.]\n\n" + enhancedMessage;
+                }
+                else if (routerResponse.ConversationTask == "askForTime") // Nur Zeit fehlt?
+                {
+                    enhancedMessage = "[SYSTEM: Frage nach Zeit.]\n\n" + enhancedMessage;
+                }
+            }
+
+            // STREAMING: Sammle komplette Antwort von PHI3:MINI (für Validierung)
+            string fullResponse = string.Empty; // Variable für komplette Antwort
+            await foreach (var chunk in this.conversation.SendStreamAsync(enhancedMessage, routerResponse.MaxTokens, fullChatHistory)) // Hole jeden Chunk
+            {
+                fullResponse += chunk; // Füge Chunk zur Gesamt-Antwort hinzu
+            }
+
+            // STREAMING OUTPUT: Gib Antwort Zeichen-für-Zeichen an UI weiter (typewriter-Effekt)
+            foreach (char c in fullResponse) // Durchlaufe jeden Buchstaben
+            {
+                yield return new ChatStreamChunk // Sende Buchstabe als Stream-Chunk
+                {
+                    TextChunk = c.ToString(), // Ein Buchstabe
+                    IsComplete = false, // Stream noch nicht komplett
+                    FoundDocuments = routerResponse.FoundDocuments, // Dokumente mitgeben
+                    FoundEvents = routerResponse.FoundEvents // Events mitgeben
                 };
             }
 
-            // Finaler Chunk: Stream ist komplett
-            yield return new ChatStreamChunk
+            yield return new ChatStreamChunk // Finaler Chunk: Stream ist komplett
             {
-                TextChunk = string.Empty,
-                IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments,
-                FoundEvents = routerResponse.FoundEvents
+                TextChunk = string.Empty, // Kein Text mehr
+                IsComplete = true, // Stream fertig!
+                FoundDocuments = routerResponse.FoundDocuments, // Dokumente mitgeben
+                FoundEvents = routerResponse.FoundEvents // Events mitgeben
             };
         }
-        else // DataAnalysis -> Fallback auf Non-Streaming (erstmal)
+        else // DATAANALYSIS-SERVICE: Non-Streaming (qwen2.5:7b analysiert Dokument-Text)
         {
-            await this.dataAnalysis.InitializeAsync(docDbService, conversationId); // Initialisiere DataAnalysis
+            await this.dataAnalysis.InitializeAsync(docDbService, conversationId); // Initialisiere DataAnalysis mit Dokument-Zugriff
 
-            string fullChatHistory = string.Empty;
-
+            string fullChatHistory = string.Empty; // Variable für Chat-History
             if (conversationId > 0) // Bestehender Chat?
             {
                 fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus Datenbank
             }
 
             string enhancedMessage = userMessage; // Start mit Original-Nachricht
-            if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
+            if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Dokumente gesucht und gefunden?
             {
                 enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
             }
 
-            string result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service
-                enhancedMessage, // User-Nachricht
-                this.currentFileContent, // Datei-Inhalt
-                this.currentFileName, // Dateiname
+            string result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service (qwen2.5:7b)
+                enhancedMessage, // User-Nachricht (evtl. mit System-Info)
+                this.currentFileContent, // Datei-Inhalt (falls hochgeladen)
+                this.currentFileName, // Dateiname (falls hochgeladen)
                 routerResponse.MaxTokens, // Token-Limit
-                fullChatHistory // Chat-History
+                fullChatHistory // Chat-History (für Kontext)
             );
 
-            yield return new ChatStreamChunk // Sende Ergebnis als Stream-Chunk
+            yield return new ChatStreamChunk // Sende komplette Antwort als einzelner Chunk (kein echtes Streaming)
             {
-                TextChunk = result,
-                IsComplete = true,
-                FoundDocuments = routerResponse.FoundDocuments,
-                FoundEvents = routerResponse.FoundEvents
+                TextChunk = result, // Komplette Antwort von qwen2.5:7b
+                IsComplete = true, // Stream ist direkt fertig (Non-Streaming)
+                FoundDocuments = routerResponse.FoundDocuments, // Gefundene Dokumente mitgeben
+                FoundEvents = routerResponse.FoundEvents // Gefundene Events mitgeben
             };
         }
     }
@@ -344,6 +408,41 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
     public string GetCurrentFileName() // Gib aktuellen Dateinamen zurück
     {
         return this.currentFileName; // Gib Dateiname zurück
+    }
+
+    private bool IsValidUserInput(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (text.Length < 2) return false;
+
+        // Sehr lange Wiederholungen blockieren (z.B. "hallo" 20x)
+        if (text.Length > 40 && !text.Contains(' '))
+        {
+            string pattern = text.Substring(0, Math.Min(5, text.Length));
+            int count = 0;
+            for (int i = 0; i < text.Length - pattern.Length + 1; i += pattern.Length)
+            {
+                if (text.Substring(i, pattern.Length).Equals(pattern, StringComparison.OrdinalIgnoreCase))
+                    count++;
+            }
+            if (count >= 4) return false;
+        }
+
+        return true;
+    }
+
+    private bool IsValidLLMOutput(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (text.Length < 3) return false;
+
+        string trimmed = text.Trim();
+
+        // Blockiere JSON/Code-Output
+        if (trimmed.StartsWith("{") || trimmed.StartsWith("[") || text.Contains("```"))
+            return false;
+
+        return true;
     }
 
     public async ValueTask DisposeAsync() // Räume alle Services auf

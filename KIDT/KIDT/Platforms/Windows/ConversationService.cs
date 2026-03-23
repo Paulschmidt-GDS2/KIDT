@@ -35,6 +35,11 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             var instructionsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Prompts", "conversation-instructions.md"); // Erstelle Pfad zur Instructions-Datei
             this.systemInstructions = await File.ReadAllTextAsync(instructionsPath, Encoding.UTF8); // Lese Instructions aus MD-Datei (UTF-8)
 
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Instructions geladen: {this.systemInstructions.Length} Zeichen");
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === LOADED INSTRUCTIONS ===");
+            System.Diagnostics.Debug.WriteLine(this.systemInstructions);
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === END INSTRUCTIONS ===");
+
             this.isInitialized = true;
         }
         catch (Exception ex)
@@ -57,8 +62,20 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === SENDING TO PHI3:MINI ===");
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] User Message: {userMessage}");
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Max Tokens: {maxTokens}");
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Has Context: {!string.IsNullOrEmpty(recentContext)}");
+            System.Diagnostics.Debug.WriteLine($"[CONVERSATION] System Instructions Length: {this.systemInstructions.Length} chars");
+
             var chatHistory = new ChatHistory(); // Erstelle frische Chat-History für jeden Call
-            chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu
+
+            // WICHTIG: Füge aktuelles Datum hinzu (für "heute", "morgen" etc.)
+            DateTime now = DateTime.Now;
+            string currentDateInfo = $"AKTUELLES DATUM: {now:dd.MM.yyyy} ({now:dddd})";
+            chatHistory.AddSystemMessage(currentDateInfo); // Datum ZUERST
+
+            chatHistory.AddSystemMessage(this.systemInstructions); // Dann Instructions
 
             if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
             {
@@ -69,7 +86,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
             var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
             {
-                Temperature = 0.5, // Mittlere Temperatur = ausgewogen zwischen Präzision und Kreativität
+                Temperature = 0.2, // Niedrige Temperature für deterministisches Verhalten (strikte Regel-Befolgung!)
                 MaxTokens = maxTokens // Dynamisch: Kurze Fragen = kurze Antworten
             };
 
@@ -83,6 +100,9 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             if (response.Content != null) // Wenn Response einen Content hat
             {
                 assistantMessage = response.Content;
+                System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === RAW RESPONSE FROM PHI3:MINI ===");
+                System.Diagnostics.Debug.WriteLine(assistantMessage);
+                System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === END RAW RESPONSE ===");
                 assistantMessage = CleanLlmResponse(assistantMessage); // Bereinige Antwort von Debug-Informationen
             }
             else // Kein Content
@@ -113,7 +133,12 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         var chatHistory = new ChatHistory(); // Erstelle frische Chat-History
 
-        chatHistory.AddSystemMessage(this.systemInstructions); // Füge System-Instructions hinzu (OHNE gefährliche Marker!)
+        // WICHTIG: Füge aktuelles Datum hinzu (für "heute", "morgen" etc.)
+        DateTime now = DateTime.Now;
+        string currentDateInfo = $"AKTUELLES DATUM: {now:dd.MM.yyyy} ({now:dddd})";
+        chatHistory.AddSystemMessage(currentDateInfo); // Datum ZUERST
+
+        chatHistory.AddSystemMessage(this.systemInstructions); // Dann Instructions
 
         if (!string.IsNullOrEmpty(recentContext)) // Wenn Verlauf vorhanden ist
         {
@@ -124,7 +149,7 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
 
         var settings = new OpenAIPromptExecutionSettings // Erstelle Settings-Objekt
         {
-            Temperature = 0.5, // Mittlere Temperatur
+            Temperature = 0.2, // Niedrige Temperature für deterministisches Verhalten (strikte Regel-Befolgung!)
             MaxTokens = maxTokens // Token-Limit
         };
 
@@ -134,9 +159,8 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         System.Diagnostics.Debug.WriteLine($"[CONVERSATION] Has Context: {!string.IsNullOrEmpty(recentContext)}");
         System.Diagnostics.Debug.WriteLine($"[CONVERSATION] System Instructions Length: {this.systemInstructions.Length} chars");
 
-        // STREAMING: Token für Token, aber sammle für Post-Processing
+        // STREAMING: Sammle VOLLSTÄNDIGE Antwort, bereinige, DANN streame
         StringBuilder fullResponse = new StringBuilder();
-        bool hasStartedOutput = false;
 
         await foreach (var chunk in this.chatService.GetStreamingChatMessageContentsAsync(
             chatHistory,
@@ -146,26 +170,6 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
             if (chunk.Content != null)
             {
                 fullResponse.Append(chunk.Content);
-
-                // Wenn noch nicht ausgegeben: Prüfe ob wir echten Content haben (keine Quotes am Anfang)
-                if (!hasStartedOutput)
-                {
-                    string currentText = fullResponse.ToString().TrimStart();
-
-                    // Überspringe führende Quotes
-                    if (currentText.StartsWith("\""))
-                    {
-                        continue; // Sammle weiter
-                    }
-
-                    hasStartedOutput = true;
-                }
-
-                // Gib Chunk DIREKT aus (echtes Streaming!)
-                if (hasStartedOutput)
-                {
-                    yield return chunk.Content;
-                }
             }
         }
 
@@ -173,6 +177,15 @@ public class ConversationService : IAsyncDisposable // Konversations-Service mit
         System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === RAW RESPONSE FROM PHI3:MINI ===");
         System.Diagnostics.Debug.WriteLine(rawResponse);
         System.Diagnostics.Debug.WriteLine($"[CONVERSATION] === END RAW RESPONSE ===");
+
+        // BEREINIGE Antwort EINMAL (entferne Quotes)
+        string cleanedResponse = CleanLlmResponse(rawResponse);
+
+        // JETZT streame die bereinigte Antwort Buchstabe-für-Buchstabe
+        foreach (char c in cleanedResponse)
+        {
+            yield return c.ToString();
+        }
     }
 
     public ValueTask DisposeAsync() // Räumt Ressourcen auf (aktuell leer)
