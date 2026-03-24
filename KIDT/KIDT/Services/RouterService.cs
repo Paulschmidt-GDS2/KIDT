@@ -70,7 +70,17 @@ public class RouterService
             string systemPrompt =
                 $"Router-Agent mit Tools. DATUM: {currentDate} ({currentDateGerman}), Jahr: {currentYear}\n\n" +
                 "Du hast KEINE Infos zu Dokumenten/Terminen - nutze Tools!\n\n" +
-                "TERMIN-ERSTELLUNG:\n" +
+                "DOKUMENTE:\n" +
+                "User fragt nach Dokument? -> search_documents\n" +
+                "User will Inhalt/Zusammenfassung?\n" +
+                "  -> Nutze DocID aus 'CONTEXT: Kürzlich gefundene DocIDs:' System-Message\n" +
+                "  -> Oder suche '[DocID: X]' in letzter Assistant-Message\n" +
+                "  -> Falls KEIN DocID: search_documents mit Dokumentname -> dann add_document_to_chat\n\n" +
+                "NORMALE KONVERSATION (Small Talk, Begrüßung, Fragen):\n" +
+                "User sagt 'hallo', 'wie geht's', stellt Fragen?\n" +
+                "-> JSON: {\"needsRouting\": true, \"intent\": \"conversation\"}\n" +
+                "KEIN conversationTask! Nur bei Termin-Erstellung!\n\n" +
+                "TERMIN-ERSTELLUNG (NUR wenn User explizit Termin will!):\n" +
                 "Pflicht: Titel, Datum, Zeit (ganztaegig/Uhrzeit)\n" +
                 "Analysiere History: Was FEHLT?\n\n" +
                 "Titel-Erkennung:\n" +
@@ -117,6 +127,37 @@ public class RouterService
                     {
                         chatHistory.AddAssistantMessage(msg.Text); // Füge Assistant-Message zur History hinzu
                     }
+                }
+
+                // Extrahiere DocIDs aus letzten Nachrichten für einfacheren Zugriff
+                var lastDocIds = new List<int>();
+                foreach (var msg in recentMessages.TakeLast(3)) // Nur letzte 3 Nachrichten prüfen
+                {
+                    if (!msg.IsUser && msg.Text.Contains("[DocID:")) // Assistant-Message mit DocID?
+                    {
+                        var startIdx = msg.Text.IndexOf("[DocID:") + 7; // Start nach "[DocID:"
+                        var endIdx = msg.Text.IndexOf("]", startIdx); // Ende bei "]"
+                        if (startIdx > 6 && endIdx > startIdx) // Valid indices?
+                        {
+                            var idsText = msg.Text.Substring(startIdx, endIdx - startIdx).Trim(); // Extrahiere IDs
+                            var idStrings = idsText.Split(','); // Splitte bei Komma
+                            foreach (var idStr in idStrings)
+                            {
+                                if (int.TryParse(idStr.Trim(), out int docId)) // Parse zu int
+                                {
+                                    lastDocIds.Add(docId); // Füge zur Liste hinzu
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Füge DocIDs als System-Context hinzu (falls vorhanden)
+                if (lastDocIds.Count > 0)
+                {
+                    string docIdsContext = string.Join(", ", lastDocIds);
+                    chatHistory.AddSystemMessage($"CONTEXT: Kürzlich gefundene DocIDs: {docIdsContext}");
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] DocIDs im Context: {docIdsContext}");
                 }
             }
 
@@ -177,6 +218,7 @@ public class RouterService
                         try
                         {
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Plugin: {functionCall.PluginName}, Function: {functionCall.FunctionName}");
+                            System.Diagnostics.Debug.WriteLine($"[ROUTER] Arguments: {JsonSerializer.Serialize(functionCall.Arguments)}");
 
                             var function = kernel.Plugins.GetFunction(functionCall.PluginName, functionCall.FunctionName); // Hole registrierte Function
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Function gefunden, führe aus...");
@@ -257,6 +299,7 @@ public class RouterService
                                     if (toolResultFound > 0) // Dokumente gefunden?
                                     {
                                         List<string> fileNames = new List<string>(); // Erstelle Liste für Dateinamen
+                                        List<int> docIds = new List<int>(); // Erstelle Liste für Dokument-IDs
                                         foreach (Document d in foundDocuments) // Gehe durch alle gefundenen Dokumente
                                         {
                                             string docFileName = string.Empty; // Initialisiere Dateiname
@@ -265,9 +308,11 @@ public class RouterService
                                                 docFileName = d.FileName; // Übernehme Dateiname
                                             }
                                             fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
+                                            docIds.Add(d.Id); // Füge Dokument-ID zur Liste hinzu
                                         }
                                         string fileNamesList = string.Join(", ", fileNames); // Verbinde Dateinamen mit Komma
-                                        message = $"{toolResultFound} Dokument(e) gefunden: {fileNamesList}";
+                                        string docIdsList = string.Join(",", docIds); // Verbinde IDs mit Komma
+                                        message = $"{toolResultFound} Dokument(e) gefunden: {fileNamesList} [DocID: {docIdsList}]"; // Inkludiere IDs für GPT-4 Context
                                     }
                                     else // Keine Dokumente gefunden
                                     {
@@ -542,62 +587,85 @@ public class RouterService
 
 
                             // add_document_to_chat Tool wurde aufgerufen
-                            if (functionCall.FunctionName == "add_document_to_chat") // War Tool add_document_to_chat?
-                            {
-                                var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // Parse JSON-Result
-                                if (addResult != null && addResult.success) // Erfolgreich hinzugefügt?
-                                {
-                                    Document docTemp = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
-                                    bool docFound = false; // Flag für Dokument gefunden
-                                    Document doc = new Document(); // Initialisiere Dokument
-                                    if (docTemp != null) // Prüfe ob Dokument vorhanden
-                                    {
-                                        doc = docTemp; // Übernehme Dokument
-                                        if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
-                                        {
-                                            docFound = true; // Setze Flag
-                                        }
-                                    }
-                                    if (docFound) // Füge nur hinzu wenn gefunden
-                                    {
-                                        foundDocuments.Add(doc);
-                                    }
+                                            if (functionCall.FunctionName == "add_document_to_chat") // War Tool add_document_to_chat?
+                                            {
+                                                var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // Parse JSON-Result
 
-                                    string fileName = "Unbekannt"; // Standard-Dateiname
-                                    if (addResult.fileName != null) // Dateiname vorhanden?
-                                    {
-                                        fileName = addResult.fileName; // Übernehme Dateiname
-                                    }
+                                                // Prüfe ob User Document-Analyse will (Zusammenfassung, Inhalt, etc.)
+                                                string lowerUserMsg = userMessage.ToLower();
+                                                bool wantsAnalysis = lowerUserMsg.Contains("zusammen") || lowerUserMsg.Contains("inhalt") || 
+                                                                    lowerUserMsg.Contains("analysier") || lowerUserMsg.Contains("erkläre") ||
+                                                                    lowerUserMsg.Contains("beschreib") || lowerUserMsg.Contains("fasse");
 
-                                    RouterResponse addSuccessResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                    addSuccessResponse.ShouldRoute = false; // Kein Routing nötig
-                                    addSuccessResponse.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
-                                    addSuccessResponse.FoundDocuments = foundDocuments;
-                                    addSuccessResponse.TargetService = string.Empty; // Kein Target-Service
-                                    addSuccessResponse.MaxTokens = 0; // Keine Token-Limit
-                                    addSuccessResponse.Reason = "Dokument hinzugefügt (Function Calling)";
-                                    addSuccessResponse.ToolWasUsed = true; // Tool wurde verwendet
-                                    return addSuccessResponse;
-                                }
-                                else // Fehler beim Hinzufügen
-                                {
-                                    string errorMessage = "Dokument konnte nicht hinzugefügt werden.";
-                                    if (addResult != null && addResult.message != null) // Fehlermeldung vorhanden?
-                                    {
-                                        errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
-                                    }
+                                                if (addResult != null && (addResult.success || addResult.message?.Contains("bereits") == true)) // Erfolgreich ODER bereits hinzugefügt?
+                                                {
+                                                    Document docTemp = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
+                                                    bool docFound = false; // Flag für Dokument gefunden
+                                                    Document doc = new Document(); // Initialisiere Dokument
+                                                    if (docTemp != null) // Prüfe ob Dokument vorhanden
+                                                    {
+                                                        doc = docTemp; // Übernehme Dokument
+                                                        if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
+                                                        {
+                                                            docFound = true; // Setze Flag
+                                                        }
+                                                    }
+                                                    if (docFound) // Füge nur hinzu wenn gefunden
+                                                    {
+                                                        foundDocuments.Add(doc);
+                                                    }
 
-                                    RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                    addErrorResponse.ShouldRoute = false; // Kein Routing nötig
-                                    addErrorResponse.DirectResponse = errorMessage;
-                                    addErrorResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
-                                    addErrorResponse.TargetService = string.Empty; // Kein Target-Service
-                                    addErrorResponse.MaxTokens = 0; // Keine Token-Limit
-                                    addErrorResponse.Reason = "Dokument bereits verknüpft";
-                                    addErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
-                                    return addErrorResponse;
-                                }
-                            }
+                                                    // Wenn User Analyse will -> Route zu DataAnalysis statt direkte Antwort
+                                                    if (wantsAnalysis && docFound)
+                                                    {
+                                                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Dokument verknüpft, route zu DataAnalysis für Analyse");
+
+                                                        RouterResponse analysisResponse = new RouterResponse();
+                                                        analysisResponse.ShouldRoute = true; // Route zu DataAnalysis
+                                                        analysisResponse.DirectResponse = null;
+                                                        analysisResponse.TargetService = "dataAnalysis";
+                                                        analysisResponse.FoundDocuments = foundDocuments;
+                                                        analysisResponse.MaxTokens = 2000;
+                                                        analysisResponse.Reason = "Dokument verknüpft -> DataAnalysis";
+                                                        analysisResponse.ToolWasUsed = true;
+                                                        return analysisResponse;
+                                                    }
+
+                                                    string fileName = "Unbekannt"; // Standard-Dateiname
+                                                    if (addResult.fileName != null) // Dateiname vorhanden?
+                                                    {
+                                                        fileName = addResult.fileName; // Übernehme Dateiname
+                                                    }
+
+                                                    RouterResponse addSuccessResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                                    addSuccessResponse.ShouldRoute = false; // Kein Routing nötig
+                                                    addSuccessResponse.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
+                                                    addSuccessResponse.FoundDocuments = foundDocuments;
+                                                    addSuccessResponse.TargetService = string.Empty; // Kein Target-Service
+                                                    addSuccessResponse.MaxTokens = 0; // Keine Token-Limit
+                                                    addSuccessResponse.Reason = "Dokument hinzugefügt (Function Calling)";
+                                                    addSuccessResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                                    return addSuccessResponse;
+                                                }
+                                                else // Fehler beim Hinzufügen
+                                                {
+                                                    string errorMessage = "Dokument konnte nicht hinzugefügt werden.";
+                                                    if (addResult != null && addResult.message != null) // Fehlermeldung vorhanden?
+                                                    {
+                                                        errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
+                                                    }
+
+                                                    RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                                    addErrorResponse.ShouldRoute = false; // Kein Routing nötig
+                                                    addErrorResponse.DirectResponse = errorMessage;
+                                                    addErrorResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
+                                                    addErrorResponse.TargetService = string.Empty; // Kein Target-Service
+                                                    addErrorResponse.MaxTokens = 0; // Keine Token-Limit
+                                                    addErrorResponse.Reason = "Dokument-Verknüpfung fehlgeschlagen";
+                                                    addErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                                    return addErrorResponse;
+                                                }
+                                            }
                         }
                         catch (Exception ex) // Tool-Execution fehlgeschlagen?
                         {
@@ -641,7 +709,8 @@ public class RouterService
                         }
 
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Conversation-Task: {conversationTask}");
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Conversation-Task: '{conversationTask}'");
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] ConversationTask isEmpty: {string.IsNullOrEmpty(conversationTask)}");
 
                         RouterResponse intentResponse = new RouterResponse(); // Erstelle neue RouterResponse
                         intentResponse.ShouldRoute = true; // Routing nötig

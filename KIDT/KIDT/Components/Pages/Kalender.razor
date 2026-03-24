@@ -39,7 +39,8 @@
                 @foreach (var cell in MonthCells) @* 42 Tageszellen *@
                 {
                     var isCurrentMonth = cell.Month == DisplayMonth.Month && cell.Year == DisplayMonth.Year; // Check: Ist Zelle im aktuellen Monat?
-                    <div class="day-cell @(isCurrentMonth ? "current-month" : "other-month")" @onclick="() => OnDayClick(cell)">
+                    var isToday = cell.Date == DateTime.Today; // Check: Ist heute?
+                    <div class="day-cell @(isCurrentMonth ? "current-month" : "other-month") @(isToday ? "today" : "")" @onclick="() => OnDayClick(cell)">
                         <div class="day-number">@cell.Day</div> @* Tagesnummer *@
                         <div class="events-preview">
                             @foreach (var ev in GetEventsForDate(cell).Take(3)) @* Zeige max 3 Termine *@
@@ -73,7 +74,8 @@
                 <div class="week-body">
                     @foreach (var day in WeekDays) @* Tagesspalten *@
                     {
-                        <div class="week-day" @onclick="() => OnDayClick(day)">
+                        var isToday = day.Date == DateTime.Today; // Check: Ist heute?
+                        <div class="week-day @(isToday ? "today" : "")" @onclick="() => OnDayClick(day)">
                             <div class="day-number">@day.Day</div>
                             @foreach (var ev in GetEventsForDate(day)) @* Alle Termine des Tages *@
                             {
@@ -94,21 +96,83 @@
         {
             <div class="day-view">
                 <h4 class="day-title">@DisplayDay.ToString("dddd, dd.MM.yyyy", germanCulture)</h4>
-                <div class="day-events">
-                    @foreach (var ev in GetEventsForDate(DisplayDay)) @* Alle Termine des Tages *@
-                    {
-                        <div class="event-item event-color-@ev.ColorIndex" style="background: @availableColors[ev.ColorIndex] !important;" @onclick="@((e) => OnEventClick(ev, e))" @onclick:stopPropagation="true">
-                            <span class="event-title-text">@ev.Title</span>
-                            @if (!ev.IsAllDay && ev.HasTime)
+
+                @* Bestehende Termine des Tages *@
+                @if (GetEventsForDate(DisplayDay).Any())
+                {
+                    <div class="day-events">
+                        @foreach (var ev in GetEventsForDate(DisplayDay))
+                        {
+                            <div class="event-item event-color-@ev.ColorIndex" style="background: @availableColors[ev.ColorIndex] !important;" @onclick="@((e) => OnEventClick(ev, e))" @onclick:stopPropagation="true">
+                                <span class="event-title-text">@ev.Title</span>
+                                @if (!ev.IsAllDay && ev.HasTime)
+                                {
+                                    <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Inline-Formular zum Erstellen neuer Termine *@
+                <div class="day-inline-form">
+                    <h5 class="inline-form-title">Neuen Termin erstellen</h5>
+
+                    <input class="dialog-input" placeholder="Titel" @bind="newEventText" />
+
+                    <div class="dialog-time-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="dayAllDay" class="time-checkbox" @bind="isAllDay" />
+                            <label for="dayAllDay" class="checkbox-label">Ganztägig</label>
+                        </div>
+                        @if (!isAllDay)
+                        {
+                            <div class="time-input-wrapper">
+                                <label class="input-label">Uhrzeit:</label>
+                                <input type="time" class="time-input" value="@selectedTime" @onchange="OnAddTimeChanged" />
+                            </div>
+                        }
+                    </div>
+
+                    <div class="dialog-color-section">
+                        <div class="color-picker-label">Farbe wählen:</div>
+                        <div class="dialog-color-picker">
+                            @for (int i = 0; i < availableColors.Length; i++)
                             {
-                                <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                var colorIndex = i;
+                                <div class="color-option @(selectedColorIndex == colorIndex ? "selected" : "")" 
+                                     style="background: @availableColors[colorIndex];"
+                                     @onclick="() => selectedColorIndex = colorIndex">
+                                </div>
                             }
                         </div>
-                    }
-                </div>
-                <div class="add-event-inline">
-                    <input class="event-input" placeholder="Neuer Termin" @bind="newEventText" @onkeydown="@(e => { if (e.Key == "Enter") OnDayClick(DisplayDay); })" />
-                    <button class="add-button" @onclick="() => OnDayClick(DisplayDay)">hinzufügen</button>
+                    </div>
+
+                    <div class="dialog-reminder-section">
+                        <div class="reminder-label-header">Erinnerung</div>
+                        <div class="reminder-buttons">
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == null ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = null">Keine</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 5 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 5">5 Min</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 15 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 15">15 Min</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 30 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 30">30 Min</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 60 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 60">1 Stunde</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 120 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 120">2 Stunden</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 1440 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 1440">1 Tag</button>
+                            <button type="button" class="reminder-btn @(newEventReminderMinutes == 10080 ? "active" : "")" 
+                                    @onclick="() => newEventReminderMinutes = 10080">1 Woche</button>
+                        </div>
+                    </div>
+
+                    <div class="dialog-actions">
+                        <button class="dialog-button save-button" @onclick="SaveDayViewEvent">Hinzufügen</button>
+                    </div>
                 </div>
             </div>
         }
@@ -506,6 +570,12 @@
         showAddDialog = false; // Dialog schließen
     }
 
+    private async Task SaveDayViewEvent() // Speichert Termin direkt aus Tagesansicht
+    {
+        await AddEventForDate(DisplayDay); // Termin für aktuellen Tag hinzufügen
+        // Felder werden bereits in AddEventForDate zurückgesetzt
+    }
+
     private async Task AddEventForDate(DateTime date) // Fügt Termin für Datum hinzu
     {
         if (string.IsNullOrWhiteSpace(newEventText)) return; // Prüfe auf leeren Titel
@@ -552,9 +622,9 @@
     {
         get
         {
-            if (currentView == "Month") return DisplayMonth.ToString("MMMM yyyy", germanCulture); // z.B. "März 2026"
-            if (currentView == "Week") return $"Woche von {WeekDays.First().ToString("dd.MM.yyyy", germanCulture)}"; // z.B. "Woche von 03.03.2025"
-            return DisplayDay.ToString("dddd, dd.MM.yyyy", germanCulture); // z.B. "Montag, 03.03.2025"
+            if (currentView == "Month") return DisplayMonth.ToString("MMMM yyyy", germanCulture);
+            if (currentView == "Week") return $"Woche von {WeekDays.First().ToString("dd.MM.yyyy", germanCulture)}";
+            return DisplayDay.ToString("dddd, dd.MM.yyyy", germanCulture);
         }
     }
 }

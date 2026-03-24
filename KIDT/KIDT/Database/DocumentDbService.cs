@@ -114,18 +114,48 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             return false; // Bereits verknüpft
         }
 
-        // Erstelle neue Verknüpfung
+        // WICHTIG: Prüfe ob Conversation und Document existieren (Foreign Key Constraints!)
+        var conversationExists = await this.db.Conversations.AnyAsync(c => c.Id == conversationId);
+        var documentExists = await this.db.Documents.AnyAsync(d => d.Id == documentId);
+
+        System.Diagnostics.Debug.WriteLine($"[DocumentDbService] ConversationExists={conversationExists}, DocumentExists={documentExists}");
+
+        if (!conversationExists || !documentExists) // Einer der beiden existiert nicht?
+        {
+            System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Abbruch: Conversation oder Document existiert nicht");
+            return false; // Kann nicht verknüpfen
+        }
+
+        // Erstelle neue Verknüpfung (OHNE Navigation Properties!)
         ConversationDocument link = new ConversationDocument
         {
             ConversationId = conversationId,
             DocumentId = documentId,
-            AddedAt = DateTime.UtcNow
+            AddedAt = DateTime.UtcNow,
+            Conversation = null, // Explizit auf null setzen
+            Document = null // Explizit auf null setzen
         };
 
+        System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Link erstellen: ConvId={conversationId}, DocId={documentId}");
         this.db.ConversationDocuments.Add(link); // Füge Verknüpfung zur Datenbank hinzu
-        await this.db.SaveChangesAsync(); // Speichere Änderungen
 
-        return true;
+        try
+        {
+            await this.db.SaveChangesAsync(); // Speichere Änderungen
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Fehler beim Verknüpfen: {ex.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Message: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Stack: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DocumentDbService] InnerException: {ex.InnerException.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"[DocumentDbService] InnerMessage: {ex.InnerException.Message}");
+            }
+            return false; // Fehler beim Speichern
+        }
     }
 
     public async Task<bool> UnlinkDocumentFromConversationAsync(int documentId, int conversationId) // Entferne Verknüpfung zwischen Dokument und Chat

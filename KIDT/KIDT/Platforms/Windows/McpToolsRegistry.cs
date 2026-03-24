@@ -55,7 +55,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 if (toolInstance == null) continue; // Instanz-Erstellung fehlgeschlagen? ? Überspringe
 
                 var allMethods = toolType.GetMethods(BindingFlags.Public | BindingFlags.Instance); // Finde alle public Instance-Methoden
-                var toolMethods = new List<MethodInfo>(); // Liste für Tool-Methoden
+                var toolMethods = new List<MethodInfo>();
                 foreach (var m in allMethods) // Durchlaufe alle Methoden
                 {
                     if (m.GetCustomAttribute<McpServerToolAttribute>() != null) // Hat [McpServerTool]-Attribut?
@@ -64,7 +64,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                     }
                 }
 
-                var functions = new List<KernelFunction>(); // Liste für Kernel-Funktionen
+                var functions = new List<KernelFunction>();
                 
                 foreach (var method in toolMethods) // Durchlaufe alle Tool-Methoden (z.B. SearchDocuments, AddDocumentToChat)
                 {

@@ -166,6 +166,13 @@
     opacity: 0.4; /* Leicht transparent */
 }
 
+/* Heutiger Tag - Hervorhebung mit dickerer schwarzer Umrandung */
+.day-cell.today {
+    border: 4px solid #0D0E0C !important; /* Dickere schwarze Umrandung für klare Hervorhebung */
+    background: rgba(13, 14, 12, 0.04); /* Sehr subtiler dunkler Hintergrund */
+    font-weight: 700; /* Fettere Schrift für Tagesnummer */
+}
+
 /* Tagesnummer in Zelle */
 .day-number {
     font-size: 15px; /* Größere Schriftgröße für bessere Lesbarkeit */
@@ -254,6 +261,13 @@
     font-size: 13px; /* Etwas kleinere Schriftgröße */
 }
 
+/* Heutiger Tag in Wochenansicht */
+.week-day.today {
+    border: 4px solid #0D0E0C !important; /* Dickere schwarze Umrandung */
+    background: rgba(13, 14, 12, 0.04); /* Sehr subtiler dunkler Hintergrund */
+    font-weight: 700; /* Fettere Schrift */
+}
+
 /* Body mit Tagesfeldern */
 .week-body {
     display: grid; /* CSS Grid aktivieren */
@@ -316,39 +330,19 @@
     font-weight: 500; /* Mittleres Gewicht */
 }
 
-/* Inline-Bereich zum Hinzufügen von Terminen */
-.add-event-inline {
-    display: flex; /* Flexbox für horizontale Anordnung */
-    gap: 8px; /* Abstand zwischen Input und Button */
-    margin-top: 16px; /* Abstand nach oben */
+/* Inline-Formular in Tagesansicht */
+.day-inline-form {
+    margin-top: 24px; /* Abstand nach oben */
+    padding-top: 24px; /* Padding oben */
+    border-top: 2px solid #0D0E0C; /* Trennlinie oben */
 }
 
-/* Input-Feld für neuen Termin */
-.event-input {
-    flex: 1; /* Nimmt verfügbaren Platz ein */
-    padding: 8px 12px; /* Innenabstand */
-    background: transparent; /* Kein Hintergrund */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
-    border-radius: 3px; /* Kleinere abgerundete Ecken */
-    color: #0D0E0C; /* Textfarbe */
-    font-size: 13px; /* Etwas kleinere Schriftgröße */
-}
-
-/* Hinzufügen-Button */
-.add-button {
-    padding: 8px 16px; /* Innenabstand */
-    background: #0D0E0C; /* Dunkler Hintergrund */
-    border: none; /* Kein Rahmen */
-    border-radius: 3px; /* Kleinere abgerundete Ecken */
-    color: #848877; /* Helle Textfarbe */
-    font-size: 13px; /* Etwas kleinere Schriftgröße */
-    cursor: pointer; /* Zeiger-Cursor */
-    transition: opacity 0.2s ease; /* Smooth Opacity-Übergang */
-}
-
-/* Hinzufügen-Button beim Hover */
-.add-button:hover {
-    opacity: 0.8; /* Leicht transparent */
+/* Titel für Inline-Formular */
+.inline-form-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0D0E0C;
+    margin-bottom: 16px;
 }
 
 /* === DIALOG === */
@@ -414,6 +408,12 @@
     color: #0D0E0C; /* Textfarbe */
     font-size: 13px; /* Etwas kleinere Schriftgröße */
     box-sizing: border-box; /* Padding in Breite einrechnen */
+}
+
+/* Placeholder-Text besser sichtbar machen */
+.dialog-input::placeholder {
+    color: rgba(13, 14, 12, 0.6); /* Dunklere, besser sichtbare Placeholder-Farbe */
+    opacity: 1; /* Volle Opazität für bessere Sichtbarkeit */
 }
 
 /* Zeit-Gruppe */

@@ -182,7 +182,18 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
 
             ChatResponse finalResponse = new ChatResponse(); // Erstelle neue ChatResponse
             finalResponse.Message = result; // Setze Antwort vom Service
-            finalResponse.FoundDocuments = routerResponse.FoundDocuments; // Setze gefundene Dokumente
+
+            // NUR bei Conversation oder direkt nach Suche: Dokumente als Cards anzeigen
+            // NICHT bei DataAnalysis (Dokumente wurden schon beim Suchen angezeigt!)
+            if (routerResponse.TargetService != "dataAnalysis")
+            {
+                finalResponse.FoundDocuments = routerResponse.FoundDocuments; // Setze gefundene Dokumente
+            }
+            else
+            {
+                finalResponse.FoundDocuments = new List<Document>(); // Leere Liste bei DataAnalysis
+            }
+
             finalResponse.FoundEvents = routerResponse.FoundEvents; // Setze gefundene Termine
             return finalResponse;
         }
@@ -360,7 +371,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             {
                 TextChunk = result, // Komplette Antwort von qwen2.5:7b
                 IsComplete = true, // Stream ist direkt fertig (Non-Streaming)
-                FoundDocuments = routerResponse.FoundDocuments, // Gefundene Dokumente mitgeben
+                FoundDocuments = new List<Document>(), // LEER bei DataAnalysis (Dokumente wurden schon beim Suchen angezeigt!)
                 FoundEvents = routerResponse.FoundEvents // Gefundene Events mitgeben
             };
         }
