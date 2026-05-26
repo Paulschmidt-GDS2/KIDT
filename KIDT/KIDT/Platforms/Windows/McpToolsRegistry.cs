@@ -65,7 +65,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 }
 
                 var functions = new List<KernelFunction>();
-                
+
                 foreach (var method in toolMethods) // Durchlaufe alle Tool-Methoden (z.B. SearchDocuments, AddDocumentToChat)
                 {
                     var function = KernelFunctionFactory.CreateFromMethod( // Erstelle Kernel-Funktion aus Methode
@@ -73,7 +73,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                         toolInstance,
                         functionName: ConvertToPythonCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments ? search_documents)
                     );
-                    
+
                     functions.Add(function);
                 }
 
@@ -99,10 +99,10 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
     private static string ConvertToPythonCase(string name) // Hilfsmethode: PascalCase ? snake_case
     {
         if (string.IsNullOrEmpty(name)) return name; // Leer? ? Gib zurück
-        
+
         var result = new System.Text.StringBuilder(); // StringBuilder für Ergebnis
         result.Append(char.ToLower(name[0])); // Erstes Zeichen lowercase
-        
+
         for (int i = 1; i < name.Length; i++) // Durchlaufe restliche Zeichen
         {
             if (char.IsUpper(name[i])) // Uppercase-Zeichen?
@@ -115,7 +115,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 result.Append(name[i]); // Füge Zeichen unverändert hinzu
             }
         }
-        
+
         return result.ToString(); // Gib snake_case-String zurück
     }
 }

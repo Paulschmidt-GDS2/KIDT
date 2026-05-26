@@ -12,6 +12,18 @@ body {
     flex-direction: column; /* Kinder vertikal stapeln */
     min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
     overflow: hidden; /* KEIN Scroll - nur .messages scrollt */
+    animation: page-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* === NACHRICHTENBEREICH === */
@@ -24,7 +36,7 @@ body {
     box-sizing: border-box; /* Padding in Breite einrechnen */
     display: flex; /* Flexbox für Zentrierung */
     justify-content: center; /* Horizontal zentrieren */
-    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
+    scrollbar-color: var(--clr-text) transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
     scrollbar-width: thin; /* Dünne Scrollbar Firefox */
     min-height: 0; /* Wichtig: Erlaubt Flex-Item zu schrumpfen */
 }
@@ -43,14 +55,14 @@ body {
 
     /* Scrollbar-Griff */
     .messages::-webkit-scrollbar-thumb {
-        background: #0D0E0C; /* Dunkler Griff */
+        background: var(--clr-text); /* Dunkler Griff */
         border-radius: 8px; /* Abgerundete Ecken */
         border: 2px solid transparent; /* Transparenter Rahmen */
     }
 
         /* Scrollbar-Griff beim Hover */
         .messages::-webkit-scrollbar-thumb:hover {
-            background: #0E0F0D; /* Extrem subtil heller beim Hover (kaum sichtbar) */
+            background: var(--clr-text); /* Extrem subtil heller beim Hover (kaum sichtbar) */
         }
 
 /* Innerer Container für Nachrichten */
@@ -85,7 +97,19 @@ body {
     overflow-wrap: anywhere; /* Text bei Bedarf umbrechen */
     margin: 0; /* Kein Außenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    white-space: pre-wrap; /* Zeilenumbr×che und Whitespace beibehalten */
+    white-space: pre-wrap; /* Zeilenumbrüche und Whitespace beibehalten */
+    animation: bubble-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes bubble-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
@@ -100,9 +124,9 @@ body {
 /* User-Nachrichten (rechts) */
 .message-bubble.user {
     align-self: flex-end; /* Rechts im Container ausrichten */
-    background: #848877; /* Kein Hintergrund */
-    border: 1px solid #0D0E0C; /* Halbdurchsichtiger Rahmen */
-    color: #0D0E0C; /* Textfarbe */
+    background: var(--clr-surface); /* Kein Hintergrund */
+    border: 1px solid var(--clr-text); /* Halbdurchsichtiger Rahmen */
+    color: var(--clr-text); /* Textfarbe */
     margin-left: auto; /* Rechts ausrichten */
     margin-top: 8px; /* Abstand nach oben */
 }
@@ -112,16 +136,21 @@ body {
     align-self: flex-start; /* Links im Container ausrichten */
     background: transparent; /* Kein Hintergrund */
     border: none; /* Kein Rahmen */
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     margin-right: auto; /* Links ausrichten */
     margin-top: 8px; /* Abstand nach oben */
 }
 
 /* === LOADING-ANIMATION === */
 
+/* Label vor Ladeanimation */
+.loading-label {
+    color: var(--clr-text); /* Gleiche Farbe wie restlicher Chat-Text */
+}
+
 /* Blinkender Cursor wie in Konsole */
 .blinking-cursor {
-    color: #0D0E0C; /* Farbe passend zum Text */
+    color: var(--clr-text); /* Farbe passend zum Text */
     font-size: 18px; /* Gleiche Schriftgröße wie normaler Text */
     animation: blink 0.8s infinite; /* Animation alle 0.8 Sekunden (schneller!) */
 }
@@ -187,7 +216,7 @@ body {
 
 /* Dateiname im Badge */
 .file-name {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 14px; /* Schriftgröße */
     max-width: 300px; /* Maximale Breite */
     overflow: hidden; /* überfluss verstecken */
@@ -216,6 +245,7 @@ body {
     position: relative; /* Für Pseudo-Element */
 }
 
+
 /* Fade-Out-Gradient über der Input-Box */
 .chat-input-container::before {
     content: ""; /* Leeres Pseudo-Element */
@@ -225,7 +255,7 @@ body {
     transform: translateX(-50%); /* Korrekte Zentrierung */
     width: min(800px, calc(100% - 120px)); /* Gleiche Breite wie .messages-inner */
     height: 25px; /* Höhe des Fade-Bereichs (reduziert) */
-    background: linear-gradient(to bottom, transparent, #6C7061); /* Gradient von transparent zu Main-Background */
+    background: linear-gradient(to bottom, transparent, var(--clr-surface-dark)); /* Gradient von transparent zu Main-Background */
     pointer-events: none; /* Klicks durchlassen */
     z-index: 1; /* Über Nachrichten, unter Input-Box */
 }
@@ -246,8 +276,8 @@ body {
     align-items: center; /* Vertikal zentrieren */
     gap: 8px; /* Abstand zwischen Textbox und Button */
     padding: 10px 12px; /* Innenabstand */
-    background: #848877; /* Dunkler Hintergrund */
-    border: 2px solid #0D0E0C; /* Halbdurchsichtiger Rahmen */
+    background: var(--clr-surface); /* Dunkler Hintergrund */
+    border: 2px solid var(--clr-text); /* Halbdurchsichtiger Rahmen */
     border-radius: 6px; /* Abgerundete Ecken */
     width: min(800px, calc(100% - 120px)); /* Max 800px oder Fensterbreite minus 120px */
     box-sizing: border-box; /* Padding in Breite einrechnen */
@@ -274,14 +304,14 @@ body {
     padding: 8px 12px; /* Innenabstand */
     border-radius: 8px; /* Abgerundete Ecken */
     border: none; /* Kein Rahmen */
-    background: #848877; /* Dunkler Hintergrund */
-    color: #0D0E0C; /* Textfarbe */
+    background: var(--clr-surface); /* Dunkler Hintergrund */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 18px; /* Schriftgröße */
     overflow-y: auto; /* Vertikaler Scroll bei Bedarf */
     resize: none; /* größenänderung deaktivieren */
     width: 100%; /* Volle Breite */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
+    scrollbar-color: var(--clr-text) transparent; /* Scrollbar-Farben Firefox: Griff dunkel, Hintergrund transparent */
     scrollbar-width: thin; /* Dünne Scrollbar Firefox */
     outline: none; /* Kein Outline */
     vertical-align: middle; /* Vertikal zentrieren */
@@ -317,49 +347,157 @@ body {
 
 /* Scrollbar-Griff für Chrome/Safari */
 .chat-textbox::-webkit-scrollbar-thumb {
-    background: #0D0E0C; /* Dunkler Griff */
+    background: var(--clr-text); /* Dunkler Griff */
     border-radius: 8px; /* Abgerundete Ecken */
     border: 2px solid transparent; /* Transparenter Rahmen */
 }
 
     /* Scrollbar-Griff beim Hover */
     .chat-textbox::-webkit-scrollbar-thumb:hover {
-        background: #0E0F0D; /* Extrem subtil heller beim Hover (kaum sichtbar) */
+        background: var(--clr-text); /* Extrem subtil heller beim Hover (kaum sichtbar) */
     }
 
 /* Platzhalter-Text im Textfeld */
 .chat-textbox::placeholder {
-    color: #0D0E0C; /* Farbe passend zum Text */
+    color: var(--clr-text); /* Farbe passend zum Text */
     opacity: 0.6; /* Leicht transparent */
 }
 
 /* === BUTTONS === */
 
-/* Upload-Button */
-.chat-upload {
-    padding: 10px 14px; /* Innenabstand */
-    border-radius: 6px; /* Abgerundete Ecken */
-    border: 2px solid #0D0E0C; /* Halbdurchsichtiger Rahmen */
-    background: #848877; /* heller Hintergrund */
-    color: #0D0E0C; /* Textfarbe */
-    cursor: pointer; /* Zeiger-Cursor */
-    font-size: 18px; /* Schriftgröße */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
-    outline: none; /* Kein Outline */
+/* === BUTTON-BEREICH (Upload + Send) === */
+
+/* Container: beide Buttons, overflow-clipping für Slide-Animation */
+.chat-actions {
+    position: relative; /* Absolute Positionierung der Kinder */
+    flex-shrink: 0; /* Kein Schrumpfen im Flex-Layout */
+    width: 188px; /* 90px Upload + 8px Gap + 90px Send */
+    height: 44px; /* Gleiche Höhe wie Textarea min-height */
+    overflow: hidden; /* Clips Send-Button wenn außerhalb */
 }
 
-/* Fullscreen-Modus: Proportional 1.3x größer */
+/* Gemeinsame Button-Basis (Upload + Send) */
+.chat-upload,
+.chat-send {
+    position: absolute; /* Absolut innerhalb .chat-actions */
+    top: 50%; /* Vertikal zentrieren */
+    transform: translateY(-50%); /* Exakt zentriert */
+    width: 90px; /* Feste gleiche Breite */
+    height: 44px; /* Explizite Höhe passend zur chat-actions Höhe */
+    padding: 0; /* Icon zentriert via flex, kein Padding nötig */
+    border-radius: 6px; /* Abgerundete Ecken */
+    border: 2px solid var(--clr-text); /* Rahmen */
+    background: var(--clr-surface); /* Hintergrund */
+    color: var(--clr-text); /* Textfarbe */
+    cursor: pointer; /* Zeiger-Cursor */
+    outline: none; /* Kein Outline */
+    display: flex; /* Flexbox für Icon-Zentrierung */
+    align-items: center; /* Icon vertikal zentrieren */
+    justify-content: center; /* Icon horizontal zentrieren */
+}
+
+/* Icon innerhalb der Chat-Buttons */
+.btn-icon {
+    width: 20px; /* Icon-Breite */
+    height: 20px; /* Icon-Höhe */
+    display: block; /* Block für exakte Größe */
+    pointer-events: none; /* Klicks gehen durch zum Button */
+}
+
+/* Upload: kein Overshoot – kein Border-Clipping an der linken Containerkante */
+.chat-upload {
+    right: 0;
+    transition: background 0.2s ease,
+                right 0.26s cubic-bezier(0.4, 0, 0.2, 1); /* Material-Easing: clean, kein Overshoot */
+}
+
+/* Upload: aktiv → nach links schieben */
+.chat-actions.active .chat-upload {
+    right: 96px; /* 90px Send + 8px Gap − 2px Puffer gegen Border-Clipping */
+}
+
+.chat-upload:hover {
+    background: var(--clr-surface-dark);
+}
+
+.chat-upload:active {
+    transform: translateY(-50%) scale(0.95); /* Kombiniert mit translateY */
+}
+
+/* Send: opacity-fade verhindert Border-Flimmern am Container-Rand */
+.chat-send {
+    right: -90px;
+    opacity: 0; /* Anfangs unsichtbar – blendet beim Einfahren mit auf */
+    transition: background 0.2s ease,
+                right 0.26s cubic-bezier(0.4, 0, 0.2, 1), /* Material-Easing: sauber und präzise */
+                opacity 0.16s ease; /* Fade beendet Border-Flimmern am Clip-Rand */
+}
+
+/* Send: aktiv → einfahren und einblenden */
+.chat-actions.active .chat-send {
+    right: 0;
+    opacity: 1;
+}
+
+.chat-send:hover {
+    background: var(--clr-surface-dark);
+}
+
+/* Abbrech-Zustand: Hover und Active in Rot */
+.chat-actions.active .chat-send.aborting:hover {
+    background: rgba(255, 0, 0, 0.1); /* Rotes Hover wie Lösch-Buttons */
+    border-color: #8B0000; /* Dunkelroter Rahmen */
+    color: #8B0000; /* Rote Icon-Tint über CSS-Filter */
+}
+
+.chat-actions.active .chat-send.aborting:hover .btn-icon {
+    filter: invert(0) sepia(1) saturate(5) hue-rotate(330deg) brightness(0.6); /* Icon rot einfärben */
+}
+
+.chat-actions.active .chat-send.aborting:active {
+    background: rgba(255, 0, 0, 0.18); /* Etwas kräftiger beim Klick */
+    border-color: #8B0000;
+}
+
+.chat-send:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+/* Streaming läuft: Send gedimmt, nicht klickbar */
+.chat-actions.no-abort .chat-send {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Fullscreen-Modus: 1.3x */
 @media (min-width: 1400px) {
-    .chat-upload {
-        padding: 13px 18px; /* 10px * 1.3 = 13px, 14px * 1.3 = 18.2px ? 18px */
-        font-size: 23px; /* 18px * 1.3 = 23.4px ? 23px */
+    .chat-actions {
+        width: 244px; /* 117px + 10px + 117px */
+        height: 57px;
+    }
+
+    .chat-upload,
+    .chat-send {
+        width: 117px; /* 90px * 1.3 */
+        height: 57px; /* Passend zur chat-actions Höhe im Fullscreen */
+        padding: 0; /* Icon zentriert via flex */
+    }
+
+    .btn-icon {
+        width: 26px; /* 20px * 1.3 = 26px */
+        height: 26px;
+    }
+
+    .chat-actions.active .chat-upload {
+        right: 125px; /* 117px + 10px Gap − 2px Puffer gegen Border-Clipping */
+    }
+
+    .chat-send {
+        right: -117px;
     }
 }
 
-/* Upload-Button beim Hover */
-.chat-upload:hover {
-    background: #6C7061; /* Noch dunkler beim Hover */
-}
 
 /* Entfernen-Button im File-Badge */
 .file-remove {
@@ -436,8 +574,9 @@ body {
     gap: 12px; /* Abstand zwischen Cards */
     margin-top: 12px; /* Abstand zur Nachricht */
     overflow-x: auto; /* Horizontal scrollbar bei vielen Dokumenten */
+    padding-top: 4px; /* Platz für translateY(-2px) hover – verhindert Border-Clipping */
     padding-bottom: 8px; /* Platz für Scrollbar */
-    scrollbar-color: #0D0E0C transparent; /* Firefox: Dunkler Griff, transparenter Hintergrund */
+    scrollbar-color: var(--clr-text) transparent; /* Firefox: Dunkler Griff, transparenter Hintergrund */
     scrollbar-width: thin; /* Dünne Scrollbar */
 }
 
@@ -451,7 +590,7 @@ body {
 }
 
 .found-documents-grid::-webkit-scrollbar-thumb {
-    background: #0D0E0C; /* Dunkler Griff */
+    background: var(--clr-text); /* Dunkler Griff */
     border-radius: 4px; /* Abgerundete Ecken */
 }
 
@@ -459,15 +598,16 @@ body {
 .document-card-chat {
     min-width: 180px; /* Minimale Breite pro Card */
     max-width: 180px; /* Maximale Breite */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border: 2px solid var(--clr-text); /* Dunkler Rahmen */
     border-radius: 6px; /* Abgerundete Ecken */
     padding: 12px; /* Innenabstand */
     background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); /* Smooth Übergänge */
     display: flex; /* Flexbox */
     flex-direction: column; /* Vertikal stapeln */
     gap: 8px; /* Abstand zwischen Elementen */
     flex-shrink: 0; /* Verhindert Schrumpfen */
+    animation: bubble-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .doc-card-content {
@@ -479,6 +619,7 @@ body {
 
 .document-card-chat:hover {
     background: rgba(132, 136, 119, 0.2); /* Heller beim Hover */
+    transform: translateY(-2px); /* Leichtes Anheben beim Hover */
 }
 
 /* Button zum Hinzuf×gen - Minimalistisch */
@@ -486,7 +627,7 @@ body {
     width: auto; /* Nur so breit wie der Text */
     padding: 3px 2px; /* Vertikal 3px, horizontal sehr schmal (2px) */
     background: transparent; /* Transparenter Hintergrund */
-    color: #0D0E0C; /* Gleiche Schriftfarbe wie alles andere */
+    color: var(--clr-text); /* Gleiche Schriftfarbe wie alles andere */
     border: 1px solid rgba(13, 14, 12, 0.3); /* Sehr Dünner, subtiler Rahmen */
     border-radius: 3px; /* Passend zum App-Stil */
     cursor: pointer;
@@ -554,7 +695,7 @@ body {
 
 /* Dokument-Name */
 .doc-name-chat {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 13px; /* Schriftgröße */
     font-weight: 500; /* Mittleres Gewicht */
     overflow: hidden; /* überfluss verstecken */
@@ -564,7 +705,7 @@ body {
 
 /* Dokument-Typ */
 .doc-type-chat {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 11px; /* Kleinere Schriftgröße */
     opacity: 0.6; /* Leicht transparent */
     text-transform: uppercase; /* Gro×buchstaben */

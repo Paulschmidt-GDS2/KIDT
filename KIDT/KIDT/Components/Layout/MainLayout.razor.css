@@ -10,15 +10,16 @@
 
 /* Linke Navigationsleiste */
 .sidebar {
-    background: #848877; /* Dunkler Hintergrund */
+    background: var(--clr-surface); /* Dunkler Hintergrund */
     color: #84804d; /* Textfarbe */
     display: flex; /* Flexbox für vertikale Anordnung */
     flex-direction: column; /* Kinder vertikal stapeln */
     align-items: flex-start; /* Links ausrichten */
-    transition: width 0.3s ease; /* Sanfter Breitenwechsel */
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Flüssiger Breitenwechsel */
     height: 99vh; /* Fast volle Viewport-Höhe */
     padding: 10px 6px 10px 10px; /* Innenabstand oben/rechts/unten/links */
     row-gap: 6px; /* Vertikaler Abstand zwischen Items */
+    will-change: width;
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
@@ -83,12 +84,20 @@ nav {
 .nav-btn {
     display: inline-flex; /* Icon und Text nebeneinander */
     align-items: center; /* Vertikal zentrieren */
-    color: white; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     text-decoration: none; /* Keine Unterstreichung */
     padding: .5rem; /* Innenabstand */
     margin: .25rem 0; /* Vertikaler Außenabstand */
     border-radius: 4px; /* Leicht abgerundete Ecken */
-    transition: all 0.3s ease; /* Sanfte Übergänge */
+    transition: background 0.2s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1); /* Sanfte Übergänge */
+}
+
+.nav-btn:hover {
+    transform: translateX(2px); /* Leichtes Einrücken beim Hover */
+}
+
+.nav-btn:active {
+    transform: scale(0.96); /* Kurzes Eindrücken beim Klick */
 }
 
     /* Icon in Navigations-Buttons */
@@ -110,7 +119,7 @@ nav {
     margin-left: 12px; /* Abstand zum Icon */
     white-space: nowrap; /* Kein Zeilenumbruch */
     font-weight: bold; /* Text fett machen */
-    transition: opacity 0.3s ease, margin 0.3s ease; /* Sanftes Ein-/Ausblenden */
+    transition: opacity 0.25s ease, margin 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Sanftes Ein-/Ausblenden */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größerer Nav-Text */
@@ -127,6 +136,111 @@ nav {
     margin-left: 0; /* Kein Abstand */
     width: 0; /* Keine Breite */
     overflow: hidden; /* überfluss verstecken */
+}
+
+/* === THEME-PICKER === */
+
+.theme-divider {
+    width: 80%;
+    height: 1px;
+    background: rgba(var(--clr-text-rgb), 0.2);
+    margin: 6px 4px 4px 4px;
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .theme-divider {
+    width: 60%;
+    margin: 6px auto;
+}
+
+.theme-section {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 2px 4px;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* Jede Theme-Kachel: volle Breite, Farbstreifen + Name nebeneinander */
+.theme-tile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    transition: background 0.18s ease,
+                transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
+}
+
+.theme-tile:hover {
+    background: rgba(var(--clr-text-rgb), 0.08);
+    transform: translateX(2px);
+}
+
+.theme-tile:active {
+    transform: scale(0.96);
+    transition-duration: 0.08s;
+}
+
+/* Farbquadrat links */
+.theme-tile-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 2px solid;
+    flex-shrink: 0;
+    transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.15s ease;
+}
+
+.theme-tile.active .theme-tile-swatch {
+    box-shadow: 0 0 0 2px var(--clr-surface), 0 0 0 4px var(--clr-text);
+    transform: scale(1.1);
+}
+
+/* Theme-Name */
+.theme-tile-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--clr-text);
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity 0.25s ease,
+                width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.3px;
+}
+
+/* Collapsed: Namen ausblenden */
+.sidebar.collapsed .theme-tile-label {
+    opacity: 0;
+    width: 0;
+    margin-left: 0;
+    overflow: hidden;
+}
+
+/* Fullscreen */
+@media (min-width: 1400px) {
+    .theme-tile {
+        padding: 5px 4px;
+        gap: 10px;
+    }
+
+    .theme-tile-swatch {
+        width: 24px;
+        height: 24px;
+    }
+
+    .theme-tile-label {
+        font-size: 14px;
+    }
 }
 
 /* === CONTENT-BEREICH === */
@@ -149,12 +263,12 @@ nav {
 /* Kopfbereich */
 header {
     flex: 0 0 10%; /* Fixe Höhe 10% */
-    background: #6C7061; /* Dunkler Hintergrund */
+    background: var(--clr-surface-dark); /* Dunkler Hintergrund */
     border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
     border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
-    border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
-    border-left: 3px solid #0D0E0C; /* Dunkle Linie links */
-    border-right: 3px solid #0D0E0C; /* Dunkle Linie rechts */
+    border-top: 3px solid var(--clr-text); /* Dunkle Linie oben */
+    border-left: 3px solid var(--clr-text); /* Dunkle Linie links */
+    border-right: 3px solid var(--clr-text); /* Dunkle Linie rechts */
     display: flex; /* Flexbox für Zentrierung */
     align-items: center; /* Vertikal zentrieren */
     justify-content: center; /* Horizontal zentrieren */
@@ -178,7 +292,7 @@ header {
 .header-title {
     margin: 0; /* Kein Margin */
     padding: 0; /* Kein Padding */
-    color: #0D0E0C; /* */
+    color: var(--clr-text); /* */
     padding-top: 11px; /* Leichter Abstand nach oben für optische Balance */
     font-family: "Courier New", Courier, monospace; /* Schriftart wie im Rest der App */
     font-weight: bold; /* Fett */
@@ -207,12 +321,12 @@ header {
 /* Hauptinhalt-Bereich */
 main {
     flex: 1; /* Nimmt verfügbaren Platz ein */
-    background: #6C7061; /* Dunkler Hintergrund */
+    background: var(--clr-surface-dark); /* Dunkler Hintergrund */
     text-align: center; /* Text zentrieren */
     position: relative; /* für absolute Positionierung von Kindern */
-    border-left: 3px solid #0D0E0C; /* Dunkle Linie links */
-    border-right: 3px solid #0D0E0C; /* Dunkle Linie rechts */
-    border-bottom: 3px solid #0D0E0C; /* Dunkle Linie unten */
+    border-left: 3px solid var(--clr-text); /* Dunkle Linie links */
+    border-right: 3px solid var(--clr-text); /* Dunkle Linie rechts */
+    border-bottom: 3px solid var(--clr-text); /* Dunkle Linie unten */
     border-bottom-left-radius: 10px; /* Untere linke Ecke abrunden */
     border-bottom-right-radius: 10px; /* Untere rechte Ecke abrunden */
     overflow: hidden; /* KEIN Scroll - nur innere Bereiche scrollen */
@@ -221,7 +335,7 @@ main {
 
     /* Main ohne Header (Kalender-Seite): runde Ecken auch oben */
     main.no-header {
-        border-top: 3px solid #0D0E0C; /* Dunkle Linie oben */
+        border-top: 3px solid var(--clr-text); /* Dunkle Linie oben */
         border-top-left-radius: 10px; /* Obere linke Ecke abrunden */
         border-top-right-radius: 10px; /* Obere rechte Ecke abrunden */
     }

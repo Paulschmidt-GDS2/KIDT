@@ -48,61 +48,62 @@ public class RouterService
         {
             // SCHRITT 1: Erstelle Kernel mit MCP-Tools für Function Calling
             var builder = Kernel.CreateBuilder();
-            builder.Services.AddAzureOpenAIChatCompletion( // Azure OpenAI hinzufügen
-                deploymentName: "gpt-4.1-deployment",
-                endpoint: "https://ts-openai-testing.openai.azure.com/",
-                apiKey: this.apiKey.Trim()
+            builder.Services.AddOpenAIChatCompletion( // OpenRouter hinzufügen (gemini-2.5-flash-lite)
+                modelId: "google/gemini-2.5-flash-lite",
+                apiKey: this.apiKey.Trim(),
+                endpoint: new Uri("https://openrouter.ai/api/v1")
             );
 
             var kernel = builder.Build(); // Kernel erstellen
 
             McpToolsRegistry.RegisterTools(kernel, docDbService, calendarService, conversationId); // Registriere MCP-Tools (search_documents, add_document_to_chat, list_calendar_events, create_calendar_event, delete_calendar_event)
+            kernel.ImportPluginFromObject(new AnalysisTools(), "Analysis"); // Registriere analyze_document Tool für Intent-basiertes Analyse-Routing
 
             var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Hole Chat-Service für LLM-Anfragen
             var chatHistory = new ChatHistory(); // Chat-History erstellen (System + User)
 
-            // Aktuelles Datum für relative Datumsangaben
+            // Aktuelles Datum und Uhrzeit für relative Abfragen
             DateTime now = DateTime.Now;
             string currentDate = now.ToString("yyyy-MM-dd");
             string currentDateGerman = now.ToString("dd.MM.yyyy");
-            int currentYear = now.Year;
+            string currentTime = now.ToString("HH:mm");
 
+            string dayOfWeek = now.ToString("dddd", new System.Globalization.CultureInfo("de-DE")); // Wochentag auf Deutsch
             string systemPrompt =
-                $"Router-Agent mit Tools. DATUM: {currentDate} ({currentDateGerman}), Jahr: {currentYear}\n\n" +
-                "Du hast KEINE Infos zu Dokumenten/Terminen - nutze Tools!\n\n" +
+                $"Heute ist {dayOfWeek}, der {currentDateGerman}, {currentTime} Uhr. ({currentDate})\n" +
+                "Antworte immer auf Deutsch. Verwende 'du', nicht 'Sie'.\n\n" +
+                "KALENDER - Termine erstellen (benötigt: Titel + Datum + Zeit):\n" +
+                "Titel-Erkennung: 'Termin [Titel] für/am [Datum]...' → das Wort/die Phrase zwischen 'Termin' und 'für'/'am'/'von' ist der Titel.\n" +
+                "Beispiele: 'Termin Mittagessen für heute von 12:00-13:00' → Titel=Mittagessen, Datum=heute, Zeit=12:00-13:00\n" +
+                "           'Termin Arzt morgen 14:00' → Titel=Arzt, Datum=morgen, Zeit=14:00\n" +
+                "           'erstelle Termin Team-Meeting am Freitag ganztägig' → Titel=Team-Meeting, Datum=Freitag, ganztägig\n" +
+                "Zeit = entweder 'ganztägig' ODER Zeitspanne (Startzeit + Endzeit, z.B. 14:00-16:00) ODER nur Startzeit.\n" +
+                "Alle Infos vorhanden? → create_calendar_event SOFORT aufrufen (startTime + endTime wenn Zeitspanne).\n" +
+                "KRITISCH: Antworte NIEMALS mit Text der besagt du hast einen Termin erstellt/gelöscht/aktualisiert ohne vorher das entsprechende Tool aufgerufen zu haben!\n" +
+                "Bei Zeitüberschneidung meldet das Tool Fehler → informiere User und frage nach anderer Zeit.\n" +
+                "Infos fehlen? → Frage direkt danach (max 15 Wörter, ganzer Satz):\n" +
+                "  Alle fehlen:   \"Wie heißt der Termin, wann und ganztägig oder welche Zeitspanne?\"\n" +
+                "  Titel fehlt:   \"Wie soll der Termin heißen?\"\n" +
+                "  Datum fehlt:   \"Für welches Datum soll ich den Termin anlegen?\"\n" +
+                "  Zeit fehlt:    \"Soll der Termin ganztägig sein oder welche Zeitspanne (z.B. 14:00-16:00)?\"\n" +
+                "  Titel+Datum:   \"Wie heißt der Termin und für welches Datum?\"\n" +
+                "  Titel+Zeit:    \"Wie soll der Termin heißen und ganztägig oder welche Zeitspanne?\"\n" +
+                "  Datum+Zeit:    \"Für welches Datum und ganztägig oder welche Zeitspanne?\"\n\n" +
                 "DOKUMENTE:\n" +
-                "User fragt nach Dokument? -> search_documents\n" +
-                "User will Inhalt/Zusammenfassung?\n" +
-                "  -> Nutze DocID aus 'CONTEXT: Kürzlich gefundene DocIDs:' System-Message\n" +
-                "  -> Oder suche '[DocID: X]' in letzter Assistant-Message\n" +
-                "  -> Falls KEIN DocID: search_documents mit Dokumentname -> dann add_document_to_chat\n\n" +
-                "NORMALE KONVERSATION (Small Talk, Begrüßung, Fragen):\n" +
-                "User sagt 'hallo', 'wie geht's', stellt Fragen?\n" +
-                "-> JSON: {\"needsRouting\": true, \"intent\": \"conversation\"}\n" +
-                "KEIN conversationTask! Nur bei Termin-Erstellung!\n\n" +
-                "TERMIN-ERSTELLUNG (NUR wenn User explizit Termin will!):\n" +
-                "Pflicht: Titel, Datum, Zeit (ganztaegig/Uhrzeit)\n" +
-                "Analysiere History: Was FEHLT?\n\n" +
-                "Titel-Erkennung:\n" +
-                "- 'Meeting' -> Titel DA\n" +
-                "- 'name ist Test3' -> Titel DA (Test3)\n" +
-                "- 'heißt Zahnarzt' -> Titel DA (Zahnarzt)\n" +
-                "- 'der termin soll Test4 heissen' -> Titel DA (Test4)\n\n" +
-                "Wenn Assistant fragt und User antwortet -> Info vorhanden!\n\n" +
-                "ALLE 3 da? -> create_calendar_event\n\n" +
-                "Infos fehlen? JSON:\n" +
-                "ALLE 3: {\"needsRouting\": true, \"intent\": \"conversation\", \"conversationTask\": \"askForAll\"}\n" +
-                "Nur TITEL: \"askForTitle\"\n" +
-                "Nur DATUM: \"askForDate\"\n" +
-                "Nur ZEIT: \"askForTime\"\n" +
-                "TITEL+DATUM: \"askForTitleAndDate\"\n" +
-                "TITEL+ZEIT: \"askForTitleAndTime\"\n" +
-                "DATUM+ZEIT: \"askForDateAndTime\"\n\n" +
-                "TOOLS: search_documents, add_document_to_chat, list_calendar_events, update_calendar_event, delete_calendar_event\n\n" +
-                "DU BIST ROUTER! Nur Tool-Calls oder JSON!\n" +
-                "KEINE eigenen Texte/Fragen/Erklärungen!";
+                "User sucht ein Dokument → search_documents aufrufen\n" +
+                "User will Dokument-Inhalt analysieren/zusammenfassen/erklären → add_document_to_chat aufrufen (wenn Dokument noch nicht im Chat)\n\n" +
+                "DATENANALYSE (Dokument-Inhalt analysieren, zusammenfassen, erklären):\n" +
+                "  PRÜFE ZUERST: Ist eine DocID im CONTEXT sichtbar (z.B. 'CONTEXT: Kürzlich gefundene DocIDs: 7')?\n" +
+                "    JA → analyze_document(docId) aufrufen – NICHT add_document_to_chat!\n" +
+                "    NEIN → add_document_to_chat aufrufen (Dokument noch nicht im Chat)\n" +
+                "  STRIKT VERBOTEN: Selbst antworten oder eigene Zusammenfassung schreiben!\n\n" +
+                "SONSTIGE TOOLS: list_calendar_events, update_calendar_event, delete_calendar_event\n\n" +
+                "KONVERSATION (Smalltalk, allgemeine Fragen, Begrüßungen):\n" +
+                "Antworte freundlich und kurz auf Deutsch (max 2-3 Sätze).";
 
             chatHistory.AddSystemMessage(systemPrompt); // Füge System-Prompt hinzu
+
+            var lastDocIds = new List<int>(); // DocIDs aus Chat-Kontext (für DataAnalysis Follow-up zugänglich)
 
             // WICHTIG: Lade vorherige Chat-History aus DB (Router braucht Kontext für Termin-Erstellung!)
             // LIMIT: Nur letzte 10 Nachrichten laden (Token-Limit beachten!)
@@ -111,8 +112,8 @@ public class RouterService
                 var allMessages = await dbService.LoadMessagesAsync(conversationId); // Lade alle Nachrichten
 
                 // Nehme nur die letzten 10 Nachrichten (um Token-Limit nicht zu überschreiten)
-                var recentMessages = allMessages.Count > 10 
-                    ? allMessages.Skip(allMessages.Count - 10).ToList() 
+                var recentMessages = allMessages.Count > 10
+                    ? allMessages.Skip(allMessages.Count - 10).ToList()
                     : allMessages;
 
                 System.Diagnostics.Debug.WriteLine($"[ROUTER] Lade {recentMessages.Count} vorherige Nachrichten aus DB (von {allMessages.Count} gesamt)...");
@@ -130,7 +131,6 @@ public class RouterService
                 }
 
                 // Extrahiere DocIDs aus letzten Nachrichten für einfacheren Zugriff
-                var lastDocIds = new List<int>();
                 foreach (var msg in recentMessages.TakeLast(3)) // Nur letzte 3 Nachrichten prüfen
                 {
                     if (!msg.IsUser && msg.Text.Contains("[DocID:")) // Assistant-Message mit DocID?
@@ -188,7 +188,7 @@ public class RouterService
                 responseText = response.Content.Trim(); // Setze Response-Text und trimme Whitespace
             }
 
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] === GPT-4 RAW RESPONSE ===");
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] === GEMINI RAW RESPONSE ===");
             System.Diagnostics.Debug.WriteLine(responseText);
             System.Diagnostics.Debug.WriteLine($"[ROUTER] === END RAW RESPONSE ===");
 
@@ -214,6 +214,58 @@ public class RouterService
                     {
                         hasToolCalls = true; // Flag: Tool wurde aufgerufen
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] ? Tool-Call erkannt: {functionCall.FunctionName}");
+
+                        // analyze_document Tool aufgerufen → Dokument aus DB laden und zu DataAnalysis routen
+                        if (functionCall.FunctionName == "analyze_document")
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ROUTER] analyze_document aufgerufen, extrahiere docId...");
+
+                            int requestedDocId = 0; // DocID aus Tool-Argument
+                            if (functionCall.Arguments != null) // Argumente vorhanden?
+                            {
+                                object? docIdObj = null;
+                                functionCall.Arguments.TryGetValue("docId", out docIdObj); // DocID-Argument holen
+                                if (docIdObj != null) // Argument vorhanden?
+                                {
+                                    int.TryParse(docIdObj.ToString(), out requestedDocId); // Parse zu int
+                                }
+                            }
+
+                            System.Diagnostics.Debug.WriteLine($"[ROUTER] analyze_document docId={requestedDocId}");
+
+                            List<Document> analysisDocs = new List<Document>(); // Dokumente für DataAnalysis
+
+                            if (requestedDocId > 0) // Spezifische DocID vorhanden?
+                            {
+                                Document requestedDoc = await docDbService.GetDocumentByIdAsync(requestedDocId); // Dokument aus DB laden
+                                if (requestedDoc != null && requestedDoc.Id > 0) // Gültiges Dokument?
+                                {
+                                    analysisDocs.Add(requestedDoc); // Zur Liste hinzufügen
+                                }
+                            }
+
+                            if (analysisDocs.Count == 0) // Kein Dokument gefunden → Fallback auf Kontext-DocIDs
+                            {
+                                foreach (int docId in lastDocIds) // Bekannte DocIDs aus Kontext
+                                {
+                                    Document doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument aus DB laden
+                                    if (doc != null && doc.Id > 0) // Gültiges Dokument?
+                                    {
+                                        analysisDocs.Add(doc); // Zur Liste hinzufügen
+                                    }
+                                }
+                            }
+
+                            RouterResponse analyzeResponse = new RouterResponse(); // Routing-Response erstellen
+                            analyzeResponse.ShouldRoute = true; // Weiterleitung zu DataAnalysis
+                            analyzeResponse.DirectResponse = null;
+                            analyzeResponse.TargetService = "dataAnalysis";
+                            analyzeResponse.MaxTokens = 2000;
+                            analyzeResponse.FoundDocuments = analysisDocs;
+                            analyzeResponse.Reason = "DataAnalysis-Routing (analyze_document Tool)";
+                            analyzeResponse.ToolWasUsed = true;
+                            return analyzeResponse;
+                        }
 
                         try
                         {
@@ -587,85 +639,79 @@ public class RouterService
 
 
                             // add_document_to_chat Tool wurde aufgerufen
-                                            if (functionCall.FunctionName == "add_document_to_chat") // War Tool add_document_to_chat?
-                                            {
-                                                var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // Parse JSON-Result
+                            if (functionCall.FunctionName == "add_document_to_chat") // War Tool add_document_to_chat?
+                            {
+                                var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // Parse JSON-Result
 
-                                                // Prüfe ob User Document-Analyse will (Zusammenfassung, Inhalt, etc.)
-                                                string lowerUserMsg = userMessage.ToLower();
-                                                bool wantsAnalysis = lowerUserMsg.Contains("zusammen") || lowerUserMsg.Contains("inhalt") || 
-                                                                    lowerUserMsg.Contains("analysier") || lowerUserMsg.Contains("erkläre") ||
-                                                                    lowerUserMsg.Contains("beschreib") || lowerUserMsg.Contains("fasse");
+                                if (addResult != null && (addResult.success || addResult.message?.Contains("bereits") == true)) // Erfolgreich ODER bereits hinzugefügt?
+                                {
+                                    Document docTemp = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
+                                    bool docFound = false; // Flag für Dokument gefunden
+                                    Document doc = new Document(); // Initialisiere Dokument
+                                    if (docTemp != null) // Prüfe ob Dokument vorhanden
+                                    {
+                                        doc = docTemp; // Übernehme Dokument
+                                        if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
+                                        {
+                                            docFound = true; // Setze Flag
+                                        }
+                                    }
+                                    if (docFound) // Füge nur hinzu wenn gefunden
+                                    {
+                                        foundDocuments.Add(doc);
+                                    }
 
-                                                if (addResult != null && (addResult.success || addResult.message?.Contains("bereits") == true)) // Erfolgreich ODER bereits hinzugefügt?
-                                                {
-                                                    Document docTemp = await docDbService.GetDocumentByIdAsync(addResult.documentId); // Lade Dokument
-                                                    bool docFound = false; // Flag für Dokument gefunden
-                                                    Document doc = new Document(); // Initialisiere Dokument
-                                                    if (docTemp != null) // Prüfe ob Dokument vorhanden
-                                                    {
-                                                        doc = docTemp; // Übernehme Dokument
-                                                        if (doc.Id > 0) // Prüfe ob ID gültig (nicht -1 vom Dummy)
-                                                        {
-                                                            docFound = true; // Setze Flag
-                                                        }
-                                                    }
-                                                    if (docFound) // Füge nur hinzu wenn gefunden
-                                                    {
-                                                        foundDocuments.Add(doc);
-                                                    }
+                                    // add_document_to_chat wird laut System-Prompt nur bei Analyse-Intent aufgerufen → immer zu DataAnalysis
+                                    if (docFound)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Dokument verknüpft, route zu DataAnalysis");
 
-                                                    // Wenn User Analyse will -> Route zu DataAnalysis statt direkte Antwort
-                                                    if (wantsAnalysis && docFound)
-                                                    {
-                                                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Dokument verknüpft, route zu DataAnalysis für Analyse");
+                                        RouterResponse analysisResponse = new RouterResponse();
+                                        analysisResponse.ShouldRoute = true; // Route zu DataAnalysis
+                                        analysisResponse.DirectResponse = null;
+                                        analysisResponse.TargetService = "dataAnalysis";
+                                        analysisResponse.FoundDocuments = foundDocuments;
+                                        analysisResponse.MaxTokens = 2000;
+                                        analysisResponse.Reason = "Dokument verknüpft -> DataAnalysis";
+                                        analysisResponse.ToolWasUsed = true;
+                                        return analysisResponse;
+                                    }
 
-                                                        RouterResponse analysisResponse = new RouterResponse();
-                                                        analysisResponse.ShouldRoute = true; // Route zu DataAnalysis
-                                                        analysisResponse.DirectResponse = null;
-                                                        analysisResponse.TargetService = "dataAnalysis";
-                                                        analysisResponse.FoundDocuments = foundDocuments;
-                                                        analysisResponse.MaxTokens = 2000;
-                                                        analysisResponse.Reason = "Dokument verknüpft -> DataAnalysis";
-                                                        analysisResponse.ToolWasUsed = true;
-                                                        return analysisResponse;
-                                                    }
+                                    string fileName = "Unbekannt"; // Standard-Dateiname
+                                    if (addResult.fileName != null) // Dateiname vorhanden?
+                                    {
+                                        fileName = addResult.fileName; // Übernehme Dateiname
+                                    }
 
-                                                    string fileName = "Unbekannt"; // Standard-Dateiname
-                                                    if (addResult.fileName != null) // Dateiname vorhanden?
-                                                    {
-                                                        fileName = addResult.fileName; // Übernehme Dateiname
-                                                    }
+                                    RouterResponse addSuccessResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    addSuccessResponse.ShouldRoute = false; // Kein Routing nötig
+                                    addSuccessResponse.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
+                                    addSuccessResponse.FoundDocuments = foundDocuments;
+                                    addSuccessResponse.TargetService = string.Empty; // Kein Target-Service
+                                    addSuccessResponse.MaxTokens = 0; // Keine Token-Limit
+                                    addSuccessResponse.Reason = "Dokument hinzugefügt (Function Calling)";
+                                    addSuccessResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return addSuccessResponse;
+                                }
+                                else // Fehler beim Hinzufügen
+                                {
+                                    string errorMessage = "Dokument konnte nicht hinzugefügt werden.";
+                                    if (addResult != null && addResult.message != null) // Fehlermeldung vorhanden?
+                                    {
+                                        errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
+                                    }
 
-                                                    RouterResponse addSuccessResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                                    addSuccessResponse.ShouldRoute = false; // Kein Routing nötig
-                                                    addSuccessResponse.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
-                                                    addSuccessResponse.FoundDocuments = foundDocuments;
-                                                    addSuccessResponse.TargetService = string.Empty; // Kein Target-Service
-                                                    addSuccessResponse.MaxTokens = 0; // Keine Token-Limit
-                                                    addSuccessResponse.Reason = "Dokument hinzugefügt (Function Calling)";
-                                                    addSuccessResponse.ToolWasUsed = true; // Tool wurde verwendet
-                                                    return addSuccessResponse;
-                                                }
-                                                else // Fehler beim Hinzufügen
-                                                {
-                                                    string errorMessage = "Dokument konnte nicht hinzugefügt werden.";
-                                                    if (addResult != null && addResult.message != null) // Fehlermeldung vorhanden?
-                                                    {
-                                                        errorMessage = addResult.message; // Verwende spezifische Fehlermeldung
-                                                    }
-
-                                                    RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                                                    addErrorResponse.ShouldRoute = false; // Kein Routing nötig
-                                                    addErrorResponse.DirectResponse = errorMessage;
-                                                    addErrorResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
-                                                    addErrorResponse.TargetService = string.Empty; // Kein Target-Service
-                                                    addErrorResponse.MaxTokens = 0; // Keine Token-Limit
-                                                    addErrorResponse.Reason = "Dokument-Verknüpfung fehlgeschlagen";
-                                                    addErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
-                                                    return addErrorResponse;
-                                                }
-                                            }
+                                    RouterResponse addErrorResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                                    addErrorResponse.ShouldRoute = false; // Kein Routing nötig
+                                    addErrorResponse.DirectResponse = errorMessage;
+                                    addErrorResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
+                                    addErrorResponse.TargetService = string.Empty; // Kein Target-Service
+                                    addErrorResponse.MaxTokens = 0; // Keine Token-Limit
+                                    addErrorResponse.Reason = "Dokument-Verknüpfung fehlgeschlagen";
+                                    addErrorResponse.ToolWasUsed = true; // Tool wurde verwendet
+                                    return addErrorResponse;
+                                }
+                            }
                         }
                         catch (Exception ex) // Tool-Execution fehlgeschlagen?
                         {
@@ -678,50 +724,40 @@ public class RouterService
 
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tools aufgerufen: {hasToolCalls}");
 
-            // SCHRITT 3: Keine Tools aufgerufen ? Fallback auf JSON-basiertes Intent-Routing
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Keine Tools genutzt, prüfe Intent-JSON...");
+            // SCHRITT 3: Kein Tool aufgerufen - prüfe ob dataAnalysis-JSON oder direkte Konversation
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Analysiere Gemini-Response...");
 
             if (responseText.TrimStart().StartsWith("{")) // Response ist JSON?
             {
                 try
                 {
-                    var routingJson = JsonSerializer.Deserialize<RoutingResponseJson>(responseText, // Parse JSON-Response
+                    var routingJson = JsonSerializer.Deserialize<SimpleRoutingJson>(responseText, // Parse JSON-Response
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitive
 
-                    if (routingJson != null && routingJson.needsRouting == true) // Routing nötig?
+                    if (routingJson != null && routingJson.route == "dataAnalysis") // DataAnalysis-Route erkannt?
                     {
-                        string targetService = "conversation"; // Standardmäßig Conversation
-                        if (routingJson.intent == "dataAnalysis") // Intent ist DataAnalysis?
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] DataAnalysis-Routing erkannt (Follow-up, DocIDs: {lastDocIds.Count})");
+
+                        // Lade Dokumente aus DB anhand der DocIDs aus dem Chat-Kontext
+                        List<Document> contextDocs = new List<Document>();
+                        foreach (int docId in lastDocIds) // Durchlaufe bekannte DocIDs
                         {
-                            targetService = "dataAnalysis";
+                            Document doc = await docDbService.GetDocumentByIdAsync(docId); // Lade Dokument aus DB
+                            if (doc != null && doc.Id > 0) // Gültiges Dokument?
+                            {
+                                contextDocs.Add(doc); // Zur Liste hinzufügen
+                            }
                         }
 
-                        int maxTokens = 500; // Standard Token-Limit für Conversation (reicht für kurze UND lange Antworten)
-                        if (targetService == "dataAnalysis") // DataAnalysis gewählt?
-                        {
-                            maxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
-                        }
-
-                        string conversationTask = string.Empty; // Variable für Conversation-Task
-                        if (routingJson.conversationTask != null) // Task vorhanden?
-                        {
-                            conversationTask = routingJson.conversationTask; // Setze Task
-                        }
-
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Routing zu: {targetService}");
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Conversation-Task: '{conversationTask}'");
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] ConversationTask isEmpty: {string.IsNullOrEmpty(conversationTask)}");
-
-                        RouterResponse intentResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                        intentResponse.ShouldRoute = true; // Routing nötig
-                        intentResponse.DirectResponse = null;
-                        intentResponse.TargetService = targetService;
-                        intentResponse.ConversationTask = conversationTask; // NEU: Setze Task
-                        intentResponse.MaxTokens = maxTokens;
-                        intentResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
-                        intentResponse.Reason = $"Intent-Routing: {routingJson.intent}";
-                        intentResponse.ToolWasUsed = false; // Keine Tools verwendet
-                        return intentResponse;
+                        RouterResponse dataResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                        dataResponse.ShouldRoute = true; // Weiterleitung nötig
+                        dataResponse.DirectResponse = null;
+                        dataResponse.TargetService = "dataAnalysis"; // Ziel: DataAnalysis-Service
+                        dataResponse.MaxTokens = 2000; // Höheres Token-Limit für Analyse
+                        dataResponse.FoundDocuments = contextDocs; // Dokumente aus Kontext mitgeben
+                        dataResponse.Reason = "DataAnalysis-Routing (Follow-up)";
+                        dataResponse.ToolWasUsed = false;
+                        return dataResponse;
                     }
                 }
                 catch (Exception ex) // JSON-Parsing fehlgeschlagen?
@@ -730,78 +766,30 @@ public class RouterService
                 }
             }
 
-            // SCHRITT 4: Letzter Fallback → Intent-Klassifizierung per GPT-4
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback: Intent-Klassifizierung per GPT-4...");
-            var fallbackIntent = await ClassifyIntentAsync(userMessage); // Klassifiziere Intent per GPT-4
-
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback Intent Result: {fallbackIntent.Intent}");
-
-            if (fallbackIntent.Intent == "document_search") // Intent ist Dokumenten-Suche?
+            // SCHRITT 4: Direkte Konversations-Antwort von Gemini verwenden
+            if (!string.IsNullOrWhiteSpace(responseText) && !hasToolCalls) // Antwort vorhanden und kein Tool?
             {
-                System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback-Suche: '{fallbackIntent.SearchQuery}'");
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Direkte Konversations-Antwort von Gemini");
 
-                string searchQuery = string.Empty; // Variable für Such-Query
-                if (fallbackIntent.SearchQuery != null) // Such-Query vorhanden?
-                {
-                    searchQuery = fallbackIntent.SearchQuery; // Setze Such-Query
-                }
-
-                var documents = await docDbService.SearchDocumentsAsync(searchQuery); // Suche in Datenbank
-
-                string message; // Variable für Nachricht
-                if (documents.Count > 0) // Dokumente gefunden?
-                {
-                    List<string> fileNames = new List<string>(); // Erstelle Liste für Dateinamen
-                    foreach (Document d in documents) // Gehe durch alle gefundenen Dokumente
-                    {
-                        string docFileName = string.Empty; // Initialisiere Dateiname
-                        if (d.FileName != null) // Dateiname vorhanden?
-                        {
-                            docFileName = d.FileName; // Übernehme Dateiname
-                        }
-                        fileNames.Add(docFileName); // Füge Dateiname zur Liste hinzu
-                    }
-                    string fileNamesList = string.Join(", ", fileNames); // Verbinde Dateinamen mit Komma
-                    message = $"{documents.Count} Dokument(e) gefunden: {fileNamesList}";
-                }
-                else // Keine Dokumente gefunden
-                {
-                    message = "Keine Dokumente gefunden.";
-                }
-
-                RouterResponse fallbackSearchResponse = new RouterResponse(); // Erstelle neue RouterResponse
-                fallbackSearchResponse.ShouldRoute = false; // Kein Routing nötig
-                fallbackSearchResponse.DirectResponse = message;
-                fallbackSearchResponse.FoundDocuments = documents;
-                fallbackSearchResponse.TargetService = string.Empty; // Kein Target-Service
-                fallbackSearchResponse.MaxTokens = 0; // Keine Token-Limit
-                fallbackSearchResponse.Reason = "Dokumentensuche durchgeführt (Fallback)";
-                fallbackSearchResponse.ToolWasUsed = true; // Tool-ähnlich (DB-Suche)
-                return fallbackSearchResponse;
+                RouterResponse conversationResponse = new RouterResponse(); // Erstelle neue RouterResponse
+                conversationResponse.ShouldRoute = false; // Kein Routing - direkte Antwort
+                conversationResponse.DirectResponse = responseText; // Gemini-Antwort direkt verwenden
+                conversationResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
+                conversationResponse.Reason = "Konversation (Gemini direkt)";
+                conversationResponse.ToolWasUsed = false;
+                return conversationResponse;
             }
 
-            // Normales Intent-Routing (Conversation oder DataAnalysis)
-            string finalTargetService = "conversation"; // Standardmäßig Conversation
-            if (fallbackIntent.Intent == "dataAnalysis") // Intent ist DataAnalysis?
-            {
-                finalTargetService = "dataAnalysis";
-            }
+            // SCHRITT 5: Fallback wenn keine verwertbare Antwort
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Fallback: Keine verwertbare Antwort");
 
-            int finalMaxTokens = 500; // Standard Token-Limit für Conversation
-            if (finalTargetService == "dataAnalysis") // DataAnalysis gewählt?
-            {
-                finalMaxTokens = 2000; // Höheres Token-Limit für komplexe Analyse
-            }
-
-            RouterResponse finalResponse = new RouterResponse(); // Erstelle neue RouterResponse
-            finalResponse.ShouldRoute = true; // Routing nötig
-            finalResponse.DirectResponse = null;
-            finalResponse.TargetService = finalTargetService;
-            finalResponse.MaxTokens = finalMaxTokens;
-            finalResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
-            finalResponse.Reason = $"Intent-Routing (Fallback): {fallbackIntent.Intent}";
-            finalResponse.ToolWasUsed = false; // Keine Tools
-            return finalResponse;
+            RouterResponse fallbackResponse = new RouterResponse(); // Erstelle Fallback-Response
+            fallbackResponse.ShouldRoute = false; // Kein Routing
+            fallbackResponse.DirectResponse = "Wie kann ich dir helfen?"; // Standard-Antwort
+            fallbackResponse.FoundDocuments = new List<Document>(); // Leere Dokument-Liste
+            fallbackResponse.Reason = "Fallback (leere Antwort)";
+            fallbackResponse.ToolWasUsed = false;
+            return fallbackResponse;
         }
         catch (Exception ex)
         {
@@ -809,13 +797,13 @@ public class RouterService
         }
     }
 
-    private async Task<IntentResult> ClassifyIntentAsync(string userMessage) // Hilfsmethode: Klassifiziert Intent per GPT-4 (Fallback wenn Function Calling versagt)
+    private async Task<IntentResult> ClassifyIntentAsync(string userMessage) // Hilfsmethode: Klassifiziert Intent (Fallback, selten aufgerufen)
     {
         var builder = Kernel.CreateBuilder(); // Erstelle neuen Kernel
-        builder.Services.AddAzureOpenAIChatCompletion( //Füge Azure OpenAI hinzu
-            deploymentName: "gpt-4.1-deployment",
-            endpoint: "https://ts-openai-testing.openai.azure.com/",
-            apiKey: this.apiKey.Trim()
+        builder.Services.AddOpenAIChatCompletion( // OpenRouter als Fallback
+            modelId: "google/gemini-2.5-flash-lite",
+            apiKey: this.apiKey.Trim(),
+            endpoint: new Uri("https://openrouter.ai/api/v1")
         );
 
         var kernel = builder.Build(); // Kernel erstellen
@@ -889,11 +877,9 @@ public class RouterService
 
     // === HELPER-KLASSEN FÜR JSON-SERIALISIERUNG ===
 
-    private class RoutingResponseJson // JSON-Klasse: Intent-basiertes Routing-Response
+    private class SimpleRoutingJson // JSON-Klasse: DataAnalysis-Routing-Signal von Gemini
     {
-        public bool needsRouting { get; set; }
-        public string? intent { get; set; }
-        public string? conversationTask { get; set; } // NEU: Task für Coordinator
+        public string? route { get; set; } // "dataAnalysis" wenn Analyse nötig
     }
 
     private class SearchResultJson // JSON-Klasse: Ergebnis von search_documents Tool
@@ -964,6 +950,18 @@ public class RouterService
         public string? message { get; set; }
         public int eventId { get; set; }
         public List<CalendarEventJson>? events { get; set; }
+    }
+}
+
+internal class AnalysisTools // Dummy-Klasse: stellt analyze_document als SK-Tool bereit (echter Handler läuft im RouterService)
+{
+    [KernelFunction("analyze_document")]
+    [System.ComponentModel.Description("Analysiert oder fasst den Inhalt eines Dokuments aus dem Chat zusammen. Aufrufen wenn der User Dokument-Inhalt verstehen, zusammenfassen, erklären oder analysieren möchte und ein Dokument im Chat-Kontext vorhanden ist.")]
+    public string AnalyzeDocument( // Dummy-Methode: wird nie wirklich ausgeführt, Routing passiert im RouterService-Handler
+        [System.ComponentModel.Description("DocID des Dokuments aus dem Chat-Kontext (steht in [DocID: X] Nachrichten)")]
+        int docId) // DocID des zu analysierenden Dokuments
+    {
+        return docId.ToString(); // Dummy-Return — Routing passiert im RouterService-Handler
     }
 }
 

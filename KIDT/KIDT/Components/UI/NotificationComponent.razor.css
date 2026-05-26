@@ -2,22 +2,29 @@
 .notification-startup,
 .notification-reminder {
     position: fixed;
-    background-color: #848877;
-    border: 2px solid #0D0E0C;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background-color: var(--clr-surface);
+    border: 2px solid var(--clr-text);
+    border-radius: 10px;
     z-index: 9999;
     font-family: "Courier New", Courier, monospace;
-    color: #0D0E0C;
+    color: var(--clr-text);
     opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none; /* Klicks ignorieren während unsichtbar */
+    will-change: opacity, transform, box-shadow;
+    transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .notification-startup.show,
 .notification-reminder.show {
     opacity: 1;
+    pointer-events: auto; /* Klicks wieder erlauben */
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+/* === SCHLIESSEN-BUTTON === */
 .notification-close {
     position: absolute;
     top: 8px;
@@ -26,139 +33,203 @@
     border: none;
     font-size: 20px;
     cursor: pointer;
-    color: #0D0E0C;
+    color: var(--clr-text);
     font-weight: bold;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     line-height: 1;
+    border-radius: 50%;
+    opacity: 0.6;
+    transition: opacity 0.15s ease,
+                color 0.15s ease,
+                background 0.15s ease,
+                transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .notification-close:hover {
-    color: #e50000;
-    transform: scale(1.2);
+    opacity: 1;
+    color: #c0392b;
+    background: rgba(192, 57, 43, 0.1);
+    transform: scale(1.15);
 }
 
-/* === STARTUP NOTIFICATION (Mittig Oben) === */
+.notification-close:active {
+    transform: scale(0.9);
+}
+
+/* === STARTUP NOTIFICATION (oben Mitte, fällt von oben rein) === */
 .notification-startup {
-    top: 20px;
+    top: 16px;
     left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    width: 450px;
+    transform: translateX(-50%) translateY(-28px) scale(0.96);
+    transform-origin: top center;
+    width: 460px;
     max-width: 90vw;
-    padding: 20px;
+    padding: 18px 20px;
 }
 
 .notification-startup.show {
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.notification-startup.dismissing {
+    animation: startup-dismiss 0.44s cubic-bezier(0.4, 0, 0.85, 1) both;
+    pointer-events: none;
+    transition: none;
+}
+
+@keyframes startup-dismiss {
+    0%   { transform: translateX(-50%) translateY(0)   scale(1)    rotate(0deg);   }
+    10%  { transform: translateX(-50%) translateY(7px)  scale(1.01) rotate(0.3deg); }
+    100% { transform: translateX(-52%) translateY(calc(-100% - 90px)) scale(0.86) rotate(-2.5deg); }
 }
 
 .notification-header {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
     margin-bottom: 12px;
-    padding-right: 30px;
+    padding-right: 28px;
+    letter-spacing: 0.3px;
 }
 
 .notification-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
+/* Termin-Zeile in Startup-Übersicht */
 .event-row {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
-    background: rgba(13, 14, 12, 0.05);
-    border-radius: 4px;
+    gap: 3px;
+    padding: 8px 10px;
+    background: rgba(var(--clr-text-rgb), 0.06);
+    border-radius: 6px;
     cursor: pointer;
-    transition: background 0.2s;
+    border: 1px solid transparent;
+    transition: background 0.2s ease,
+                border-color 0.2s ease,
+                transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
 }
 
 .event-row:hover {
-    background: rgba(13, 14, 12, 0.15);
+    background: rgba(var(--clr-text-rgb), 0.13);
+    border-color: rgba(var(--clr-text-rgb), 0.15);
+    transform: translateX(3px);
+}
+
+.event-row:active {
+    transform: scale(0.98) translateX(3px);
 }
 
 .event-title {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: bold;
-    color: #0D0E0C;
+    color: var(--clr-text);
 }
 
 .event-date {
-    font-size: 12px;
-    color: #555;
+    font-size: 11px;
+    color: var(--clr-text-muted);
 }
 
 .event-time {
-    color: #006bb7;
+    color: var(--clr-accent);
     font-weight: 600;
 }
 
 .no-events {
     text-align: center;
-    padding: 20px;
+    padding: 16px 0;
     color: #666;
     font-style: italic;
+    font-size: 13px;
 }
 
-/* === EVENT REMINDER (Rechts Unten) === */
+/* === EVENT REMINDER (rechts unten, kommt von rechts rein) === */
 .notification-reminder {
     bottom: 20px;
     right: 20px;
-    width: 320px;
-    padding: 16px;
+    width: 300px;
+    padding: 14px 16px;
     cursor: pointer;
-    transform: translateX(400px);
+    transform: translateX(340px) scale(0.95);
+    transform-origin: right bottom;
+    border-left: 3px solid var(--clr-accent); /* Blauer Akzent-Streifen links */
+    transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.25s ease,
+                background-color 0.2s ease;
 }
 
 .notification-reminder.show {
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
+}
+
+.notification-reminder.dismissing {
+    animation: reminder-dismiss 0.42s cubic-bezier(0.4, 0, 0.9, 1) both;
+    pointer-events: none;
+    transition: none;
+}
+
+@keyframes reminder-dismiss {
+    0%   { transform: translateX(0)    translateY(0)    scale(1)    rotate(0deg);   }
+    8%   { transform: translateX(-4px) translateY(-5px) scale(1.01) rotate(0.5deg); }
+    100% { transform: translateX(18px) translateY(150px) scale(0.8) rotate(-6deg);  }
 }
 
 .notification-reminder:hover {
-    background-color: #959886;
+    background-color: #909385;
+    transform: translateX(0) scale(1) translateY(-3px);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32), 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.notification-reminder:active {
+    transform: translateX(0) scale(0.98) translateY(0);
+    transition-duration: 0.1s;
 }
 
 .notification-content {
-    padding-right: 30px;
+    padding-right: 26px;
 }
 
 .notification-title {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: bold;
-    margin-bottom: 8px;
-    color: #0D0E0C;
+    margin-bottom: 6px;
+    color: var(--clr-text);
+    letter-spacing: 0.2px;
 }
 
 .notification-info {
-    font-size: 12px;
-    color: #2a2b28;
-    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--clr-text-muted);
+    margin-bottom: 5px;
 }
 
 .notification-countdown {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: bold;
-    color: #006bb7;
-    margin-top: 4px;
+    color: var(--clr-accent);
+    margin-top: 3px;
 }
 
 /* === RESPONSIVE === */
 @media (max-width: 600px) {
     .notification-startup {
-        width: 90vw;
-        top: 10px;
+        width: 92vw;
+        top: 8px;
     }
 
     .notification-reminder {
-        width: 90vw;
-        right: 5%;
-        bottom: 10px;
+        width: 88vw;
+        right: 4%;
+        bottom: 12px;
     }
 }

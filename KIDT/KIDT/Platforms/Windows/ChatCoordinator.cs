@@ -45,10 +45,9 @@ namespace KIDT.Services;
 /// 3. Analyse-Modelle fokussieren sich NUR auf Text-Verarbeitung
 /// 4. State-Tracking im Router (GPT-4), nicht in kleinen Modellen (PHI3:MINI)
 /// </summary>
-public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, Conversation, DataAnalysis und File-Upload (wird von Home.razor verwendet)
+public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koordiniert Router, DataAnalysis und File-Upload (wird von Home.razor verwendet)
 {
     private DataAnalysisService dataAnalysis;
-    private ConversationService conversation;
     private FileService fileService;
     private RouterService router;
     private readonly IServiceProvider serviceProvider;
@@ -60,7 +59,6 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
     {
         this.serviceProvider = serviceProvider;
         this.dataAnalysis = new DataAnalysisService();
-        this.conversation = new ConversationService();
         this.fileService = new FileService();
         this.router = new RouterService(serviceProvider);
     }
@@ -72,7 +70,6 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         try
         {
             this.dataAnalysis = new DataAnalysisService(); // Erstelle DataAnalysis-Service
-            this.conversation = new ConversationService(); // Erstelle Conversation-Service
             this.fileService = new FileService(); // Erstelle File-Service
             this.router = new RouterService(this.serviceProvider); // Erstelle Router-Service
 
@@ -86,7 +83,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         }
     }
 
-    public async Task<ChatResponse> SendAsync(string userMessage, int conversationId) // Verarbeite User-Nachricht und gib Antwort zurück
+    public async Task<ChatResponse> SendAsync(string userMessage, int conversationId, bool deepThink = false) // Verarbeite User-Nachricht und gib Antwort zurück
     {
         if (!this.isInitialized) // Services noch nicht initialisiert?
         {
@@ -150,34 +147,32 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                     enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
                 }
 
+                // --- Dokument-Inhalt bestimmen ---
+                string fileContentToUse = this.currentFileContent; // Standard: direkt hochgeladene Datei
+                string fileNameToUse = this.currentFileName; // Standard: direkt hochgeladener Dateiname
+
+                if (string.IsNullOrEmpty(fileContentToUse) && routerResponse.FoundDocuments.Count > 0) // Kein Upload, aber DB-Dokument vorhanden?
+                {
+                    Document firstDoc = routerResponse.FoundDocuments[0]; // Erstes gefundenes DB-Dokument verwenden
+                    if (!string.IsNullOrEmpty(firstDoc.ExtractedText)) // Extrahierter Text vorhanden?
+                    {
+                        fileContentToUse = firstDoc.ExtractedText; // Dokument-Text aus DB übergeben
+                        fileNameToUse = firstDoc.FileName; // Dateiname aus DB übergeben
+                    }
+                }
+
                 result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service
                     enhancedMessage, // User-Nachricht
-                    this.currentFileContent, // Datei-Inhalt
-                    this.currentFileName, // Dateiname
+                    fileContentToUse, // Datei-Inhalt (Upload oder DB-Dokument)
+                    fileNameToUse, // Dateiname (Upload oder DB-Dokument)
                     routerResponse.MaxTokens, // Token-Limit
-                    fullChatHistory // Chat-History
+                    fullChatHistory, // Chat-History
+                    deepThink // Deep Think Toggle
                 );
             }
-            else // Router hat Conversation gewählt
+            else // Fallback: sollte nicht vorkommen (Gemini antwortet direkt via DirectResponse)
             {
-                string fullChatHistory = string.Empty; // Variable für Chat-History
-
-                if (conversationId > 0) // Bestehender Chat?
-                {
-                    fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus Datenbank
-                }
-
-                string enhancedMessage = userMessage; // Start mit Original-Nachricht
-                if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
-                {
-                    enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
-                }
-
-                result = await this.conversation.SendAsync( // Sende an Conversation-Service
-                    enhancedMessage, // User-Nachricht
-                    routerResponse.MaxTokens, // Token-Limit
-                    fullChatHistory // Chat-History
-                );
+                result = "Wie kann ich dir helfen?"; // Sicherheits-Fallback
             }
 
             ChatResponse finalResponse = new ChatResponse(); // Erstelle neue ChatResponse
@@ -213,7 +208,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
     }
 
 
-    public async IAsyncEnumerable<ChatStreamChunk> SendStreamAsync(string userMessage, int conversationId) // Verarbeite User-Nachricht mit STREAMING
+    public async IAsyncEnumerable<ChatStreamChunk> SendStreamAsync(string userMessage, int conversationId, bool deepThink = false, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) // Verarbeite User-Nachricht mit STREAMING
     {
         if (!this.isInitialized) // Services noch nicht initialisiert?
         {
@@ -263,87 +258,7 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
             yield break; // Stream beenden
         }
 
-        // CONVERSATION-SERVICE: Streaming für Conversation (phi3:mini fragt nach fehlenden Infos)
-        if (routerResponse.TargetService == "conversation")
-        {
-            string fullChatHistory = string.Empty; // Variable für Chat-History
-            if (conversationId > 0) // Bestehender Chat?
-            {
-                fullChatHistory = await dbService.GetFullChatHistoryAsync(conversationId); // Lade Chat-History aus Datenbank
-            }
-
-            string enhancedMessage = userMessage; // Start mit Original-Nachricht
-            if (routerResponse.ToolWasUsed && routerResponse.FoundDocuments.Count > 0) // Wurden Tools verwendet und Dokumente gefunden?
-            {
-                enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
-            }
-
-            // ROUTER-DIRECTED TASKS: Router analysiert Chat-History und gibt Task zurück (was fehlt?)
-            // PHI3:MINI bekommt SYSTEM-Message mit Anweisung und generiert natürliche Frage
-            if (!string.IsNullOrEmpty(routerResponse.ConversationTask)) // Router hat Task gegeben?
-            {
-                System.Diagnostics.Debug.WriteLine($"[COORDINATOR] Task: {routerResponse.ConversationTask}"); // Debug-Log
-
-                // MULTI-FIELD TASKS: Mehrere Infos auf einmal abfragen (effizienter!)
-                if (routerResponse.ConversationTask == "askForAll") // Alle 3 Infos fehlen (Titel, Datum, Zeit)?
-                {
-                    enhancedMessage = "[SYSTEM: Frage nach Titel, Datum und Zeit.]\n\n" + enhancedMessage;
-                }
-                else if (routerResponse.ConversationTask == "askForTitleAndDate") // 2 Infos fehlen (Titel + Datum)?
-                {
-                    enhancedMessage = "[SYSTEM: Zeit vorhanden. Frage nach Titel und Datum.]\n\n" + enhancedMessage;
-                }
-                else if (routerResponse.ConversationTask == "askForTitleAndTime") // 2 Infos fehlen (Titel + Zeit)?
-                {
-                    enhancedMessage = "[SYSTEM: Datum vorhanden. Frage nach Titel und Zeit.]\n\n" + enhancedMessage;
-                }
-                else if (routerResponse.ConversationTask == "askForDateAndTime") // 2 Infos fehlen (Datum + Zeit)?
-                {
-                    enhancedMessage = "[SYSTEM: Titel vorhanden. Frage nach Datum und Zeit.]\n\n" + enhancedMessage;
-                }
-                // SINGLE-FIELD TASKS: Nur eine Info fehlt (seltener Fall, wenn User schon 2 von 3 angegeben hat)
-                else if (routerResponse.ConversationTask == "askForTitle") // Nur Titel fehlt?
-                {
-                    enhancedMessage = "[SYSTEM: Frage nach Titel.]\n\n" + enhancedMessage;
-                }
-                else if (routerResponse.ConversationTask == "askForDate") // Nur Datum fehlt?
-                {
-                    enhancedMessage = "[SYSTEM: Frage nach Datum.]\n\n" + enhancedMessage;
-                }
-                else if (routerResponse.ConversationTask == "askForTime") // Nur Zeit fehlt?
-                {
-                    enhancedMessage = "[SYSTEM: Frage nach Zeit.]\n\n" + enhancedMessage;
-                }
-            }
-
-            // STREAMING: Sammle komplette Antwort von PHI3:MINI (für Validierung)
-            string fullResponse = string.Empty; // Variable für komplette Antwort
-            await foreach (var chunk in this.conversation.SendStreamAsync(enhancedMessage, routerResponse.MaxTokens, fullChatHistory)) // Hole jeden Chunk
-            {
-                fullResponse += chunk; // Füge Chunk zur Gesamt-Antwort hinzu
-            }
-
-            // STREAMING OUTPUT: Gib Antwort Zeichen-für-Zeichen an UI weiter (typewriter-Effekt)
-            foreach (char c in fullResponse) // Durchlaufe jeden Buchstaben
-            {
-                yield return new ChatStreamChunk // Sende Buchstabe als Stream-Chunk
-                {
-                    TextChunk = c.ToString(), // Ein Buchstabe
-                    IsComplete = false, // Stream noch nicht komplett
-                    FoundDocuments = routerResponse.FoundDocuments, // Dokumente mitgeben
-                    FoundEvents = routerResponse.FoundEvents // Events mitgeben
-                };
-            }
-
-            yield return new ChatStreamChunk // Finaler Chunk: Stream ist komplett
-            {
-                TextChunk = string.Empty, // Kein Text mehr
-                IsComplete = true, // Stream fertig!
-                FoundDocuments = routerResponse.FoundDocuments, // Dokumente mitgeben
-                FoundEvents = routerResponse.FoundEvents // Events mitgeben
-            };
-        }
-        else // DATAANALYSIS-SERVICE: Non-Streaming (qwen2.5:7b analysiert Dokument-Text)
+        // DATAANALYSIS-SERVICE: qwen3.5:9b analysiert Dokument-Text (einziger verbleibender Route-Pfad)
         {
             await this.dataAnalysis.InitializeAsync(docDbService, conversationId); // Initialisiere DataAnalysis mit Dokument-Zugriff
 
@@ -359,12 +274,30 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
                 enhancedMessage += $"\n\n[SYSTEM: {routerResponse.FoundDocuments.Count} Dokument(e) gefunden]"; // Füge System-Info hinzu
             }
 
-            string result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service (qwen2.5:7b)
+            // --- Dokument-Inhalt bestimmen ---
+            string fileContentToUse = this.currentFileContent; // Standard: direkt hochgeladene Datei
+            string fileNameToUse = this.currentFileName; // Standard: direkt hochgeladener Dateiname
+
+            if (string.IsNullOrEmpty(fileContentToUse) && routerResponse.FoundDocuments.Count > 0) // Kein Upload, aber DB-Dokument vorhanden?
+            {
+                Document firstDoc = routerResponse.FoundDocuments[0]; // Erstes gefundenes DB-Dokument verwenden
+                if (!string.IsNullOrEmpty(firstDoc.ExtractedText)) // Extrahierter Text vorhanden?
+                {
+                    fileContentToUse = firstDoc.ExtractedText; // Dokument-Text aus DB übergeben
+                    fileNameToUse = firstDoc.FileName; // Dateiname aus DB übergeben
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[COORDINATOR] DataAnalysis aufgerufen - DeepThink: {deepThink}, File: '{fileNameToUse}', ContentLength: {fileContentToUse.Length} Zeichen");
+
+            string result = await this.dataAnalysis.SendAsync( // Sende an DataAnalysis-Service (qwen3.5:9b)
                 enhancedMessage, // User-Nachricht (evtl. mit System-Info)
-                this.currentFileContent, // Datei-Inhalt (falls hochgeladen)
-                this.currentFileName, // Dateiname (falls hochgeladen)
+                fileContentToUse, // Datei-Inhalt (Upload oder DB-Dokument)
+                fileNameToUse, // Dateiname (Upload oder DB-Dokument)
                 routerResponse.MaxTokens, // Token-Limit
-                fullChatHistory // Chat-History (für Kontext)
+                fullChatHistory, // Chat-History (für Kontext)
+                deepThink, // Deep Think Toggle (reasoning_effort: none/high)
+                cancellationToken // Weiterleiten: ermöglicht Abort-Button den qwen3-Request zu stoppen
             );
 
             yield return new ChatStreamChunk // Sende komplette Antwort als einzelner Chunk (kein echtes Streaming)
@@ -421,6 +354,11 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         return this.currentFileName; // Gib Dateiname zurück
     }
 
+    public string GetCurrentFileContent() // Gib extrahierten Datei-Inhalt zurück (für DB-Speicherung)
+    {
+        return this.currentFileContent; // Gib Inhalt zurück
+    }
+
     private bool IsValidUserInput(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
@@ -461,11 +399,6 @@ public class ChatCoordinator : IAsyncDisposable // Zentraler Orchestrator: Koord
         if (this.dataAnalysis != null) // DataAnalysis-Service existiert?
         {
             await this.dataAnalysis.DisposeAsync(); // Räume DataAnalysis-Service auf
-        }
-
-        if (this.conversation != null) // Conversation-Service existiert?
-        {
-            await this.conversation.DisposeAsync(); // Räume Conversation-Service auf
         }
     }
 }

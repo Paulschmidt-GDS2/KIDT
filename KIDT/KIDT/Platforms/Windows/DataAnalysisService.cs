@@ -8,7 +8,8 @@ namespace KIDT.Services;
 
 /// <summary>
 /// Spezialisierter Service für Daten-Analyse und Text-Verarbeitung.
-/// Nutzt qwen2.5:7b für präzise Analysen von hochgeladenen Dateien und Chat-Dokumenten.
+/// Nutzt qwen3.5:9b für präzise Analysen von hochgeladenen Dateien und Chat-Dokumenten.
+/// Deep Think per reasoning_effort steuerbar (kein Prompt-Text nötig).
 /// KEINE Tool-Integration - Tools werden vom RouterService gehandhabt.
 /// </summary>
 public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse mit asynchroner Aufräumung
@@ -16,7 +17,7 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
     private Kernel kernel = null!;
     private IChatCompletionService chatService = null!;
     private string systemInstructions = string.Empty;
-    private bool isInitialized = false; 
+    private bool isInitialized = false;
     private DocumentDbService docDbService = null!;
     private int currentConversationId = 0;
 
@@ -31,11 +32,11 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
         {
             this.docDbService = documentDbService; // Speichere DocumentDbService
             this.currentConversationId = conversationId; // Speichere Conversation-ID
-            
+
             var builder = Kernel.CreateBuilder(); // Erstelle Kernel-Builder
-            builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzu
-                modelId: "qwen2.5:7b",
-                apiKey: null,
+            builder.Services.AddOpenAIChatCompletion( // Füge Chat-Completion hinzuja
+                modelId: "qwen3.5:9b",
+                apiKey: "ollama",
                 endpoint: new Uri("http://localhost:11434/v1")
             );
             this.kernel = builder.Build(); // Baue Kernel
@@ -53,18 +54,18 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
         }
     }
 
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens) // Sendet Nachricht mit optionalem Datei-Anhang und benutzerdefiniertem MaxTokens
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, bool deepThink = false, CancellationToken cancellationToken = default) // Sendet Nachricht mit optionalem Datei-Anhang und benutzerdefiniertem MaxTokens
     {
-        return await SendAsync(userMessage, fileContent, fileName, maxTokens, string.Empty);
+        return await SendAsync(userMessage, fileContent, fileName, maxTokens, string.Empty, deepThink, cancellationToken);
     }
 
-    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext) // Sende Nachricht an KI
+    public async Task<string> SendAsync(string userMessage, string fileContent, string fileName, int maxTokens, string recentContext, bool deepThink = false, CancellationToken cancellationToken = default) // Sende Nachricht an KI
     {
         if (this.kernel == null || this.chatService == null) // Service nicht initialisiert?
         {
             return "Fehler: Daten-Analyse-Service nicht initialisiert.";
         }
-        
+
         try
         {
             var chatHistory = new ChatHistory(); // Erstelle neue Chat-History
@@ -75,31 +76,31 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
             {
                 hasContext = true;
             }
-            
+
             if (hasContext) // Kontext vorhanden?
             {
                 chatHistory.AddSystemMessage($"Letzter Gesprächsverlauf:\n{recentContext}");
             }
-            
+
             string finalMessage = userMessage; // Variable für finale Nachricht
-            
+
             bool hasFile = false; // Variable für Datei-Check
             if (!string.IsNullOrEmpty(fileContent) && !string.IsNullOrEmpty(fileName)) // Datei vorhanden?
             {
                 hasFile = true;
             }
-            
+
             if (hasFile) // Datei vorhanden?
             {
                 string limitedContent = fileContent; // Variable für Datei-Inhalt
                 int maxChars = 5000; // Maximum 5000 Zeichen
-                
+
                 if (fileContent.Length > maxChars) // Inhalt zu lang?
                 {
                     limitedContent = fileContent.Substring(0, maxChars); // Kürze auf Maximum
                     limitedContent += "\n\n[... Datei gekürzt, nur erste 5000 Zeichen gezeigt ...]"; // Füge Warnung hinzu
                 }
-                
+
                 finalMessage = $"[Datei: {fileName}]\n\n{limitedContent}\n\n---\n\n{userMessage}";
             }
 
@@ -108,11 +109,23 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
             var settings = new OpenAIPromptExecutionSettings(); // Erstelle Settings-Objekt
             settings.Temperature = 0.3; // Setze Temperatur (niedrig = präzise)
             settings.MaxTokens = maxTokens; // Setze Token-Limit
-            
+
+            // Deep Think Toggle: reasoning_effort steuert qwen3.5:9b Thinking per API (kein Prompt-Hack!)
+            settings.ExtensionData = new System.Collections.Generic.Dictionary<string, object>();
+            if (deepThink) // Deep Think aktiviert?
+            {
+                settings.ExtensionData["reasoning_effort"] = "high"; // Volles Thinking einschalten
+            }
+            else // Normal-Modus
+            {
+                settings.ExtensionData["reasoning_effort"] = "none"; // Thinking ausschalten (schneller)
+            }
+
             var response = await this.chatService.GetChatMessageContentAsync( // Sende Anfrage an KI
                 chatHistory, // Mit Chat-History
                 executionSettings: settings, // Mit Settings
-                kernel: this.kernel // Mit Kernel
+                kernel: this.kernel, // Mit Kernel
+                cancellationToken: cancellationToken // Abbruch-Token (für Abort-Button)
             );
 
             string assistantMessage; // Variable für Antwort
@@ -127,6 +140,10 @@ public class DataAnalysisService : IAsyncDisposable // Service für Text-Analyse
             }
 
             return assistantMessage;
+        }
+        catch (OperationCanceledException) // Abbruch durch Benutzer
+        {
+            throw; // Weiterleiten: wird in SendMessage als wasCancelled behandelt
         }
         catch (Exception ex)
         {

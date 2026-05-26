@@ -49,7 +49,7 @@
                                     <span class="event-title-text">@ev.Title</span>
                                     @if (!ev.IsAllDay && ev.HasTime)
                                     {
-                                        <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                        <span class="event-time-text">@FormatEventTime(ev)</span>
                                     }
                                 </div>
                             }
@@ -83,7 +83,7 @@
                                     <span class="event-title-text">@ev.Title</span>
                                     @if (!ev.IsAllDay && ev.HasTime)
                                     {
-                                        <span class="event-time-text">@ev.Time.ToString(@"hh\:mm")</span>
+                                        <span class="event-time-text">@FormatEventTime(ev)</span>
                                     }
                                 </div>
                             }
@@ -127,9 +127,24 @@
                         </div>
                         @if (!isAllDay)
                         {
-                            <div class="time-input-wrapper">
-                                <label class="input-label">Uhrzeit:</label>
-                                <input type="time" class="time-input" value="@selectedTime" @onchange="OnAddTimeChanged" />
+                            <div class="time-span-row">
+                                <div class="time-input-wrapper">
+                                    <label class="input-label">Von:</label>
+                                    <div class="time-custom-group">
+                                        <input type="text" class="time-num-input" value="@(selectedTimeHour.ToString("D2"))" @onchange="OnAddStartHourChanged" placeholder="HH" />
+                                        <span class="time-colon">:</span>
+                                        <input type="text" class="time-num-input" value="@(selectedTimeMinute.ToString("D2"))" @onchange="OnAddStartMinuteChanged" placeholder="MM" />
+                                    </div>
+                                </div>
+                                <span class="time-span-separator">–</span>
+                                <div class="time-input-wrapper">
+                                    <label class="input-label">Bis:</label>
+                                    <div class="time-custom-group">
+                                        <input type="text" class="time-num-input" value="@(selectedEndTimeHour.ToString("D2"))" @onchange="OnAddEndHourChanged" placeholder="HH" />
+                                        <span class="time-colon">:</span>
+                                        <input type="text" class="time-num-input" value="@(selectedEndTimeMinute.ToString("D2"))" @onchange="OnAddEndMinuteChanged" placeholder="MM" />
+                                    </div>
+                                </div>
                             </div>
                         }
                     </div>
@@ -196,9 +211,24 @@
                     </div>
                     @if (!isAllDay)
                     {
-                        <div class="time-input-wrapper">
-                            <label class="input-label">Uhrzeit:</label>
-                            <input type="time" class="time-input" value="@selectedTime" @onchange="OnAddTimeChanged" />
+                        <div class="time-span-row">
+                            <div class="time-input-wrapper">
+                                <label class="input-label">Von:</label>
+                                <div class="time-custom-group">
+                                    <input type="text" class="time-num-input" value="@(selectedTimeHour.ToString("D2"))" @onchange="OnAddStartHourChanged" placeholder="HH" />
+                                    <span class="time-colon">:</span>
+                                    <input type="text" class="time-num-input" value="@(selectedTimeMinute.ToString("D2"))" @onchange="OnAddStartMinuteChanged" placeholder="MM" />
+                                </div>
+                            </div>
+                            <span class="time-span-separator">–</span>
+                            <div class="time-input-wrapper">
+                                <label class="input-label">Bis:</label>
+                                <div class="time-custom-group">
+                                    <input type="text" class="time-num-input" value="@(selectedEndTimeHour.ToString("D2"))" @onchange="OnAddEndHourChanged" placeholder="HH" />
+                                    <span class="time-colon">:</span>
+                                    <input type="text" class="time-num-input" value="@(selectedEndTimeMinute.ToString("D2"))" @onchange="OnAddEndMinuteChanged" placeholder="MM" />
+                                </div>
+                            </div>
                         </div>
                     }
                 </div>
@@ -269,10 +299,24 @@
                     </div>
                     @if (!editingEvent.IsAllDay)
                     {
-                        <div class="time-input-wrapper">
-                            <label class="input-label">Uhrzeit:</label>
-                            <input type="time" class="time-input" value="@(editingEvent.HasTime ? editingEvent.Time.ToString(@"hh\:mm") : "09:00")" 
-                                   @onchange="OnEditTimeChanged" />
+                        <div class="time-span-row">
+                            <div class="time-input-wrapper">
+                                <label class="input-label">Von:</label>
+                                <div class="time-custom-group">
+                                    <input type="text" class="time-num-input" value="@(editStartHour.ToString("D2"))" @onchange="OnEditStartHourChanged" placeholder="HH" />
+                                    <span class="time-colon">:</span>
+                                    <input type="text" class="time-num-input" value="@(editStartMinute.ToString("D2"))" @onchange="OnEditStartMinuteChanged" placeholder="MM" />
+                                </div>
+                            </div>
+                            <span class="time-span-separator">–</span>
+                            <div class="time-input-wrapper">
+                                <label class="input-label">Bis:</label>
+                                <div class="time-custom-group">
+                                    <input type="text" class="time-num-input" value="@(editEndHour.ToString("D2"))" @onchange="OnEditEndHourChanged" placeholder="HH" />
+                                    <span class="time-colon">:</span>
+                                    <input type="text" class="time-num-input" value="@(editEndMinute.ToString("D2"))" @onchange="OnEditEndMinuteChanged" placeholder="MM" />
+                                </div>
+                            </div>
                         </div>
                     }
                 </div>
@@ -348,7 +392,16 @@
     private CalendarEvent editingEvent = new CalendarEvent();
     private bool isAllDay = true;
     private string selectedTime = "09:00";
+    private string selectedEndTime = "10:00";
     private int? newEventReminderMinutes = null;
+    private int selectedTimeHour = 9;
+    private int selectedTimeMinute = 0;
+    private int selectedEndTimeHour = 10;
+    private int selectedEndTimeMinute = 0;
+    private int editStartHour = 9;
+    private int editStartMinute = 0;
+    private int editEndHour = 10;
+    private int editEndMinute = 0;
 
     protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
@@ -374,6 +427,7 @@
                 if (ev != null)
                 {
                     editingEvent = ev;
+                    InitEditTimeFields(); // Zeitfelder für Custom-Picker befüllen
                     showEditDialog = true;
 
                     Navigation.NavigateTo("/Kalender", replace: true);
@@ -443,7 +497,12 @@
         newEventText = string.Empty; // Eingabefeld leeren
         selectedColorIndex = 0; // Standard-Farbe
         isAllDay = true; // Standard: Ganztägig
-        selectedTime = "09:00"; // Standard-Uhrzeit
+        selectedTime = "09:00"; // Standard-Startzeit
+        selectedEndTime = "10:00"; // Standard-Endzeit
+        selectedTimeHour = 9;
+        selectedTimeMinute = 0;
+        selectedEndTimeHour = 10;
+        selectedEndTimeMinute = 0;
         newEventReminderMinutes = null; // Keine Erinnerung als Standard
         showAddDialog = true; // Dialog anzeigen
     }
@@ -451,6 +510,7 @@
     private void OnEventClick(CalendarEvent ev, MouseEventArgs e) // öffnet Edit-Dialog beim Klick auf Event
     {
         editingEvent = ev; // Event zum Bearbeiten setzen
+        InitEditTimeFields(); // Zeitfelder für Custom-Picker befüllen
         showEditDialog = true; // Edit-Dialog anzeigen
     }
 
@@ -460,72 +520,159 @@
         editingEvent = new CalendarEvent(); // Event zurücksetzen auf neues Objekt
     }
 
-    private void OnAddTimeChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e) // Handler für Zeit-Änderung im Add-Dialog
+    private int ClampHour(int h) // Begrenzt Stunden auf 0-23
     {
-        string timeValue = "09:00"; // Standard-Zeit
-        if (e.Value != null) // Prüfe ob Wert vorhanden
-        {
-            object val = e.Value; // Hole Wert als object
-            if (val != null) // Prüfe ob object nicht null
-            {
-                string valStrTemp = string.Empty; // Initialisiere String
-                try
-                {
-                    valStrTemp = $"{val}"; // Verwende String-Interpolation statt Convert.ToString (garantiert non-null)
-                }
-                catch
-                {
-                    valStrTemp = string.Empty; // Bei Fehler leer
-                }
-                if (valStrTemp.Length > 0) // Prüfe ob String nicht leer
-                {
-                    timeValue = valStrTemp; // Übernehme Wert
-                }
-            }
-        }
-        selectedTime = timeValue; // Setze selectedTime
+        if (h < 0) return 0; // Untergrenze
+        if (h > 23) return 23; // Obergrenze
+        return h;
     }
 
-    private void OnEditTimeChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e) // Handler für Zeit-Änderung im Edit-Dialog
+    private int ClampMinute(int m) // Begrenzt Minuten auf 0-59
     {
-        string timeValue = string.Empty; // Initialisiere Zeit
-        if (e.Value != null) // Prüfe ob Wert vorhanden
+        if (m < 0) return 0; // Untergrenze
+        if (m > 59) return 59; // Obergrenze
+        return m;
+    }
+
+    private string FormatTimeStr(int h, int m) // Erstellt Zeit-String "HH:MM" aus Stunden und Minuten
+    {
+        return $"{h:D2}:{m:D2}";
+    }
+
+    private void InitEditTimeFields() // Liest Zeitfelder aus editingEvent für Edit-Dialog
+    {
+        if (editingEvent == null) return;
+        if (editingEvent.HasTime) // Startzeit vorhanden?
         {
-            object val = e.Value; // Hole Wert als object
-            if (val != null) // Prüfe ob object nicht null
-            {
-                string valStrTemp = string.Empty; // Initialisiere String
-                try
-                {
-                    valStrTemp = $"{val}"; // Verwende String-Interpolation statt Convert.ToString (garantiert non-null)
-                }
-                catch
-                {
-                    valStrTemp = string.Empty; // Bei Fehler leer
-                }
-                if (valStrTemp.Length > 0) // Prüfe ob String nicht leer
-                {
-                    timeValue = valStrTemp; // Übernehme Wert
-                }
-            }
+            editStartHour = editingEvent.Time.Hours;
+            editStartMinute = editingEvent.Time.Minutes;
         }
-        if (timeValue.Length > 0) // Prüfe ob Zeit gesetzt
+        else
         {
-            UpdateEditTime(timeValue); // Aktualisiere Zeit
+            editStartHour = 9;
+            editStartMinute = 0;
+        }
+        if (editingEvent.HasEndTime) // Endzeit vorhanden?
+        {
+            editEndHour = editingEvent.EndTime.Hours;
+            editEndMinute = editingEvent.EndTime.Minutes;
+        }
+        else
+        {
+            editEndHour = 10;
+            editEndMinute = 0;
         }
     }
 
-    private void UpdateEditTime(string timeString) // Aktualisiert Uhrzeit im Edit-Dialog
+    private void OnAddStartHourChanged(ChangeEventArgs e) // Handler: Stunden der Startzeit (Add-Dialog)
     {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h); // Eingabe parsen
+            h = ClampHour(h); // Gültigkeitsbereich erzwingen
+        }
+        selectedTimeHour = h;
+        selectedTime = FormatTimeStr(selectedTimeHour, selectedTimeMinute); // String-Backup aktualisieren
+    }
+
+    private void OnAddStartMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Startzeit (Add-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        selectedTimeMinute = m;
+        selectedTime = FormatTimeStr(selectedTimeHour, selectedTimeMinute);
+    }
+
+    private void OnAddEndHourChanged(ChangeEventArgs e) // Handler: Stunden der Endzeit (Add-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h);
+            h = ClampHour(h);
+        }
+        selectedEndTimeHour = h;
+        selectedEndTime = FormatTimeStr(selectedEndTimeHour, selectedEndTimeMinute);
+    }
+
+    private void OnAddEndMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Endzeit (Add-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        selectedEndTimeMinute = m;
+        selectedEndTime = FormatTimeStr(selectedEndTimeHour, selectedEndTimeMinute);
+    }
+
+    private void OnEditStartHourChanged(ChangeEventArgs e) // Handler: Stunden der Startzeit (Edit-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h);
+            h = ClampHour(h);
+        }
+        editStartHour = h;
         if (editingEvent != null)
         {
-            TimeSpan time;
-            bool parseSuccess = TimeSpan.TryParse(timeString, out time);
-            if (parseSuccess)
-            {
-                editingEvent.Time = time; // Uhrzeit setzen
-                editingEvent.HasTime = true;
-            }
+            editingEvent.Time = new TimeSpan(editStartHour, editStartMinute, 0); // Startzeit setzen
+            editingEvent.HasTime = true;
+        }
+    }
+
+    private void OnEditStartMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Startzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editStartMinute = m;
+        if (editingEvent != null)
+        {
+            editingEvent.Time = new TimeSpan(editStartHour, editStartMinute, 0);
+            editingEvent.HasTime = true;
+        }
+    }
+
+    private void OnEditEndHourChanged(ChangeEventArgs e) // Handler: Stunden der Endzeit (Edit-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h);
+            h = ClampHour(h);
+        }
+        editEndHour = h;
+        if (editingEvent != null)
+        {
+            editingEvent.EndTime = new TimeSpan(editEndHour, editEndMinute, 0); // Endzeit setzen
+            editingEvent.HasEndTime = true;
+        }
+    }
+
+    private void OnEditEndMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Endzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editEndMinute = m;
+        if (editingEvent != null)
+        {
+            editingEvent.EndTime = new TimeSpan(editEndHour, editEndMinute, 0);
+            editingEvent.HasEndTime = true;
         }
     }
 
@@ -533,15 +680,17 @@
     {
         if (editingEvent != null && !string.IsNullOrWhiteSpace(editingEvent.Title)) // Check: Titel vorhanden?
         {
-            if (!editingEvent.IsAllDay && !editingEvent.HasTime) // Wenn nicht ganztägig, setze Default-Zeit
+            if (!editingEvent.IsAllDay && !editingEvent.HasTime) // Wenn nicht ganztägig, setze Default-Startzeit
             {
                 editingEvent.Time = new TimeSpan(9, 0, 0); // Default 09:00
                 editingEvent.HasTime = true;
             }
-            else if (editingEvent.IsAllDay) // Wenn ganztägig, entferne Zeit
+            else if (editingEvent.IsAllDay) // Wenn ganztägig, entferne Zeiten
             {
                 editingEvent.Time = TimeSpan.Zero;
                 editingEvent.HasTime = false;
+                editingEvent.EndTime = TimeSpan.Zero;
+                editingEvent.HasEndTime = false;
             }
 
             editingEvent.ReminderShown = false; // Reminder zurücksetzen bei Bearbeitung
@@ -581,26 +730,39 @@
         if (string.IsNullOrWhiteSpace(newEventText)) return; // Prüfe auf leeren Titel
         var d = date.Date; // Nur Datum ohne Uhrzeit
 
-        TimeSpan time = TimeSpan.Zero; // Standard: keine Uhrzeit
+        TimeSpan time = TimeSpan.Zero; // Standard: keine Startzeit
         bool hasTime = false;
-        if (!isAllDay)
+        TimeSpan endTime = TimeSpan.Zero; // Standard: keine Endzeit
+        bool hasEndTime = false;
+
+        if (!isAllDay) // Nicht ganztägig?
         {
-            TimeSpan parsedTime;
-            bool parseSuccess = TimeSpan.TryParse(selectedTime, out parsedTime);
-            if (parseSuccess) // Check: Uhrzeit gewählt?
+            TimeSpan parsedTime; // Variable für geparste Startzeit
+            bool parseSuccess = TimeSpan.TryParse(selectedTime, out parsedTime); // Parse Startzeit
+            if (parseSuccess) // Startzeit gültig?
             {
-                time = parsedTime; // Uhrzeit setzen
-                hasTime = true;
+                time = parsedTime; // Startzeit setzen
+                hasTime = true; // Flag setzen
+            }
+
+            TimeSpan parsedEnd; // Variable für geparste Endzeit
+            bool parseEndSuccess = TimeSpan.TryParse(selectedEndTime, out parsedEnd); // Parse Endzeit
+            if (parseEndSuccess && hasTime && parsedEnd > time) // Endzeit gültig und nach Startzeit?
+            {
+                endTime = parsedEnd; // Endzeit setzen
+                hasEndTime = true; // Flag setzen
             }
         }
 
-        var newEvent = new CalendarEvent(); 
+        var newEvent = new CalendarEvent();
         newEvent.Start = d;
         newEvent.Title = newEventText.Trim();
         newEvent.ColorIndex = selectedColorIndex;
         newEvent.IsAllDay = isAllDay;
         newEvent.Time = time;
         newEvent.HasTime = hasTime;
+        newEvent.EndTime = endTime;
+        newEvent.HasEndTime = hasEndTime;
         newEvent.ReminderMinutesBefore = newEventReminderMinutes; // Erinnerung hinzufügen
 
         await CalendarService.AddEventAsync(newEvent); // In Datenbank speichern
@@ -609,6 +771,12 @@
         newEventText = string.Empty; // Eingabefeld leeren
         selectedColorIndex = 0; // Farbe zurücksetzen
         isAllDay = true; // Zurücksetzen
+        selectedTime = "09:00"; // Startzeit zurücksetzen
+        selectedEndTime = "10:00"; // Endzeit zurücksetzen
+        selectedTimeHour = 9;
+        selectedTimeMinute = 0;
+        selectedEndTimeHour = 10;
+        selectedEndTimeMinute = 0;
         newEventReminderMinutes = null; // Erinnerung zurücksetzen
     }
 
@@ -616,6 +784,15 @@
     {
         var d = date.Date; // Nur Datum ohne Uhrzeit
         return events.TryGetValue(d, out var list) ? list : new List<CalendarEvent>(); // Liste oder leere Liste zurückgeben
+    }
+
+    private string FormatEventTime(CalendarEvent ev) // Hilfsmethode: Formatiert Zeitangabe (Zeitspanne oder nur Startzeit)
+    {
+        if (ev.HasTime && ev.HasEndTime) // Zeitspanne vorhanden?
+        {
+            return $"{ev.Time:hh\\:mm}–{ev.EndTime:hh\\:mm}"; // Format: "14:00–16:00"
+        }
+        return ev.Time.ToString(@"hh\:mm"); // Nur Startzeit: "14:00"
     }
 
     private string ViewTitle // Titel-Text je nach Ansicht

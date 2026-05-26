@@ -31,29 +31,29 @@ public class FileService // Klasse für Datei-Operationen
 
             var extension = Path.GetExtension(filePath).ToLowerInvariant(); // Dateierweiterung holen (z.B. ".pdf") und zu lowercase
             string result;
-            
+
             switch (extension)
             {
                 case ".pdf": // PDF-Datei erkannt
                     result = await ExtractFromPdfAsync(filePath); // Extrahiere mit PdfPig
                     break;
-                
+
                 case ".txt": // Text-Datei erkannt
                     result = await File.ReadAllTextAsync(filePath, Encoding.UTF8); // Lese direkt als UTF-8
                     break;
-                
+
                 case ".md": // Markdown-Datei erkannt
                     result = await File.ReadAllTextAsync(filePath, Encoding.UTF8); // Lese direkt als UTF-8
                     break;
-                
+
                 case ".json": // JSON-Datei erkannt
                     result = await File.ReadAllTextAsync(filePath, Encoding.UTF8); // Lese direkt als UTF-8
                     break;
-                
+
                 default: // Unbekannter Dateityp
                     return "Fehler: Dateityp nicht unterstützt. Unterstützt: PDF, TXT, MD, JSON."; // Fehler-Nachricht
             }
-            
+
             return result; // Gibt Ergebnis zurück
         }
         catch (Exception ex)
@@ -85,7 +85,7 @@ public class FileService // Klasse für Datei-Operationen
                 string[] separators = new string[] { " ", "\t", "\n" }; // Trennzeichen für Split
                 var words = extractedText.Split(separators, StringSplitOptions.RemoveEmptyEntries); // Splitte bei Leerzeichen/Tabs/Newlines
                 int wordCount = words.Length; // Anzahl Wörter zählen
-                
+
                 if (wordCount > 3000) // Check: PDF zu lang für Token-Limit?
                 {
                     string warning = $"[WARNUNG: Diese PDF ist sehr lang ({wordCount} Wörter). Das Modell kann möglicherweise nicht alles verarbeiten.]\n\n";

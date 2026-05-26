@@ -26,6 +26,11 @@
     </div>
 
     <script>
+        // Theme-Helper: setzt data-theme Attribut auf html-Element
+        window.setTheme = function(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+        };
+
         // Textarea-Helper direkt inline
         window.textareaHelper = {
             clearAndReset: function(elementId) {

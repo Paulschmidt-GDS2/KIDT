@@ -16,12 +16,20 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
-    [Description("Listet Kalender-Termine auf. Nutze 'titleSearch' um nach spezifischem Titel zu suchen. Mit startDate/endDate kannst du Zeitraum einschränken. Ohne Parameter: alle Termine.")]
+    [Description("Listet Kalender-Termine auf. 'date' für einen bestimmten Tag (z.B. heute). 'titleSearch' für Titelsuche. Mit startDate/endDate für Zeitraum. Ohne Parameter: alle Termine.")]
     public async Task<string> ListCalendarEvents( // Tool: Listet Termine aus Datenbank
         [Description("Suche nach Titel (optional, z.B. 'Meeting' findet 'Team Meeting')")] string titleSearch = "",
         [Description("Start-Datum im Format 'yyyy-MM-dd' (optional)")] string startDate = "",
-        [Description("End-Datum im Format 'yyyy-MM-dd' (optional)")] string endDate = "")
+        [Description("End-Datum im Format 'yyyy-MM-dd' (optional)")] string endDate = "",
+        [Description("Exaktes Datum im Format 'yyyy-MM-dd' (optional, für alle Termine an einem bestimmten Tag, z.B. heute)")] string date = "")
     {
+        // Einzelnes Datum als startDate/endDate setzen (falls angegeben)
+        if (!string.IsNullOrEmpty(date) && string.IsNullOrEmpty(startDate) && string.IsNullOrEmpty(endDate)) // Nur date angegeben?
+        {
+            startDate = date; // Verwende date als Start
+            endDate = date; // Verwende date als Ende (gleicher Tag)
+        }
+
         List<CalendarEvent> events; // Liste für gefundene Termine
 
         // Lade Termine: Mit oder ohne Zeitraum-Filter
@@ -71,22 +79,23 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         List<object> eventList = new List<object>(); // Initialisiere Event-Liste für JSON
         foreach (CalendarEvent e in events) // Durchlaufe alle gefundenen Events
         {
-            // Formatiere Zeitangabe: Ganztägig vs. Uhrzeit vs. Keine Zeit
+            // Formatiere Zeitangabe: Ganztägig vs. Zeitspanne vs. Startzeit vs. Keine Zeit
             string timeString; // Variable für formatierte Zeit
             if (e.IsAllDay) // Ganztägiger Termin?
             {
                 timeString = "Ganztägig"; // Setze Text
             }
-            else // Termin mit Uhrzeit
+            else if (e.HasTime && e.HasEndTime) // Zeitspanne (Start + Ende)?
             {
-                if (e.HasTime) // Uhrzeit vorhanden?
-                {
-                    timeString = e.Time.ToString(@"hh\:mm"); // Formatiere als HH:mm
-                }
-                else // Keine Uhrzeit gesetzt
-                {
-                    timeString = "Keine Zeit"; // Fallback-Text
-                }
+                timeString = $"{e.Time:hh\\:mm} - {e.EndTime:hh\\:mm}"; // Format: "14:00 - 16:00"
+            }
+            else if (e.HasTime) // Nur Startzeit?
+            {
+                timeString = e.Time.ToString(@"hh\:mm"); // Format: "14:00"
+            }
+            else // Keine Uhrzeit
+            {
+                timeString = "Keine Zeit"; // Fallback-Text
             }
 
             eventList.Add(new // Füge Event zur Liste hinzu
@@ -94,7 +103,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
                 id = e.Id, // Event-ID
                 date = e.Start.ToString("dd.MM.yyyy"), // Formatiertes Datum
                 title = e.Title, // Titel
-                time = timeString, // Formatierte Zeit
+                time = timeString, // Formatierte Zeit (ggf. Zeitspanne)
                 color = e.ColorIndex, // Farb-Index (0-7)
                 reminderMinutes = e.ReminderMinutesBefore // Erinnerung in Minuten (null = keine)
             });
@@ -116,115 +125,143 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
-    [Description("Erstellt einen neuen Kalender-Termin. Benötigt: date (yyyy-MM-dd), title. Optional: isAllDay (true/false), time (HH:mm), colorIndex (0-7), reminderMinutes (Erinnerung X Minuten vorher, z.B. 15, 30, 60, 1440 für 1 Tag).")]
+    [Description("Erstellt einen neuen Kalender-Termin. PFLICHTFELDER: date (yyyy-MM-dd), title, isAllDay (MUSS immer angegeben werden: true=ganztägig, false=mit Uhrzeit). Optional: startTime (HH:mm), endTime (HH:mm), colorIndex (0-7), reminderMinutes. Wenn startTime+endTime: Zeitspanne. Bei Überschneidung: Fehler.")]
     public async Task<string> CreateCalendarEvent( // Tool: Erstellt neuen Termin in Datenbank
         [Description("Datum im Format 'yyyy-MM-dd' (z.B. '2025-01-15')")] string date,
         [Description("Titel des Termins (z.B. 'Meeting mit Team')")] string title,
-        [Description("Ganztägig? true oder false (Standard: true)")] bool isAllDay = true,
-        [Description("Uhrzeit im Format 'HH:mm' (z.B. '14:30'), nur wenn isAllDay=false")] string time = "",
+        [Description("PFLICHTFELD: Ganztägig? true = ganztägig (kein startTime/endTime nötig), false = mit Uhrzeit (dann startTime angeben)")] bool isAllDay,
+        [Description("Startzeit im Format 'HH:mm' (z.B. '14:00'), nur wenn isAllDay=false")] string startTime = "",
+        [Description("Endzeit im Format 'HH:mm' (z.B. '15:30'), nur wenn isAllDay=false und Zeitspanne gewünscht")] string endTime = "",
         [Description("Farbindex 0-7 (Standard: 0)")] int colorIndex = 0,
-        [Description("Erinnerung X Minuten vorher (z.B. 15, 30, 60, 1440). 0 oder nicht angegeben = keine Erinnerung")] int reminderMinutes = 0)
+        [Description("Erinnerung X Minuten vorher (z.B. 15, 30, 60, 1440). 0 = keine Erinnerung")] int reminderMinutes = 0)
     {
         // Validierung: Datum parsen
         DateTime parsedDate; // Variable für geparsten Datum
         bool parseDateSuccess = DateTime.TryParse(date, out parsedDate); // Versuche Datum zu parsen
         if (!parseDateSuccess) // Datum ungültig?
         {
-            return JsonSerializer.Serialize(new // Gib JSON zurück: Fehler
-            {
-                success = false,
-                message = "Ungültiges Datum-Format. Nutze 'yyyy-MM-dd'."
-            });
+            return JsonSerializer.Serialize(new { success = false, message = "Ungültiges Datum-Format. Nutze 'yyyy-MM-dd'." });
         }
 
-        // Validierung: Titel darf nicht leer sein
         if (string.IsNullOrWhiteSpace(title)) // Titel leer?
         {
-            return JsonSerializer.Serialize(new // Gib JSON zurück: Fehler
-            {
-                success = false, // Fehler-Flag
-                message = "Titel darf nicht leer sein." // Fehlermeldung
-            });
+            return JsonSerializer.Serialize(new { success = false, message = "Titel darf nicht leer sein." });
         }
 
-        // Validierung: ColorIndex muss 0-7 sein
         if (colorIndex < 0 || colorIndex > 7) // ColorIndex außerhalb Bereich?
         {
-            colorIndex = 0; // Setze auf Standard (grau/oliv)
+            colorIndex = 0; // Setze auf Standard
         }
 
-        // Parse Uhrzeit (nur bei nicht-ganztägigen Terminen)
-        TimeSpan parsedTime = TimeSpan.Zero; // Initialisiere Zeit (Fallback: Mitternacht)
-        bool hasTime = false; // Flag: Wurde Uhrzeit geparst?
-        if (!isAllDay && !string.IsNullOrEmpty(time)) // Nicht ganztägig und Zeit angegeben?
+        // Wenn startTime angegeben: kann kein ganztägiger Termin sein (Gemini vergisst isAllDay oft)
+        if (!string.IsNullOrEmpty(startTime)) // Startzeit übergeben?
         {
-            TimeSpan tempTime; // Temporäre Variable für Parsing
-            bool parseSuccess = TimeSpan.TryParse(time, out tempTime); // Versuche Zeit zu parsen
-            if (!parseSuccess) // Zeit parsen fehlgeschlagen?
+            isAllDay = false; // Überschreibe Default: nicht ganztägig
+        }
+
+        // Startzeit parsen
+        TimeSpan parsedStart = TimeSpan.Zero; // Initialisiere Startzeit
+        bool hasTime = false; // Flag: Startzeit gesetzt?
+        if (!isAllDay && !string.IsNullOrEmpty(startTime)) // Nicht ganztägig und Startzeit angegeben?
+        {
+            TimeSpan tempStart; // Temporäre Variable
+            bool parseOk = TimeSpan.TryParse(startTime, out tempStart); // Parse Startzeit
+            if (!parseOk) // Parsing fehlgeschlagen?
             {
-                return JsonSerializer.Serialize(new // Gib JSON zurück: Fehler
-                {
-                    success = false,
-                    message = "Ungültiges Zeit-Format. Nutze 'HH:mm' (z.B. '14:30')." // Fehlermeldung
-                });
+                return JsonSerializer.Serialize(new { success = false, message = "Ungültiges Startzeit-Format. Nutze 'HH:mm'." });
             }
-            parsedTime = tempTime; // Übernehme geparste Zeit
-            hasTime = true; // Setze Flag
+            parsedStart = tempStart; // Übernehme Startzeit
+            hasTime = true; // Startzeit gesetzt
         }
 
-        // Erstelle neues Event-Objekt mit validierten Daten
+        // Endzeit parsen
+        TimeSpan parsedEnd = TimeSpan.Zero; // Initialisiere Endzeit
+        bool hasEndTime = false; // Flag: Endzeit gesetzt?
+        if (!isAllDay && !string.IsNullOrEmpty(endTime)) // Nicht ganztägig und Endzeit angegeben?
+        {
+            TimeSpan tempEnd; // Temporäre Variable
+            bool parseOk = TimeSpan.TryParse(endTime, out tempEnd); // Parse Endzeit
+            if (!parseOk) // Parsing fehlgeschlagen?
+            {
+                return JsonSerializer.Serialize(new { success = false, message = "Ungültiges Endzeit-Format. Nutze 'HH:mm'." });
+            }
+            if (hasTime && tempEnd <= parsedStart) // Endzeit vor oder gleich Startzeit?
+            {
+                return JsonSerializer.Serialize(new { success = false, message = "Endzeit muss nach der Startzeit liegen." });
+            }
+            parsedEnd = tempEnd; // Übernehme Endzeit
+            hasEndTime = true; // Endzeit gesetzt
+        }
+
+        // Überlappungsprüfung: Nur wenn Zeitspanne vorhanden (Start + Ende)
+        if (!isAllDay && hasTime && hasEndTime) // Zeitspanne angegeben?
+        {
+            var eventsOnDay = await this.calendarService.GetEventsByDateRangeAsync(parsedDate.Date, parsedDate.Date); // Lade Events des Tages
+            foreach (CalendarEvent existing in eventsOnDay) // Prüfe alle bestehenden Events
+            {
+                if (existing.IsAllDay || !existing.HasTime || !existing.HasEndTime) // Ganztägig oder ohne Zeitspanne?
+                {
+                    continue; // Kein Konflikt möglich
+                }
+                bool overlaps = parsedStart < existing.EndTime && parsedEnd > existing.Time; // Überlappungsformel
+                if (overlaps) // Überlappung gefunden?
+                {
+                    string existingTime = $"{existing.Time:hh\\:mm} - {existing.EndTime:hh\\:mm}"; // Formatiere bestehende Zeit
+                    return JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        message = $"Zeitüberschneidung mit '{existing.Title}' ({existingTime}). Wähle eine andere Uhrzeit."
+                    });
+                }
+            }
+        }
+
+        // Erstelle neues Event-Objekt
         var newEvent = new CalendarEvent(); // Initialisiere neues Event
-        newEvent.Start = parsedDate.Date; // Setze Start-Datum (nur Datum, keine Zeit)
-        newEvent.Title = title.Trim(); // Setze Titel (getrimmt)
-        newEvent.ColorIndex = colorIndex; // Setze Farb-Index
+        newEvent.Start = parsedDate.Date; // Setze Datum
+        newEvent.Title = title.Trim(); // Setze Titel
+        newEvent.ColorIndex = colorIndex; // Setze Farbe
         newEvent.IsAllDay = isAllDay; // Setze Ganztägig-Flag
-        if (hasTime) // Uhrzeit gesetzt?
-        {
-            newEvent.Time = parsedTime; // Setze Uhrzeit
-            newEvent.HasTime = true; // Markiere: Hat Uhrzeit
-        }
-        else // Keine Uhrzeit
-        {
-            newEvent.Time = TimeSpan.Zero; // Setze auf Mitternacht
-            newEvent.HasTime = false; // Markiere: Keine Uhrzeit
-        }
+        newEvent.Time = parsedStart; // Startzeit (Zero wenn ganztägig)
+        newEvent.HasTime = hasTime; // Flag Startzeit
+        newEvent.EndTime = parsedEnd; // Endzeit (Zero wenn nicht gesetzt)
+        newEvent.HasEndTime = hasEndTime; // Flag Endzeit
 
         if (reminderMinutes > 0) // Erinnerung gewünscht?
         {
-            newEvent.ReminderMinutesBefore = reminderMinutes; // Setze Erinnerung in Minuten
+            newEvent.ReminderMinutesBefore = reminderMinutes; // Setze Erinnerung
         }
 
         await this.calendarService.AddEventAsync(newEvent); // Speichere in Datenbank
 
-        // Formatiere Zeitangabe für JSON-Response
+        // Zeitstring für Response
         string timeString; // Variable für formatierte Zeit
         if (isAllDay) // Ganztägig?
         {
-            timeString = "Ganztägig"; // Text für ganztägig
+            timeString = "Ganztägig"; // Text
         }
-        else // Mit Uhrzeit
+        else if (hasTime && hasEndTime) // Zeitspanne?
         {
-            if (hasTime) // Uhrzeit vorhanden?
-            {
-                timeString = parsedTime.ToString(@"hh\:mm"); // Formatiere als HH:mm
-            }
-            else // Keine Uhrzeit
-            {
-                timeString = "Keine Zeit"; // Fallback-Text
-            }
+            timeString = $"{parsedStart:hh\\:mm} - {parsedEnd:hh\\:mm}"; // Format: "14:00 - 16:00"
+        }
+        else if (hasTime) // Nur Startzeit?
+        {
+            timeString = parsedStart.ToString(@"hh\:mm"); // Format: "14:00"
+        }
+        else
+        {
+            timeString = "Keine Zeit"; // Fallback
         }
 
-        var result = new // Erstelle JSON-Result mit Erfolg
+        return JsonSerializer.Serialize(new
         {
-            success = true, // Erfolg-Flag
-            message = $"Termin '{title}' für {parsedDate:dd.MM.yyyy} erstellt", // Human-readable Message
-            eventId = newEvent.Id, // ID des erstellten Events
-            date = parsedDate.ToString("dd.MM.yyyy"), // Formatiertes Datum
-            title = title, // Titel
-            time = timeString // Formatierte Zeit
-        };
-
-        return JsonSerializer.Serialize(result); // Gib JSON zurück
+            success = true,
+            message = $"Termin '{title}' für {parsedDate:dd.MM.yyyy} ({timeString}) erstellt",
+            eventId = newEvent.Id,
+            date = parsedDate.ToString("dd.MM.yyyy"),
+            title = title,
+            time = timeString
+        });
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
@@ -375,7 +412,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
     }
 
     [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
-    [Description("Aktualisiert einen Kalender-Termin. Finde Termin per ID oder Datum+Titel. Änderbare Felder: title, date, isAllDay, time, color (Farbe als Text z.B. 'gelb', 'blau'), reminder (Erinnerung in Minuten, z.B. 15, 30, 60, 1440).")]
+    [Description("Aktualisiert einen Kalender-Termin. Finde Termin per ID oder Datum+Titel. Änderbare Felder: title, date, isAllDay, newStartTime (HH:mm), newEndTime (HH:mm, Endzeit der Zeitspanne), color, reminder.")]
     public async Task<string> UpdateCalendarEvent( // Tool: Aktualisiert bestehenden Termin
         [Description("ID des Termins (wenn bekannt)")] int eventId = -1,
         [Description("Aktuelles Datum zum Finden des Termins (Format 'yyyy-MM-dd' oder 'dd.MM')")] string currentDate = "",
@@ -383,7 +420,8 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         [Description("Neuer Titel (optional)")] string newTitle = "",
         [Description("Neues Datum (Format 'yyyy-MM-dd', optional)")] string newDate = "",
         [Description("Neuer Ganztägig-Status als String: 'true' für ganztägig, 'false' für mit Uhrzeit (optional)")] string newIsAllDay = "",
-        [Description("Neue Uhrzeit (Format 'HH:mm', optional)")] string newTime = "",
+        [Description("Neue Startzeit (Format 'HH:mm', optional)")] string newStartTime = "",
+        [Description("Neue Endzeit (Format 'HH:mm', optional, für Zeitspanne)")] string newEndTime = "",
         [Description("Neue Farbe als Text: 'grau/oliv', 'blau', 'lachs/rosa', 'grün', 'gelb', 'lila/violett', 'pink', 'mint' (optional)")] string newColor = "",
         [Description("Neue Erinnerung X Minuten vorher (z.B. 15, 30, 60, 1440). -1 = Erinnerung entfernen (optional)")] int newReminderMinutes = -999)
     {
@@ -554,15 +592,31 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
             }
         }
 
-        if (!string.IsNullOrEmpty(newTime)) // Neue Uhrzeit angegeben?
+        if (!string.IsNullOrEmpty(newStartTime)) // Neue Startzeit angegeben?
         {
-            TimeSpan parsedNewTime; // Variable für geparste Zeit
-            bool parseSuccess = TimeSpan.TryParse(newTime, out parsedNewTime); // Versuche zu parsen
+            TimeSpan parsedNewStart; // Variable für geparste Startzeit
+            bool parseSuccess = TimeSpan.TryParse(newStartTime, out parsedNewStart); // Versuche zu parsen
             if (parseSuccess) // Zeit valide?
             {
-                eventToUpdate.Time = parsedNewTime; // Übernehme neue Zeit
-                eventToUpdate.HasTime = true; // Markiere: Hat Uhrzeit
-                eventToUpdate.IsAllDay = false; // Zeit gesetzt = automatisch nicht ganztägig
+                eventToUpdate.Time = parsedNewStart; // Übernehme neue Startzeit
+                eventToUpdate.HasTime = true; // Markiere: Hat Startzeit
+                eventToUpdate.IsAllDay = false; // Startzeit gesetzt = nicht ganztägig
+                wasUpdated = true; // Markiere als geändert
+            }
+        }
+
+        if (!string.IsNullOrEmpty(newEndTime)) // Neue Endzeit angegeben?
+        {
+            TimeSpan parsedNewEnd; // Variable für geparste Endzeit
+            bool parseOk = TimeSpan.TryParse(newEndTime, out parsedNewEnd); // Versuche zu parsen
+            if (parseOk) // Zeit valide?
+            {
+                if (eventToUpdate.HasTime && parsedNewEnd <= eventToUpdate.Time) // Endzeit vor Startzeit?
+                {
+                    return JsonSerializer.Serialize(new { success = false, message = "Endzeit muss nach der Startzeit liegen." });
+                }
+                eventToUpdate.EndTime = parsedNewEnd; // Übernehme neue Endzeit
+                eventToUpdate.HasEndTime = true; // Markiere: Hat Endzeit
                 wasUpdated = true; // Markiere als geändert
             }
         }

@@ -34,6 +34,10 @@
                 <div class="@bubbleClass">
                     @if (msg.IsLoading) @* Check: Ist dies eine Loading-Nachricht? *@
                     {
+                        @if (!string.IsNullOrEmpty(msg.LoadingText)) @* Label einblenden wenn gesetzt *@
+                        {
+                            <span class="loading-label">@msg.LoadingText</span>
+                        }
                         <span class="blinking-cursor">_</span>
                     }
                     else if (msg.IsUser)
@@ -83,7 +87,23 @@
                             <div class="found-events-grid">
                                 @foreach (var evt in msg.FoundEvents)
                                 {
-                                    string eventTimeString = evt.IsAllDay ? "Ganztägig" : (evt.HasTime ? evt.Time.ToString(@"hh\:mm") : "Keine Zeit");
+                                    string eventTimeString; // Variable für formatierte Zeit
+                                    if (evt.IsAllDay) // Ganztägig?
+                                    {
+                                        eventTimeString = "Ganztägig";
+                                    }
+                                    else if (evt.HasTime && evt.HasEndTime) // Zeitspanne?
+                                    {
+                                        eventTimeString = $"{evt.Time:hh\\:mm} – {evt.EndTime:hh\\:mm}";
+                                    }
+                                    else if (evt.HasTime) // Nur Startzeit?
+                                    {
+                                        eventTimeString = evt.Time.ToString(@"hh\:mm");
+                                    }
+                                    else
+                                    {
+                                        eventTimeString = "Keine Zeit";
+                                    }
                                     string[] eventColorClasses = new[] { "event-color-0", "event-color-1", "event-color-2", "event-color-3", "event-color-4", "event-color-5", "event-color-6", "event-color-7" };
                                     string eventColorClass = eventColorClasses[evt.ColorIndex];
 
@@ -108,6 +128,9 @@
 
     <div class="chat-input-container">
         @* Container für die Eingabe *@
+
+        @* Abbrechen-Button: Sichtbar während AI-Anfrage läuft *@
+
         @* Datei-Badge: Zeigt angehängte Datei an *@
         @if (!string.IsNullOrEmpty(UploadedFileName)) @* Check: Ist Datei angehängt? *@
         {
@@ -123,8 +146,22 @@
 
         <div class="chat-input" role="search" aria-label="Chat Eingabe">
             @* Input-Box *@
-            <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols"></textarea> @* Textfeld - Enter wird per JavaScript gehandhabt! *@
-            <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick">Upload</button> @* Upload-Button *@
+            <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols" spellcheck="false"></textarea>
+            <div class="chat-actions @GetActionsClass()">
+                <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick">
+                    <img src="images/fileExport.png" alt="Datei hochladen" class="btn-icon" />
+                </button>
+                <button class="@GetSendClass()" @onclick="OnSendOrAbort" title="@GetSendTitle()">
+                    @if (isSaving) @* Sendet gerade: Abbruch-Icon *@
+                    {
+                        <img src="images/cancel.png" alt="Abbrechen" class="btn-icon" />
+                    }
+                    else @* Bereit zum Senden: Send-Icon *@
+                    {
+                        <img src="images/send.png" alt="Senden" class="btn-icon" />
+                    }
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -151,9 +188,24 @@
                 </div>
                 @if (!editIsAllDay)
                 {
-                    <div class="time-input-wrapper">
-                        <label class="input-label">Uhrzeit:</label>
-                        <input type="time" class="time-input" value="@editTime" @onchange="OnEditTimeChanged" />
+                    <div class="time-span-row">
+                        <div class="time-input-wrapper">
+                            <label class="input-label">Von:</label>
+                            <div class="time-custom-group">
+                                <input type="text" class="time-num-input" value="@(editTimeHour.ToString("D2"))" @onchange="OnEditStartHourChanged" placeholder="HH" />
+                                <span class="time-colon">:</span>
+                                <input type="text" class="time-num-input" value="@(editTimeMinute.ToString("D2"))" @onchange="OnEditStartMinuteChanged" placeholder="MM" />
+                            </div>
+                        </div>
+                        <span class="time-span-separator">–</span>
+                        <div class="time-input-wrapper">
+                            <label class="input-label">Bis:</label>
+                            <div class="time-custom-group">
+                                <input type="text" class="time-num-input" value="@(editEndTimeHour.ToString("D2"))" @onchange="OnEditEndHourChanged" placeholder="HH" />
+                                <span class="time-colon">:</span>
+                                <input type="text" class="time-num-input" value="@(editEndTimeMinute.ToString("D2"))" @onchange="OnEditEndMinuteChanged" placeholder="MM" />
+                            </div>
+                        </div>
                     </div>
                 }
             </div>
@@ -232,8 +284,9 @@
     {
         public string Text { get; set; } = string.Empty;
         public bool IsUser { get; set; }
-        public bool IsLoading { get; set; } 
+        public bool IsLoading { get; set; }
         public string DisplayText { get; set; } = string.Empty;
+        public string LoadingText { get; set; } = string.Empty; // Label nach 2.5s (z.B. "LLM denkt...")
         public List<Document> FoundDocuments { get; set; } = new List<Document>();
         public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
     }
@@ -262,7 +315,9 @@
     }
 
     private string UploadedFileName = string.Empty;
-    private int currentDocumentId = 0; // ID des aktuell verknüpften Dokuments (0 = keins)
+    private int currentDocumentId = 0;
+    private CancellationTokenSource? cancelSource; // Abbruch-Token für laufende AI-Anfragen
+    private bool canAbort = false; // Flag: Abbrechen-Button nur sichtbar vor erstem Chunk
 
     // Edit-Dialog Variablen
     private bool showEventEditDialog = false;
@@ -270,6 +325,11 @@
     private string editEventTitle = string.Empty;
     private bool editIsAllDay = true;
     private string editTime = "12:00";
+    private string editEndTime = "13:00";
+    private int editTimeHour = 12;
+    private int editTimeMinute = 0;
+    private int editEndTimeHour = 13;
+    private int editEndTimeMinute = 0;
     private int editColorIndex = 0;
     private int? editReminderMinutes = null;
     private string[] editAvailableColors = { "#848877", "#A8C5DD", "#F4C2B8", "#C3E5A4", "#F7DC9F", "#D4B5E8", "#FFB6C1", "#B0D9B0" };
@@ -306,6 +366,7 @@
 
             foreach (KIDT.Models.Message dbMsg in dbMessages) // Durchlaufe alle geladenen Messages
             {
+                if (dbMsg.Text.StartsWith("[DocID:")) continue; // Interne Marker nicht anzeigen
                 var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser }; // Erstelle ChatMessage-Objekt
 
                 if (!string.IsNullOrEmpty(dbMsg.DocumentIdsJson)) // Prüfe ob Dokumente verknüpft sind
@@ -395,6 +456,7 @@
     [JSInvokable]
     public async Task OnEnterPressed() // Wird von JavaScript aufgerufen wenn Enter gedrückt wird (ohne Shift!)
     {
+        if (isSaving) return; // Verhindert Doppel-Aufruf während Antwort läuft
         string textToSend = InputText; // Speichere Text
         InputText = string.Empty; // Leere sofort (ruft UpdateRows() auf ? rows = 1!)
         await SendMessage(textToSend); // Sende Nachricht
@@ -439,30 +501,91 @@
         rows = Math.Clamp(total, 1, MaxRows); // auf Bereich beschränken (min 1, max 19)
     }
 
-    private async Task TypewriterEffect(ChatMessage message, string fullText) // Typewriter-Effekt
+    private async Task TypewriterEffect(ChatMessage message, string fullText) // Typewriter-Effekt (adaptive steps, gleicher Rhythmus wie Streaming-Drain)
     {
         message.DisplayText = ""; // Start mit leerem Text
+        int displayedLength = 0;
 
-        for (int i = 0; i < fullText.Length; i++) // Durchlaufe jeden Buchstaben
+        while (displayedLength < fullText.Length) // Solange noch Text zum Anzeigen
         {
-            message.DisplayText += fullText[i]; // Füge nächsten Buchstaben hinzu
+            int remaining = fullText.Length - displayedLength; // Verbleibende Zeichen
+            int step = remaining > 80 ? 3 : 2; // Adaptiv: bei viel Text schneller (gleiche Logik wie Streaming-Drain)
+            displayedLength = Math.Min(displayedLength + step, fullText.Length); // Sicher begrenzen
+            message.DisplayText = fullText[..displayedLength]; // Zeige Fortschritt
             StateHasChanged(); // UI aktualisieren
-            await Task.Delay(20); // 50ms Pause zwischen Buchstaben
+            await Task.Delay(22); // ~45fps, gleicher Takt wie Streaming-Drain
         }
+
         message.Text = fullText; // Setze vollständigen Text
         StateHasChanged(); // Final UI update
     }
 
+    private async Task AbortMessage() // Aktuelle AI-Anfrage abbrechen
+    {
+        canAbort = false; // Button sofort ausblenden
+        StateHasChanged();
+        if (cancelSource != null) // Token-Source vorhanden?
+        {
+            cancelSource.Cancel(); // HTTP-Request zu Ollama/Gemini abbrechen
+        }
+    }
+
+    private string GetSendClass() // CSS-Klassen für Send/Abort-Button
+    {
+        if (isSaving && canAbort) // Abbruch möglich: aborting-Klasse für Rot-Hover
+        {
+            return "chat-send aborting";
+        }
+        return "chat-send";
+    }
+
+    private string GetSendTitle() // Tooltip-Text für Send/Abort-Button
+    {
+        if (isSaving) // Sendet gerade?
+        {
+            return "Abbrechen";
+        }
+        return "Senden";
+    }
+
+    private string GetActionsClass() // CSS-Klassen für chat-actions Container
+    {
+        string cls = string.Empty;
+        if (!string.IsNullOrEmpty(InputText) || isSaving) // Aktiv wenn Text vorhanden oder am Senden
+        {
+            cls = "active";
+        }
+        if (isSaving && !canAbort) // Streaming: kein Abbruch mehr möglich
+        {
+            if (cls.Length > 0) cls += " ";
+            cls += "no-abort";
+        }
+        return cls;
+    }
+
+    private async Task OnSendOrAbort() // Send/Abbruch-Button Handler
+    {
+        if (!isSaving) // Nicht am Senden: Nachricht abschicken
+        {
+            if (string.IsNullOrWhiteSpace(InputText)) return;
+            string textToSend = InputText;
+            InputText = string.Empty;
+            await SendMessage(textToSend);
+        }
+        else if (canAbort) // Wartet auf LLM: Abbruch möglich
+        {
+            await AbortMessage();
+        }
+        // isSaving && !canAbort: Streaming läuft, kein Abbruch
+    }
+
     private async Task SendMessage(string text) // Methode zum Senden der Nachricht (Text als Parameter!)
     {
-        if (text == null) // Check: Ist null?
-        {
-            text = string.Empty; // Setze auf leer
-        }
+        if (string.IsNullOrWhiteSpace(text)) return; // Leere oder Whitespace-Nachrichten nicht senden
         text = text.Trim(); // Trimme Whitespace
-        if (text.Length == 0) return; // leere Nachrichten nicht senden
 
         isSaving = true; // Setze Flag: Speicherung läuft
+        cancelSource = new CancellationTokenSource(); // Neuen Abbruch-Token erstellen
 
         // InputText und rows wurden bereits in HandleKeyDown zurückgesetzt!
 
@@ -474,7 +597,24 @@
         // 3. SOFORT: Loading-Nachricht anzeigen
         var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
         Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
+        canAbort = true; // Abbrechen-Button einblenden
         StateHasChanged(); // UI aktualisieren für Loading-Anzeige
+
+        // Label-Task: nach 2.5s "KI denkt nach_" anzeigen (nur bei längeren Anfragen sichtbar)
+        var loadingLabelCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2500, loadingLabelCts.Token); // Warte 2.5s
+                await InvokeAsync(() =>
+                {
+                    loadingMessage.LoadingText = "KI denkt nach"; // Label setzen
+                    StateHasChanged();
+                });
+            }
+            catch (OperationCanceledException) { } // Schnelle Antwort: kein Label
+        });
 
         // 4. PARALLEL: DB-Speicherung + AI-Anfrage (kein await = blockiert nicht!)
         int conversationIdForSave = currentConversationId; // Kopiere ID für async Task
@@ -485,18 +625,15 @@
             conversationIdForSave = currentConversationId;
         }
 
-        // DB-Speicherung im Hintergrund (Fire-and-Forget während AI läuft)
+        // DB-Speicherung läuft echt parallel zur AI – KEIN await vor dem Stream!
         var saveUserMessageTask = Task.Run(async () =>
         {
-            await Db.SaveMessageAsync(conversationIdForSave, true, text); // Speichere User-Nachricht
-            await Db.UpdateConversationTitleAsync(conversationIdForSave); // Titel aktualisieren
+            await Db.SaveMessageAsync(conversationIdForSave, true, text);
+            await Db.UpdateConversationTitleAsync(conversationIdForSave);
         });
 
-        // Starte MinDelay (Loading bleibt mindestens 3 Sekunden sichtbar)
-        var minDelayTask = Task.Delay(1600); // 2x Blink-Zyklus
-
-        // Warte bis User-Nachricht gespeichert ist (parallel zu minDelay)
-        await saveUserMessageTask;
+        // Starte MinDelay (Loading bleibt mindestens 1.6s sichtbar)
+        var minDelayTask = Task.Delay(1600);
 
         // Erstelle Assistent-Nachricht (wird erst nach erstem Chunk hinzugefügt!)
         var assistantMessage = new ChatMessage
@@ -508,43 +645,97 @@
         };
 
         string fullMessage = string.Empty;
+        int displayedLength = 0;
+        bool streamComplete = false;
         List<Document> foundDocuments = new List<Document>();
         List<CalendarEvent> foundEvents = new List<CalendarEvent>();
         bool firstChunkReceived = false;
 
-        // STREAMING: Empfange Token für Token!
-        await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave))
+        // Typewriter-Drain-Task: läuft bei 60fps unabhängig vom Stream
+        var drainTask = Task.Run(async () =>
         {
-            if (!firstChunkReceived) // Erster Chunk empfangen?
+            while (!streamComplete || displayedLength < fullMessage.Length)
             {
-                firstChunkReceived = true; // Setze Flag
-                await minDelayTask; // Warte bis MinDelay vorbei (Loading bleibt mind. 3 Sekunden!)
-                Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
-                Messages.Add(assistantMessage); // Füge Assistent-Nachricht hinzu
-                StateHasChanged(); // UI aktualisieren
-            }
-
-            if (!string.IsNullOrEmpty(chunk.TextChunk)) // Chunk enthält Text?
-            {
-                fullMessage += chunk.TextChunk; // Füge zu vollständiger Nachricht hinzu
-
-                // Typewriter-Effekt: Zeige jeden Buchstaben einzeln mit Delay
-                for (int i = 0; i < chunk.TextChunk.Length; i++)
+                await InvokeAsync(() =>
                 {
-                    assistantMessage.DisplayText += chunk.TextChunk[i]; // Füge Buchstabe hinzu
+                    int total = fullMessage.Length;
+                    if (displayedLength < total)
+                    {
+                        int lag = total - displayedLength;
+                        int step = lag > 80 ? 3 : 2; // leicht adaptiv, max 3 Zeichen pro Frame
+                        displayedLength = Math.Min(displayedLength + step, total);
+                        assistantMessage.DisplayText = fullMessage[..displayedLength];
+                        StateHasChanged();
+                    }
+                });
+                await Task.Delay(22); // ~45fps für sichtbaren Typewriter-Rhythmus
+            }
+            // Sicherstellung: alles angezeigt
+            await InvokeAsync(() =>
+            {
+                assistantMessage.DisplayText = fullMessage;
+                StateHasChanged();
+            });
+        });
+
+        bool wasCancelled = false; // Flag: Wurde die Anfrage abgebrochen?
+
+        // STREAMING: Empfange Token für Token und fülle Puffer
+        try
+        {
+            await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave, false, cancelSource.Token).WithCancellation(cancelSource.Token))
+            {
+                if (!firstChunkReceived) // Erster Chunk empfangen?
+                {
+                    firstChunkReceived = true; // Setze Flag
+                    canAbort = false; // Abbrechen-Button ausblenden (Antwort läuft)
+                    loadingLabelCts.Cancel(); // Label-Task abbrechen
+                    await minDelayTask; // Warte bis MinDelay vorbei (Loading bleibt mind. 3 Sekunden!)
+                    Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
+                    Messages.Add(assistantMessage); // Füge Assistent-Nachricht hinzu
                     StateHasChanged(); // UI aktualisieren
-                    await Task.Delay(20); // 20ms Delay pro Buchstabe (gleiche Geschwindigkeit wie TypewriterEffect)
+                }
+
+                if (!string.IsNullOrEmpty(chunk.TextChunk)) // Chunk enthält Text?
+                {
+                    fullMessage += chunk.TextChunk; // Nur in Puffer – Drain-Task zeigt es an
+                }
+
+                if (chunk.IsComplete) // Stream ist komplett?
+                {
+                    foundDocuments = chunk.FoundDocuments; // Setze gefundene Dokumente
+                    foundEvents = chunk.FoundEvents; // Setze gefundene Events
+                    assistantMessage.FoundDocuments = foundDocuments; // Füge zu Nachricht hinzu
+                    assistantMessage.FoundEvents = foundEvents; // Setze gefundene Termine
+                    break; // Stream beenden
                 }
             }
+        }
+        catch (OperationCanceledException) // Anfrage wurde durch Abort-Button abgebrochen
+        {
+            wasCancelled = true; // Abbruch-Flag setzen
+        }
 
-            if (chunk.IsComplete) // Stream ist komplett?
+        loadingLabelCts.Cancel(); // Label-Task in jedem Fall beenden
+        streamComplete = true; // Signal an Drain-Task
+        await Task.WhenAll(drainTask, saveUserMessageTask); // Drain + DB-Save parallel abwarten
+
+        if (wasCancelled) // Abbruch: UI aufräumen
+        {
+            if (!firstChunkReceived) // Noch keine Antwort gezeigt? → Loading entfernen
             {
-                foundDocuments = chunk.FoundDocuments; // Setze gefundene Dokumente
-                foundEvents = chunk.FoundEvents; // Setze gefundene Events
-                assistantMessage.FoundDocuments = foundDocuments; // Füge zu Nachricht hinzu
-                assistantMessage.FoundEvents = foundEvents; // Setze gefundene Termine
-                break; // Stream beenden
+                Messages.Remove(loadingMessage);
             }
+            else if (string.IsNullOrEmpty(fullMessage)) // Partielle leere Nachricht? → entfernen
+            {
+                Messages.Remove(assistantMessage);
+            }
+
+            cancelSource.Dispose(); // Token-Source freigeben
+            cancelSource = new CancellationTokenSource(); // Neuen Token für nächste Anfrage bereitstellen
+            isSaving = false; // Speicherung abgeschlossen
+            StateHasChanged();
+            return; // Nicht in DB speichern
         }
 
         assistantMessage.Text = fullMessage; // Setze vollständigen Text
@@ -568,7 +759,10 @@
             await Db.SaveMessageAsync(conversationIdForSave, false, fullMessage, docIds, eventIds); // Speichere mit DocumentIds und EventIds
         });
 
+        cancelSource.Dispose(); // Token-Source nach normalem Abschluss freigeben
+        cancelSource = new CancellationTokenSource(); // Neuen Token für nächste Anfrage bereitstellen
         isSaving = false; // Speicherung abgeschlossen
+        StateHasChanged(); // Button-Zustand zurücksetzen (slide out)
     }
 
 
@@ -625,6 +819,9 @@
                         conversationIdForSave = currentConversationId;
                     }
 
+                    // Extrahierten Datei-Inhalt holen (vor dem Task, solange currentFileContent noch gesetzt ist)
+                    string extractedFileText = Chat.GetCurrentFileContent(); // Echter Datei-Text für ExtractedText in DB
+
                     // Speicherung im Hintergrund während Typewriter läuft
                     var saveFileTask = Task.Run(async () =>
                     {
@@ -657,12 +854,17 @@
                                 fileContent = await File.ReadAllTextAsync(result.FullPath); // Lese als Text
                             }
 
-                            documentId = await docDbService.SaveDocumentAsync(result.FileName, fileContent, fileType, uploadResult, thumbnail); // Speichere Dokument in DB
+                            documentId = await docDbService.SaveDocumentAsync(result.FileName, fileContent, fileType, extractedFileText, thumbnail); // Speichere mit echtem extrahiertem Text als ExtractedText
 
                             await docDbService.LinkDocumentToConversationAsync(documentId, conversationIdForSave); // Verknüpfe Dokument mit Chat
                         }
 
                         await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult); // Speichere Upload-Nachricht in DB
+
+                        if (documentId > 0) // DocID als Context-Marker speichern (für RouterService analyze_document)
+                        {
+                            await Db.SaveMessageAsync(conversationIdForSave, false, $"[DocID: {documentId}]"); // RouterService extrahiert diese ID aus History
+                        }
 
                         await Db.UpdateConversationTitleAsync(conversationIdForSave); // Aktualisiere Chat-Titel
 
@@ -892,13 +1094,28 @@
             editColorIndex = editingEvent.ColorIndex;
             editReminderMinutes = editingEvent.ReminderMinutesBefore;
 
-            if (editingEvent.HasTime)
+            editTime = editingEvent.HasTime ? editingEvent.Time.ToString(@"hh\:mm") : "12:00"; // Startzeit laden
+            editEndTime = editingEvent.HasEndTime ? editingEvent.EndTime.ToString(@"hh\:mm") : "13:00"; // Endzeit laden
+
+            if (editingEvent.HasTime) // Stunden- und Minuten-Felder initialisieren
             {
-                editTime = editingEvent.Time.ToString(@"hh\:mm");
+                editTimeHour = editingEvent.Time.Hours;
+                editTimeMinute = editingEvent.Time.Minutes;
             }
             else
             {
-                editTime = "12:00";
+                editTimeHour = 12;
+                editTimeMinute = 0;
+            }
+            if (editingEvent.HasEndTime)
+            {
+                editEndTimeHour = editingEvent.EndTime.Hours;
+                editEndTimeMinute = editingEvent.EndTime.Minutes;
+            }
+            else
+            {
+                editEndTimeHour = 13;
+                editEndTimeMinute = 0;
             }
 
             showEventEditDialog = true;
@@ -910,12 +1127,71 @@
         }
     }
 
-    private void OnEditTimeChanged(ChangeEventArgs e) // Zeit im Edit-Dialog geändert
+    private int ClampHour(int h) // Begrenzt Stunden auf 0-23
     {
+        if (h < 0) return 0; // Untergrenze
+        if (h > 23) return 23; // Obergrenze
+        return h;
+    }
+
+    private int ClampMinute(int m) // Begrenzt Minuten auf 0-59
+    {
+        if (m < 0) return 0; // Untergrenze
+        if (m > 59) return 59; // Obergrenze
+        return m;
+    }
+
+    private string FormatTimeStr(int h, int m) // Erstellt Zeit-String "HH:MM" aus Stunden und Minuten
+    {
+        return $"{h:D2}:{m:D2}";
+    }
+
+    private void OnEditStartHourChanged(ChangeEventArgs e) // Handler: Stunden der Startzeit (Edit-Dialog)
+    {
+        int h = 0;
         if (e.Value != null)
         {
-            editTime = e.Value.ToString() ?? "12:00";
+            int.TryParse($"{e.Value}", out h); // Eingabe parsen
+            h = ClampHour(h); // Gültigkeitsbereich erzwingen
         }
+        editTimeHour = h;
+        editTime = FormatTimeStr(editTimeHour, editTimeMinute); // String für SaveEventEdit aktualisieren
+    }
+
+    private void OnEditStartMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Startzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editTimeMinute = m;
+        editTime = FormatTimeStr(editTimeHour, editTimeMinute);
+    }
+
+    private void OnEditEndHourChanged(ChangeEventArgs e) // Handler: Stunden der Endzeit (Edit-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h);
+            h = ClampHour(h);
+        }
+        editEndTimeHour = h;
+        editEndTime = FormatTimeStr(editEndTimeHour, editEndTimeMinute);
+    }
+
+    private void OnEditEndMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Endzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editEndTimeMinute = m;
+        editEndTime = FormatTimeStr(editEndTimeHour, editEndTimeMinute);
     }
 
     private async Task SaveEventEdit() // Speichert Änderungen am Termin
@@ -937,15 +1213,30 @@
                 editingEvent.ReminderShown = false;
             }
 
-            if (!editIsAllDay && TimeSpan.TryParse(editTime, out TimeSpan parsedTime))
+            if (!editIsAllDay && TimeSpan.TryParse(editTime, out TimeSpan parsedTime)) // Startzeit gültig?
             {
-                editingEvent.Time = parsedTime;
-                editingEvent.HasTime = true;
+                editingEvent.Time = parsedTime; // Setze Startzeit
+                editingEvent.HasTime = true; // Flag setzen
+
+                TimeSpan parsedEnd; // Variable für Endzeit
+                bool endParsed = TimeSpan.TryParse(editEndTime, out parsedEnd); // Parse Endzeit
+                if (endParsed && parsedEnd > parsedTime) // Endzeit gültig und nach Startzeit?
+                {
+                    editingEvent.EndTime = parsedEnd; // Setze Endzeit
+                    editingEvent.HasEndTime = true; // Flag setzen
+                }
+                else // Endzeit ungültig oder vor Startzeit
+                {
+                    editingEvent.EndTime = TimeSpan.Zero; // Endzeit zurücksetzen
+                    editingEvent.HasEndTime = false; // Flag zurücksetzen
+                }
             }
-            else
+            else // Ganztägig oder keine gültige Zeit
             {
-                editingEvent.Time = TimeSpan.Zero;
+                editingEvent.Time = TimeSpan.Zero; // Zeiten zurücksetzen
                 editingEvent.HasTime = false;
+                editingEvent.EndTime = TimeSpan.Zero;
+                editingEvent.HasEndTime = false;
             }
 
             await calendarService.UpdateEventAsync(editingEvent);
@@ -961,6 +1252,8 @@
                         evt.IsAllDay = editingEvent.IsAllDay;
                         evt.Time = editingEvent.Time;
                         evt.HasTime = editingEvent.HasTime;
+                        evt.EndTime = editingEvent.EndTime;
+                        evt.HasEndTime = editingEvent.HasEndTime;
                         evt.ColorIndex = editingEvent.ColorIndex;
                         evt.ReminderMinutesBefore = editingEvent.ReminderMinutesBefore;
                         evt.ReminderShown = editingEvent.ReminderShown;

@@ -29,7 +29,7 @@
                     @* Grid-Container für Chat-Cards *@
                     @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
                     {
-                        <div class="chat-card">
+                        <div class="chat-card @(removingChatIds.Contains(chat.Id) ? "removing" : "")">
                             @* Chat-Card *@
                             <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" disabled="@isDeleting" title="Chat löschen" aria-label="Chat löschen">
                                 @* Lösch-Button (disabled während Löschvorgang) *@
@@ -103,7 +103,7 @@
                     {
                         @foreach (var doc in Documents) @* Durchlaufe alle Dokumente *@
                         {
-                            <div class="document-row" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true">
+                            <div class="document-row @(removingDocumentIds.Contains(doc.Id) ? "removing" : "")" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true">
                                 @* Klick öffnet Dokument *@
                                 <div class="document-thumbnail">
                                     @* Thumbnail/Icon Bereich *@
@@ -143,16 +143,18 @@
     private bool isDeletingDocument = false;
     private bool isLoadingChats = true;
     private bool isLoadingDocuments = true;
+    private List<int> removingChatIds = new List<int>(); // IDs die gerade animiert entfernt werden
+    private List<int> removingDocumentIds = new List<int>(); // IDs die gerade animiert entfernt werden
 
     protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
         await Task.Yield(); // Gibt UI-Thread frei
     
-        Chats = await ChatDb.LoadAllConversationsAsync(); // Lade alle Conversations aus DB (bereits sortiert!)
+        Chats = await ChatDb.LoadAllConversationsAsync(); // Lade Conversations für Listen-Anzeige
         isLoadingChats = false; // Loading für Chats beendet
         StateHasChanged(); // UI aktualisieren
-    
-        Documents = await DocDb.GetAllDocumentsAsync(); // Lade alle Dokumente aus DB (bereits sortiert!)
+
+        Documents = await DocDb.GetAllDocumentsAsync(); // Lade Dokumente für Listen-Anzeige
         isLoadingDocuments = false; // Loading für Dokumente beendet
         StateHasChanged(); // UI aktualisieren
     }
@@ -165,12 +167,18 @@
     private async Task DeleteChat(int chatId) // Löscht einen Chat
     {
         if (isDeleting) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
-    
+
         isDeleting = true; // Setze Flag
-    
-        // 1. SOFORT: Entferne aus UI (User sieht sofort dass Chat weg ist!)
+
+        // 1. EXIT-ANIMATION: Füge ID zur Removing-Liste hinzu → CSS-Klasse wird gesetzt
+        removingChatIds.Add(chatId);
+        StateHasChanged();
+        await Task.Delay(340); // Warte bis Card-Animation fertig ist (0.32s + kleiner Puffer)
+
+        // 2. Entferne aus UI nach Animation
         Chats = Chats.Where(c => c.Id != chatId).ToList();
-        StateHasChanged(); // UI sofort aktualisieren
+        removingChatIds.Remove(chatId);
+        StateHasChanged();
     
         // 2. DANN: Lösche aus DB im Hintergrund
         try
@@ -195,12 +203,18 @@
     private async Task DeleteDocument(int documentId) // Löscht ein Dokument
     {
         if (isDeletingDocument) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
-    
+
         isDeletingDocument = true; // Setze Flag
-    
-        // 1. SOFORT: Entferne aus UI (User sieht sofort dass Dokument weg ist!)
+
+        // 1. EXIT-ANIMATION: Row nach rechts rausschieben
+        removingDocumentIds.Add(documentId);
+        StateHasChanged();
+        await Task.Delay(300); // Warte bis Row-Animation fertig ist (0.28s + kleiner Puffer)
+
+        // 2. Entferne aus UI nach Animation
         Documents = Documents.Where(d => d.Id != documentId).ToList();
-        StateHasChanged(); // UI sofort aktualisieren
+        removingDocumentIds.Remove(documentId);
+        StateHasChanged();
     
         // 2. DANN: Lösche aus DB im Hintergrund
         try

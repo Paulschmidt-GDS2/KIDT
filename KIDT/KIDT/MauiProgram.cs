@@ -19,7 +19,7 @@ namespace KIDT
                 });
 
             builder.Services.AddMauiBlazorWebView();
-            
+
             // Radzen.Blazor: Registriere DI-Services, die von Radzen-Komponenten benötigt werden.
             // Hinweis: Diese Services stellen Funktionalität für Dialoge, Notifications,
             // Tooltips und Context-Menus bereit und müssen im DI-Container verfügbar sein.
@@ -30,7 +30,7 @@ namespace KIDT
 
             // DbContext als Transient (jede Operation bekommt eigene Instanz - wichtig für MAUI!)
             builder.Services.AddDbContext<ChatDbContext>(ServiceLifetime.Transient);
-            
+
             // Services registrieren
             builder.Services.AddSingleton<ChatCoordinator>();
             builder.Services.AddTransient<ChatDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
@@ -38,10 +38,12 @@ namespace KIDT
             builder.Services.AddTransient<CalendarService>(); // Service für Kalender-Termine
             builder.Services.AddSingleton<ThumbnailGenerator>();
             builder.Services.AddSingleton<AppNotificationService>(); // Singleton für Termin-Benachrichtigungen
+            builder.Services.AddSingleton<KIDT.Services.ThemeService>(); // Theme-System (visuell)
+            builder.Services.AddSingleton<ITypewriterStreamingService, TypewriterStreamingService>(); // Typewriter-Animations-Service
 
 #if DEBUG
-    		builder.Services.AddBlazorWebViewDeveloperTools();
-    		builder.Logging.AddDebug();
+            builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Logging.AddDebug();
 #endif
 
             var app = builder.Build();

@@ -7,6 +7,18 @@
     height: 100%; /* Füllt gesamte Höhe */
     display: flex; /* Flexbox für vertikales Layout */
     flex-direction: column; /* Kinder vertikal stapeln */
+    animation: page-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* === TAB-NAVIGATION === */
@@ -24,23 +36,27 @@
 .tab-button {
     padding: 12px 24px; /* Innenabstand */
     background: transparent; /* Kein Hintergrund */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen rundum */
+    border: 2px solid var(--clr-text); /* Dunkler Rahmen rundum */
     border-radius: 6px; /* Alle Ecken abgerundet */
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 16px; /* Schriftgröße */
     font-weight: 500; /* Mittleres Gewicht */
     cursor: pointer; /* Zeiger-Cursor */
-    transition: background 0.2s ease; /* Smooth Hintergrund-übergang */
+    transition: background 0.2s ease, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1); /* Smooth Übergänge */
 }
 
 /* Tab-Button beim Hover */
 .tab-button:hover {
-    background: rgba(132, 136, 119, 0.2); /* Leicht heller Hintergrund */
+    background: rgba(var(--clr-surface-rgb), 0.2); /* Leicht heller Hintergrund */
+}
+
+.tab-button:active {
+    transform: scale(0.97); /* Kurzes Eindrücken */
 }
 
 /* Aktiver Tab-Button */
 .tab-button.active {
-    background: #848877; /* Heller Hintergrund */
+    background: var(--clr-surface); /* Heller Hintergrund */
     font-weight: 600; /* Fettgedruckt */
 }
 
@@ -52,7 +68,7 @@
     box-sizing: border-box; /* Padding in Breite einrechnen */
     display: flex; /* Flexbox für Zentrierung */
     justify-content: center; /* Horizontal zentrieren */
-    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-color: var(--clr-text) transparent; /* Scrollbar-Farben Firefox */
     scrollbar-width: thin; /* Dünne Scrollbar Firefox */
 }
 
@@ -70,7 +86,7 @@
 
 /* Scrollbar-Griff */
 .data-container::-webkit-scrollbar-thumb {
-    background: #0D0E0C; /* Dunkler Griff */
+    background: var(--clr-text); /* Dunkler Griff */
     border-radius: 8px; /* Abgerundete Ecken */
     border: 2px solid transparent; /* Transparenter Rahmen */
 }
@@ -124,10 +140,11 @@
 /* Einzelne Chat-Card */
 .chat-card {
     background: transparent; /* Kein Hintergrund */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border: 2px solid var(--clr-text); /* Dunkler Rahmen */
     border-radius: 6px; /* Abgerundete Ecken */
     padding: 16px; /* Innenabstand */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
+    transition: background 0.2s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+    animation: card-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
     display: flex; /* Flexbox aktivieren */
     flex-direction: column; /* Kinder vertikal stapeln */
     gap: 12px; /* Abstand zwischen Elementen */
@@ -151,9 +168,28 @@
     }
 }
 
+@keyframes card-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* Chat-Card beim Hover */
 .chat-card:hover {
-    background: #848877; /* Heller Hintergrund beim Hover */
+    background: var(--clr-surface);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Chat-Card wird entfernt — kurz nach oben, dann wegstempeln */
+.chat-card.removing {
+    animation: card-out 0.32s cubic-bezier(0.4, 0, 1, 1) both;
+    pointer-events: none;
+}
+
+@keyframes card-out {
+    0%   { opacity: 1;   transform: scale(1)    translateY(0)   rotate(0deg); }
+    18%  {               transform: scale(1.04) translateY(-5px) rotate(0deg); } /* kurzes Abheben */
+    100% { opacity: 0;   transform: scale(0.78) translateY(10px) rotate(-2deg); filter: blur(2px); }
 }
 
 /* === DELETE-BUTTON === */
@@ -188,7 +224,13 @@
 
 /* Delete-Button beim Hover */
 .delete-btn:hover {
-    opacity: 1; /* Voll sichtbar beim direkten Hover */
+    opacity: 1;
+    transform: scale(1.15);
+    transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.delete-btn:active {
+    transform: scale(0.92);
 }
 
 /* Icon im Delete-Button */
@@ -239,7 +281,7 @@
     flex: 1; /* Nimmt den Hauptteil der Box ein */
     min-height: 150px; /* MindestHöhe für Preview-Bereich */
     max-height: 150px; /* Maximale Höhe (schneidet unteren Teil ab) */
-    background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
+    background: rgba(var(--clr-text-rgb), 0.02); /* Sehr subtiler Hintergrund */
     border-radius: 4px; /* Leicht abgerundete Ecken */
     margin: 8px 0; /* Abstand oben und unten */
     overflow: hidden; /* Schneidet überfl×ssigen Teil ab */
@@ -282,7 +324,7 @@
 
 /* Dateiname unter Vorschau */
 .card-filename {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 14px; /* Schriftgröße */
     overflow: hidden; /* überfluss verstecken */
     text-overflow: ellipsis; /* Auslassungspunkte bei überfluss */
@@ -304,7 +346,7 @@
 
 /* Chat-Titel */
 .card-title {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 16px; /* Schriftgröße */
     font-weight: bold; /* Fettgedruckt */
     overflow: hidden; /* überfluss verstecken */
@@ -312,7 +354,7 @@
     white-space: nowrap; /* Kein Zeilenumbruch */
     max-width: 100%; /* Maximale Breite */
     padding-bottom: 8px; /* Abstand nach unten */
-    border-bottom: 1px solid rgba(13, 14, 12, 0.1); /* Dünne Trennlinie */
+    border-bottom: 1px solid rgba(var(--clr-text-rgb), 0.1); /* Dünne Trennlinie */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
@@ -327,7 +369,7 @@
 
 /* Datum */
 .card-date {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 12px; /* Schriftgröße */
     opacity: 0.6; /* Leicht transparent */
     text-align: center; /* Zentriert */
@@ -347,7 +389,7 @@
 /* Einzelne Dokument-Card (keine Klick-Funktion, nur Anzeige) */
 .document-card {
     background: transparent; /* Kein Hintergrund */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
+    border: 2px solid var(--clr-text); /* Dunkler Rahmen */
     border-radius: 6px; /* Abgerundete Ecken */
     padding: 16px; /* Innenabstand */
     display: flex; /* Flexbox aktivieren */
@@ -395,7 +437,7 @@
     overflow-y: auto; /* Vertikaler Scroll wenn nötig */
     padding: 32px; /* Außenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    scrollbar-color: #0D0E0C transparent; /* Scrollbar-Farben Firefox */
+    scrollbar-color: var(--clr-text) transparent; /* Scrollbar-Farben Firefox */
     scrollbar-width: thin; /* Dünne Scrollbar Firefox */
 }
 
@@ -413,7 +455,7 @@
 
 /* Scrollbar-Griff */
 .data-container-documents::-webkit-scrollbar-thumb {
-    background: #0D0E0C; /* Dunkler Griff */
+    background: var(--clr-text); /* Dunkler Griff */
     border-radius: 8px; /* Abgerundete Ecken */
     border: 2px solid transparent; /* Transparenter Rahmen */
 }
@@ -431,26 +473,49 @@
 
 /* Einzelne Dokument-Zeile (Explorer-Style) */
 .document-row {
-    display: flex; /* Flexbox für horizontale Anordnung */
-    align-items: center; /* Vertikal zentrieren */
-    padding: 12px 16px; /* Innenabstand */
-    border: 2px solid #0D0E0C; /* Dunkler Rahmen */
-    border-radius: 6px; /* Abgerundete Ecken */
-    margin-bottom: 8px; /* Abstand zwischen Zeilen */
-    background: transparent; /* Transparenter Hintergrund */
-    cursor: pointer; /* Zeiger-Cursor (klickbar!) */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
-    position: relative; /* für absoluten Delete-Button */
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 2px solid var(--clr-text);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease,
+                transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.2s ease;
+    position: relative;
+    animation: row-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes row-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
 }
 
 /* Dokument-Zeile beim Hover */
 .document-row:hover {
-    background: rgba(132, 136, 119, 0.3); /* Leicht heller Hintergrund */
+    background: rgba(var(--clr-surface-rgb), 0.3);
+    transform: translateX(3px);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
 }
 
 /* Dokument-Zeile beim Klick */
 .document-row:active {
-    transform: scale(0.99); /* Leicht verkleinern beim Klick */
+    transform: scale(0.99) translateX(3px);
+}
+
+/* Dokument-Zeile wird entfernt — fegt nach rechts raus und komprimiert */
+.document-row.removing {
+    animation: row-out 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+@keyframes row-out {
+    0%   { opacity: 1;   transform: translateX(0)   scaleY(1);    max-height: 80px;  margin-bottom: 8px; }
+    45%  { opacity: 0.2; transform: translateX(55px) scaleY(0.85); }
+    100% { opacity: 0;   transform: translateX(90px) scaleY(0.4);  max-height: 0;     margin-bottom: 0; }
 }
 
 /* L×sch-Button für Dokumente */
@@ -504,7 +569,7 @@
     align-items: center; /* Vertikal zentrieren */
     justify-content: center; /* Horizontal zentrieren */
     margin-right: 16px; /* Abstand zum Text */
-    background: rgba(13, 14, 12, 0.05); /* Leicht dunkler Hintergrund */
+    background: rgba(var(--clr-text-rgb), 0.05); /* Leicht dunkler Hintergrund */
     border-radius: 4px; /* Abgerundete Ecken */
     overflow: hidden; /* Schneidet überfl×ssige Teile ab */
 }
@@ -531,7 +596,7 @@
 
 /* Dokumenten-Name */
 .document-name {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 15px; /* Schriftgröße */
     font-weight: 500; /* Mittleres Gewicht */
     overflow: hidden; /* überfluss verstecken */
@@ -542,7 +607,7 @@
 
 /* Dokumenten-Metadaten (Typ + Datum) */
 .document-meta {
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     font-size: 13px; /* Kleinere Schriftgröße */
     opacity: 0.6; /* Leicht transparent */
     overflow: hidden; /* überfluss verstecken */
@@ -554,7 +619,7 @@
 .empty-state {
     text-align: center; /* Zentrieren */
     padding: 60px 20px; /* Innenabstand */
-    color: #0D0E0C; /* Textfarbe */
+    color: var(--clr-text); /* Textfarbe */
     opacity: 0.5; /* Leicht transparent */
 }
 

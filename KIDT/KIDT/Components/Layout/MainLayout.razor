@@ -8,6 +8,8 @@
 @using KIDT.Components.UI
 @inject NavigationManager Navigation
 @inject AppNotificationService AppNotificationService
+@inject KIDT.Services.ThemeService ThemeService
+@inject IJSRuntime JS
 @implements IDisposable
 
 @* Notification-Komponente (über allem, außerhalb Layout) *@
@@ -43,6 +45,20 @@
             <img src="images/data.png" alt="Daten" />
             <span>Daten</span>
         </a>
+
+        @* Theme-Auswahl *@
+        <div class="theme-divider"></div>
+        <div class="theme-section">
+            @foreach (var t in themes)
+            {
+                <button class="theme-tile @(ThemeService.CurrentTheme == t.Id ? "active" : "")"
+                        title="@t.Name"
+                        @onclick="() => ApplyTheme(t.Id)">
+                    <div class="theme-tile-swatch" style="background: @t.SurfaceColor; border-color: @t.TextColor;"></div>
+                    <span class="theme-tile-label">@t.Name</span>
+                </button>
+            }
+        </div>
     </div>
 
     <div class="content"> @* Hauptinhalt rechts von Sidebar, die Content-Box*@
@@ -62,9 +78,26 @@
 </div>
 
 @code {
-    private bool isCollapsed = false; // Start: Sidebar breit
+    private bool isCollapsed = false;
     private NotificationComponent? notificationComponent;
     private bool hasRendered = false;
+
+    private record ThemeInfo(string Id, string Name, string SurfaceColor, string TextColor);
+
+    private readonly ThemeInfo[] themes =
+    {
+        new ThemeInfo("oliv",    "Oliv",        "#848877", "#0D0E0C"),
+        new ThemeInfo("schwarz", "Dark",        "#1e1e1e", "#e0e0dc"),
+        new ThemeInfo("weiss",   "Light",       "#f2f1ec", "#1a1a18"),
+        new ThemeInfo("blau",    "Indigo",      "#363854", "#c8c8f8"),
+        new ThemeInfo("rot",     "Mahagoni",    "#541818", "#f0d0b8"),
+    };
+
+    private void ApplyTheme(string themeId)
+    {
+        ThemeService.SetTheme(themeId);
+        StateHasChanged();
+    }
 
     private bool IsKalenderPage => Navigation.Uri.Contains("/kalender", StringComparison.OrdinalIgnoreCase); // Check: Ist aktuelle Seite Kalender?
 
@@ -82,8 +115,10 @@
         if (firstRender && !hasRendered)
         {
             hasRendered = true;
+            await JS.InvokeVoidAsync("setTheme", ThemeService.CurrentTheme); // Gespeichertes Theme anwenden
+            ThemeService.ThemeChanged += OnThemeChangedSync;
             System.Diagnostics.Debug.WriteLine($"[MAINLAYOUT] OnAfterRenderAsync firstRender - notificationComponent is null? {notificationComponent == null}");
-            await Task.Delay(3000); // 3 Sekunden warten bis UI stabil ist
+            await Task.Delay(3000);
             System.Diagnostics.Debug.WriteLine("[MAINLAYOUT] Rufe ShowStartupNotificationAsync auf...");
 
             try
@@ -115,10 +150,20 @@
         StateHasChanged(); // UI neu rendern wenn URL sich ändert
     }
 
-    public void Dispose() // Aufräumen beim Entfernen der Komponente
+    private void OnThemeChangedSync()
     {
-        Navigation.LocationChanged -= OnLocationChanged; // Event-Handler entfernen
-        AppNotificationService.OnNotificationRequested -= HandleNotification; // Event-Handler entfernen
+        InvokeAsync(async () =>
+        {
+            await JS.InvokeVoidAsync("setTheme", ThemeService.CurrentTheme);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        AppNotificationService.OnNotificationRequested -= HandleNotification;
+        ThemeService.ThemeChanged -= OnThemeChangedSync;
     }
 
     private void ToggleSidebar() // Methode zum Umschalten der Sidebar

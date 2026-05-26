@@ -7,7 +7,7 @@
 {
     if (notification?.Type == NotificationType.StartupOverview)
     {
-        <div class="notification-startup @(isVisible ? "show" : "")">
+        <div class="notification-startup @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")">
             <button class="notification-close" @onclick="Dismiss">×</button>
             <div class="notification-header">Anstehende Termine</div>
             <div class="notification-body">
@@ -37,7 +37,7 @@
     else if (notification?.Type == NotificationType.EventReminder && notification.Events.Count > 0)
     {
         var ev = notification.Events[0];
-        <div class="notification-reminder @(isVisible ? "show" : "")" @onclick="() => NavigateToEvent(ev.Id)">
+        <div class="notification-reminder @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")" @onclick="() => NavigateToEvent(ev.Id)">
             <button class="notification-close" @onclick="Dismiss" @onclick:stopPropagation="true">×</button>
             <div class="notification-content">
                 <div class="notification-title">@ev.Title</div>
@@ -57,18 +57,24 @@
 @code {
     private NotificationData? notification;
     private bool isVisible = false;
+    private bool isDismissing = false; // True während Exit-Animation läuft
 
     public void Show(NotificationData data)
     {
         System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_COMPONENT] Show aufgerufen - Type: {data.Type}, Events: {data.Events.Count}");
         notification = data;
+        isDismissing = false;
         isVisible = true;
         StateHasChanged();
     }
 
-    private void Dismiss()
+    private async Task Dismiss() // Async: spielt Exit-Animation ab, dann versteckt
     {
+        isDismissing = true; // Exit-Animation starten
+        StateHasChanged();
+        await Task.Delay(460); // Warten bis Animation fertig (~0.44s)
         isVisible = false;
+        isDismissing = false;
         StateHasChanged();
     }
 

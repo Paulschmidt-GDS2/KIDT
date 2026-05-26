@@ -14,3 +14,6 @@ packages/
 
 # Logs
 *.log
+
+.claude/
+MEMORY.md

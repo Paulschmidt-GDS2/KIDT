@@ -31,8 +31,10 @@ public class CalendarService // Service für Kalender-Datenbankoperationen
     // Lädt Termine für einen bestimmten Datumsbereich
     public async Task<List<CalendarEvent>> GetEventsByDateRangeAsync(DateTime start, DateTime end) // Gibt Events im Zeitraum zurück
     {
+        DateTime startDay = start.Date; // Normiere auf Mitternacht (ignoriert Uhrzeit)
+        DateTime endDay = end.Date.AddDays(1); // Exklusives Ende: nächster Tag Mitternacht
         return await _dbContext.CalendarEvents // Query auf CalendarEvents-Tabelle
-            .Where(e => e.Start >= start && e.Start <= end) // Filter: Zwischen start und end
+            .Where(e => e.Start >= startDay && e.Start < endDay) // Filter: Ganzer Tag inklusive
             .OrderBy(e => e.Start) // Sortiere nach Datum
             .ThenBy(e => e.Time) // Bei gleichem Datum: Nach Uhrzeit
             .ToListAsync(); // Führe Query aus
@@ -82,30 +84,40 @@ public class CalendarService // Service für Kalender-Datenbankoperationen
             // Versuche einfach die Spalten hinzuzufügen - wenn sie existieren, gibt's einen Fehler den wir ignorieren
             try // Innerer Try: ReminderMinutesBefore + ReminderShown
             {
-                await _dbContext.Database.ExecuteSqlRawAsync(@" // Führe SQL direkt aus
-                    ALTER TABLE CalendarEvents 
-                    ADD COLUMN ReminderMinutesBefore INT NULL; // Spalte: Erinnerung in Minuten (NULL = keine)
-                ");
-
-                await _dbContext.Database.ExecuteSqlRawAsync(@" // Führe SQL direkt aus
-                    ALTER TABLE CalendarEvents 
-                    ADD COLUMN ReminderShown TINYINT(1) NOT NULL DEFAULT 0; // Spalte: Erinnerung bereits gezeigt? (0/1)
-                ");
-
-                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] Datenbank-Schema erfolgreich aktualisiert (ReminderMinutesBefore, ReminderShown hinzugefügt)");
+                await _dbContext.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE CalendarEvents ADD COLUMN ReminderMinutesBefore INT NULL;"
+                );
+                await _dbContext.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE CalendarEvents ADD COLUMN ReminderShown TINYINT(1) NOT NULL DEFAULT 0;"
+                );
+                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] ReminderMinutesBefore + ReminderShown hinzugefügt");
             }
-            catch (MySql.Data.MySqlClient.MySqlException ex) when (ex.Number == 1060) // Error 1060: Duplicate column name
+            catch (MySql.Data.MySqlClient.MySqlException ex) when (ex.Number == 1060) // Spalten existieren bereits?
             {
-                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] Spalten existieren bereits - kein Update nötig"); // Ignoriere Fehler (idempotent)
+                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] Reminder-Spalten existieren bereits");
+            }
+
+            try // Innerer Try: EndTime + HasEndTime (Zeitspannen-Feature)
+            {
+                await _dbContext.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE CalendarEvents ADD COLUMN EndTime time(6) NOT NULL DEFAULT '00:00:00';"
+                );
+                await _dbContext.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE CalendarEvents ADD COLUMN HasEndTime TINYINT(1) NOT NULL DEFAULT 0;"
+                );
+                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] EndTime + HasEndTime hinzugefügt");
+            }
+            catch (MySql.Data.MySqlClient.MySqlException ex) when (ex.Number == 1060) // Spalten existieren bereits?
+            {
+                System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] EndTime/HasEndTime existieren bereits");
             }
 
             // Füge EventIdsJson zu Messages hinzu
             try // Innerer Try: EventIdsJson in Messages-Tabelle
             {
-                await _dbContext.Database.ExecuteSqlRawAsync(@" // Führe SQL direkt aus
-                    ALTER TABLE Messages 
-                    ADD COLUMN EventIdsJson TEXT NULL; // Spalte: JSON-Array mit Event-IDs
-                ");
+                await _dbContext.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE Messages ADD COLUMN EventIdsJson TEXT NULL;"
+                );
 
                 System.Diagnostics.Debug.WriteLine("[CALENDAR_SERVICE] Messages-Tabelle erweitert (EventIdsJson hinzugefügt)");
             }
