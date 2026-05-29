@@ -78,17 +78,17 @@
         StateHasChanged();
     }
 
-    private void NavigateToEvent(int eventId)
+    private async Task NavigateToEvent(int eventId) // Dismiss abwarten, dann navigieren
     {
-        Dismiss();
+        await Dismiss(); // Warte auf Exit-Animation (460ms), dann verstecken
         Navigation.NavigateTo($"/Kalender?eventId={eventId}");
     }
 
-    private string GetCountdownText(CalendarEvent ev)
+    private string GetCountdownText(CalendarEvent ev) // Gibt lesbaren Countdown-Text zurück
     {
         DateTime eventDateTime;
-        
-        if (ev.HasTime && !ev.IsAllDay)
+
+        if (ev.HasTime && !ev.IsAllDay) // Termin mit Uhrzeit?
         {
             eventDateTime = ev.Start.Date + ev.Time;
         }
@@ -97,14 +97,20 @@
             eventDateTime = ev.Start.Date;
         }
 
-        var timeUntil = eventDateTime - DateTime.Now;
+        var timeUntil = eventDateTime - DateTime.Now; // Verbleibende Zeit bis Termin
 
-        if (timeUntil.TotalMinutes < 60)
+        if (timeUntil.TotalMinutes < 60) // Weniger als 1 Stunde?
+        {
             return $"in {(int)timeUntil.TotalMinutes} Minuten";
-        else if (timeUntil.TotalHours < 24)
+        }
+        else if (timeUntil.TotalHours < 24) // Weniger als 1 Tag?
+        {
             return $"in {(int)timeUntil.TotalHours} Stunden";
+        }
         else
+        {
             return $"in {(int)timeUntil.TotalDays} Tagen";
+        }
     }
 
     public void Dispose()

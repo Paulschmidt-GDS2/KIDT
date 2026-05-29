@@ -248,13 +248,13 @@ nav {
 /* Rechter Hauptinhalt-Bereich */
 .content {
     flex: 1; /* Nimmt verbleibenden Platz ein */
-    height: 100vh; /* Volle Viewport-Höhe */
+    height: calc(100vh - 0.8cm); /* Volle Viewport-Höhe minus Außenabstand unten */
     overflow: hidden; /* KEIN Scroll - nur innere Bereiche scrollen */
     position: relative; /* für absolute Positionierung von Kindern */
     display: flex; /* Flexbox für Layout */
     flex-direction: column; /* Kinder vertikal stapeln */
     padding: 10px; /* Innenabstand */
-    margin-right: 3px; /* Rechter Außenabstand */
+    margin: 0px 10px 0.8cm 10px; /* Außenabstand — unten 0.8cm */
     box-sizing: border-box; /* Padding in Breite einrechnen */
 }
 

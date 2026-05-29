@@ -1,4 +1,4 @@
-﻿using KIDT.Models;
+using KIDT.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace KIDT.Database;
@@ -7,18 +7,18 @@ public class ChatDbService // Service für Datenbank-Zugriff
 {
     private readonly ChatDbContext db;
 
-    public ChatDbService(ChatDbContext dbContext) // Konstruktor: Wird beim Erstellen der Klasse aufgerufen
+    public ChatDbService(ChatDbContext dbContext)
     {
         this.db = dbContext; // Context per Dependency Injection erhalten
     }
 
     public async Task<int> CreateConversationAsync(string title) // Neuen Chat erstellen
     {
-        Conversation conversation = new Conversation(); // Erstelle neues Conversation-Objekt
-        string safeTitle = string.Empty; // Initialisiere mit leerem String
+        Conversation conversation = new Conversation();
+        string safeTitle = string.Empty;
         if (title != null) // Prüfe ob Title vorhanden
         {
-            safeTitle = title; // Übernehme Title
+            safeTitle = title;
         }
         conversation.Title = safeTitle;
         conversation.CreatedAt = DateTime.UtcNow;
@@ -31,7 +31,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
     public async Task SaveMessageAsync(int conversationId, bool isUser, string text) // Nachricht speichern
     {
-        List<int> emptyList = new List<int>(); // Erstelle leere Liste statt null
+        List<int> emptyList = new List<int>();
         await SaveMessageAsync(conversationId, isUser, text, emptyList); // Rufe Überladung ohne DocumentIds auf
     }
 
@@ -43,13 +43,13 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
     public async Task SaveMessageAsync(int conversationId, bool isUser, string text, List<int> documentIds, List<int> eventIds) // Nachricht speichern (mit Dokument-IDs und Event-IDs)
     {
-        Message message = new Message(); // Neue Nachricht
+        Message message = new Message();
         message.ConversationId = conversationId; // Zu welchem Chat?
         message.IsUser = isUser; // User oder Assistant?
-        string safeText = string.Empty; // Initialisiere mit leerem String
+        string safeText = string.Empty;
         if (text != null) // Prüfe ob Text vorhanden
         {
-            safeText = text; // Übernehme Text
+            safeText = text;
         }
         message.Text = safeText; // Nachrichtentext
         message.Timestamp = DateTime.UtcNow; // Aktueller Zeitstempel
@@ -80,7 +80,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
     {
         var query = this.db.Messages.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
 
-        var filtered = new List<Message>(); // Erstelle leere Liste für Ergebnis
+        var filtered = new List<Message>();
         var allMessages = await query.ToListAsync(); // Lade alle Nachrichten aus Datenbank
 
         foreach (Message m in allMessages) // Gehe durch alle Nachrichten
@@ -104,7 +104,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
             return string.Empty;
         }
 
-        List<string> contextLines = new List<string>(); // Erstelle Liste für formatierte Zeilen
+        List<string> contextLines = new List<string>();
 
         foreach (Message msg in allMessages) // Gehe durch alle Nachrichten
         {
@@ -114,10 +114,10 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 role = "User";
             }
 
-            string msgText = string.Empty; // Initialisiere Text
+            string msgText = string.Empty;
             if (msg.Text != null) // Prüfe ob Text vorhanden
             {
-                msgText = msg.Text; // Übernehme Text
+                msgText = msg.Text;
             }
 
             contextLines.Add($"{role}: {msgText}"); // Füge formatierte Zeile zur Liste hinzu
@@ -139,7 +139,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 .AsNoTracking()
                 .ToListAsync(); // Lade alle ConversationDocuments
 
-            var conversationDocs = new List<ConversationDocument>(); // Erstelle leere Liste
+            var conversationDocs = new List<ConversationDocument>();
             foreach (var cd in allConversationDocs) // Gehe durch alle ConversationDocuments
             {
                 if (cd.ConversationId == c.Id) // Gehört zu dieser Conversation?
@@ -148,7 +148,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 }
             }
 
-            c.LinkedDocuments = new List<Document>(); // Initialisiere Liste
+            c.LinkedDocuments = new List<Document>();
 
             foreach (var cd in conversationDocs) // Gehe durch alle Verknüpfungen
             {
@@ -156,16 +156,16 @@ public class ChatDbService // Service für Datenbank-Zugriff
                     .AsNoTracking()
                     .ToListAsync(); // Lade alle Dokumente
 
-                Document foundDoc = new Document(); // Initialisiere Dokument
-                bool docFound = false; // Flag für Dokument gefunden
+                Document foundDoc = new Document();
+                bool docFound = false;
 
                 foreach (var d in allDocuments) // Gehe durch alle Dokumente
                 {
                     if (d.Id == cd.DocumentId) // Ist dies das gesuchte Dokument?
                     {
-                        foundDoc = d; // Übernehme Dokument
-                        docFound = true; // Setze Flag
-                        break; // Beende Schleife
+                        foundDoc = d;
+                        docFound = true;
+                        break;
                     }
                 }
 
@@ -177,14 +177,14 @@ public class ChatDbService // Service für Datenbank-Zugriff
         }
 
         allConversations.Sort((a, b) => b.CreatedAt.CompareTo(a.CreatedAt)); // Sortiere nach Datum (neueste zuerst)
-        return allConversations; // Gib sortierte Liste zurück
+        return allConversations;
     }
 
     public async Task UpdateConversationTitleAsync(int conversationId) // Aktualisiere Chat-Titel
     {
         var allMessages = await this.db.Messages.ToListAsync(); // Lade alle Nachrichten aus Datenbank
 
-        var userMessages = new List<Message>(); // Erstelle leere Liste für User-Nachrichten
+        var userMessages = new List<Message>();
         foreach (Message m in allMessages) // Gehe durch alle Nachrichten
         {
             if (m.ConversationId == conversationId && m.IsUser) // Gehört zu diesem Chat und ist User-Nachricht?
@@ -195,17 +195,17 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
         userMessages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp)); // Sortiere nach Zeitstempel
 
-        Message firstUserMessage = new Message(); // Initialisiere mit neuem Objekt
-        bool hasFirstMessage = false; // Flag für erste Nachricht gefunden
+        Message firstUserMessage = new Message();
+        bool hasFirstMessage = false;
         if (userMessages.Count > 0) // Gibt es User-Nachrichten?
         {
             firstUserMessage = userMessages[0]; // Nimm erste Nachricht
-            hasFirstMessage = true; // Setze Flag
+            hasFirstMessage = true;
         }
 
         if (hasFirstMessage) // User-Nachricht gefunden?
         {
-            string title = string.Empty; // Initialisiere Titel
+            string title = string.Empty;
             if (firstUserMessage.Text != null) // Prüfe ob Text vorhanden
             {
                 title = firstUserMessage.Text; // Nimm Nachricht als Titel
@@ -217,14 +217,14 @@ public class ChatDbService // Service für Datenbank-Zugriff
             }
 
             var allConversations = await this.db.Conversations.ToListAsync();
-            Conversation conv = new Conversation(); // Initialisiere mit neuem Objekt
-            bool convFound = false; // Flag für Conversation gefunden
+            Conversation conv = new Conversation();
+            bool convFound = false;
             foreach (Conversation c in allConversations)
             {
                 if (c.Id == conversationId)
                 {
                     conv = c;
-                    convFound = true; // Setze Flag
+                    convFound = true;
                     break;
                 }
             }
@@ -240,7 +240,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
     public async Task DeleteConversationAsync(int conversationId) // Lösche Conversation mit allen Daten
     {
         var allMessages = await this.db.Messages.ToListAsync(); // Lade alle Nachrichten aus Datenbank
-        var messages = new List<Message>(); // Erstelle leere Liste für zu löschende Nachrichten
+        var messages = new List<Message>();
         foreach (Message m in allMessages) // Gehe durch alle Nachrichten
         {
             if (m.ConversationId == conversationId) // Gehört Nachricht zu diesem Chat?
@@ -253,7 +253,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
         // Lösche ConversationDocuments-Verknüpfungen (Documents selbst bleiben erhalten!)
         var allConversationDocs = await this.db.ConversationDocuments.ToListAsync(); // Lade alle ConversationDocuments
-        var conversationDocs = new List<ConversationDocument>(); // Erstelle leere Liste
+        var conversationDocs = new List<ConversationDocument>();
         foreach (var cd in allConversationDocs) // Gehe durch alle ConversationDocuments
         {
             if (cd.ConversationId == conversationId) // Gehört zu diesem Chat?
@@ -265,14 +265,14 @@ public class ChatDbService // Service für Datenbank-Zugriff
         this.db.ConversationDocuments.RemoveRange(conversationDocs); // Lösche Verknüpfungen
 
         var allConversations = await this.db.Conversations.ToListAsync();
-        Conversation conv = new Conversation(); // Initialisiere mit neuem Objekt
-        bool convFound = false; // Flag für Conversation gefunden
+        Conversation conv = new Conversation();
+        bool convFound = false;
         foreach (Conversation c in allConversations)
         {
             if (c.Id == conversationId)
             {
                 conv = c;
-                convFound = true; // Setze Flag
+                convFound = true;
                 break;
             }
         }

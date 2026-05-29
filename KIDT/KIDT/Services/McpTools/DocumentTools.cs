@@ -1,4 +1,4 @@
-﻿using ModelContextProtocol.Server;
+using ModelContextProtocol.Server;
 using System.ComponentModel;
 using KIDT.Database;
 using KIDT.Models;
@@ -18,7 +18,7 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
         this.conversationId = currentConversationId;
     }
 
-    [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
+    [McpServerTool]
     [Description("Durchsucht alle gespeicherten Dokumente nach einem Suchbegriff. Gibt JSON mit IDs und Details zurück.")]
     public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff
         [Description("Der Suchbegriff (wird in Dateiname und Textinhalt gesucht)")] string searchQuery)
@@ -27,7 +27,7 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
         if (documents.Count == 0) // Keine Dokumente gefunden?
         {
-            return JsonSerializer.Serialize(new  // Gib JSON zurück: 0 gefunden
+            return JsonSerializer.Serialize(new
             {
                 found = 0,
                 documentIds = new List<int>(),
@@ -37,7 +37,7 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
         var result = new // Erstelle JSON-Result mit Dokument-Infos
         {
-            found = documents.Count, // Anzahl gefundener Dokumente
+            found = documents.Count,
             documentIds = new List<int>() // Liste der IDs (für add_document_to_chat)
         };
 
@@ -46,36 +46,36 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
             result.documentIds.Add(d.Id); // Füge ID zur Liste hinzu
         }
 
-        var documentList = new List<object>(); // Initialisiere Liste für Detail-Objekte
+        var documentList = new List<object>();
         foreach (Document d in documents) // Durchlaufe alle gefundenen Dokumente
         {
-            bool hasThumbnail = false; // Flag: Hat Dokument Thumbnail?
+            bool hasThumbnail = false;
             if (!string.IsNullOrEmpty(d.ThumbnailBase64)) // Thumbnail vorhanden?
             {
-                hasThumbnail = true; // Setze Flag
+                hasThumbnail = true;
             }
 
-            documentList.Add(new // Füge Dokument-Info zur Liste hinzu
+            documentList.Add(new
             {
-                id = d.Id, // Dokument-ID
-                fileName = d.FileName, // Dateiname
-                fileType = d.FileType, // Dateityp (z.B. "pdf", "txt")
+                id = d.Id,
+                fileName = d.FileName,
+                fileType = d.FileType,
                 uploadedAt = d.UploadedAt.ToString("dd.MM.yyyy HH:mm"), // Formatierter Upload-Zeitstempel
-                hasThumbnail = hasThumbnail // Hat Thumbnail? (bool)
+                hasThumbnail = hasThumbnail
             });
         }
 
-        var finalResult = new // Erstelle finales Result-Objekt
+        var finalResult = new
         {
-            found = documents.Count, // Anzahl gefundener Dokumente
-            documentIds = result.documentIds, // Liste der IDs
-            documents = documentList // Liste mit Detail-Objekten
+            found = documents.Count,
+            documentIds = result.documentIds,
+            documents = documentList
         };
 
-        return JsonSerializer.Serialize(finalResult); // Gib JSON zurück
+        return JsonSerializer.Serialize(finalResult);
     }
 
-    [McpServerTool] // Markiert Methode als MCP-Tool (wird vom LLM per Function Calling aufgerufen)
+    [McpServerTool]
     [Description("Fügt ein Dokument zum aktuellen Chat hinzu. Gibt JSON mit Erfolg und Details zurück.")]
     public async Task<string> AddDocumentToChat( // Tool: Fügt Dokument zum aktuellen Chat hinzu (erstellt Link in ConversationDocuments-Tabelle)
         [Description("Die ID des hinzuzufügenden Dokuments (aus search_documents)")] int documentId)
@@ -84,7 +84,7 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
         if (alreadyLinked) // Bereits hinzugefügt?
         {
-            return JsonSerializer.Serialize(new  // Gib JSON zurück: Bereits hinzugefügt
+            return JsonSerializer.Serialize(new
             {
                 success = false,
                 message = "Dokument ist bereits hinzugefügt",
@@ -94,9 +94,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
         bool success = await this.docDbService.LinkDocumentToConversationAsync(documentId, this.conversationId); // Erstelle Link in ConversationDocuments-Tabelle
 
-        if (!success) // Hinzufügen fehlgeschlagen? (sollte nicht passieren)
+        if (!success) // Hinzufügen fehlgeschlagen?
         {
-            return JsonSerializer.Serialize(new  // Gib JSON zurück: Fehler
+            return JsonSerializer.Serialize(new
             {
                 success = false,
                 message = "Hinzufügen fehlgeschlagen",
@@ -106,9 +106,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
 
         var document = await this.docDbService.GetDocumentByIdAsync(documentId); // Lade volles Dokument aus DB (für Details)
 
-        if (document == null) // Dokument nicht gefunden? (sollte nicht passieren)
+        if (document == null) // Dokument nicht gefunden?
         {
-            return JsonSerializer.Serialize(new  // Gib JSON zurück: Nicht gefunden
+            return JsonSerializer.Serialize(new
             {
                 success = false,
                 message = "Dokument nicht gefunden",
@@ -116,29 +116,29 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
             });
         }
 
-        var result = new // Erstelle JSON-Result mit Erfolg
+        var result = new
         {
-            success = true, // Erfolg-Flag
-            message = $"Dokument '{document.FileName}' wurde hinzugefügt", // Human-readable Message
-            documentId = documentId, // Dokument-ID
-            fileName = document.FileName, // Dateiname
-            fileType = document.FileType, // Dateityp
+            success = true,
+            message = $"Dokument '{document.FileName}' wurde hinzugefügt",
+            documentId = documentId,
+            fileName = document.FileName,
+            fileType = document.FileType,
             extractedTextLength = 0 // Länge des extrahierten Texts (Initial: 0)
         };
 
         if (document.ExtractedText != null) // Extrahierter Text vorhanden?
         {
-            result = new // Erstelle neues Result mit echter Text-Länge
+            result = new
             {
-                success = true, // Erfolg-Flag
-                message = $"Dokument '{document.FileName}' wurde hinzugefügt", // Human-readable Message
-                documentId = documentId, // Dokument-ID
-                fileName = document.FileName, // Dateiname
-                fileType = document.FileType, // Dateityp
+                success = true,
+                message = $"Dokument '{document.FileName}' wurde hinzugefügt",
+                documentId = documentId,
+                fileName = document.FileName,
+                fileType = document.FileType,
                 extractedTextLength = document.ExtractedText.Length // Länge des extrahierten Texts
             };
         }
 
-        return JsonSerializer.Serialize(result); // Gib JSON zurück
+        return JsonSerializer.Serialize(result);
     }
 }

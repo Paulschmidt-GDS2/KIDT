@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading.Tasks;
 
 #if WINDOWS
@@ -41,16 +41,16 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
 
             PdfPage page = pdfDoc.GetPage(0); // Hole erste Seite
 
-            InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream(); // Erstelle Memory-Stream
+            InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream();
 
-            PdfPageRenderOptions options = new PdfPageRenderOptions(); // Render-Optionen
+            PdfPageRenderOptions options = new PdfPageRenderOptions();
             options.DestinationWidth = 200; // Thumbnail-Breite 200px
 
             await page.RenderToStreamAsync(stream, options); // Rendere Seite zu Stream
 
             stream.Seek(0); // Stream zurücksetzen
 
-            byte[] bytes = new byte[stream.Size]; // Byte-Array für Bild
+            byte[] bytes = new byte[stream.Size];
             IBuffer buffer = await stream.ReadAsync(bytes.AsBuffer(), (uint)stream.Size, InputStreamOptions.None); // Lese Stream
 
             string base64 = Convert.ToBase64String(bytes); // Konvertiere zu Base64
@@ -67,5 +67,3 @@ public class ThumbnailGenerator // Service zum Generieren von Datei-Thumbnails
 #endif
     }
 }
-
-

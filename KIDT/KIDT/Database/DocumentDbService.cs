@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using KIDT.Models;
 using Microsoft.EntityFrameworkCore;
@@ -20,14 +20,14 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
 
         var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
 
-        Document existingDoc = new Document(); // Initialisiere mit neuem Objekt
-        bool docExists = false; // Flag für existierendes Dokument
+        Document existingDoc = new Document();
+        bool docExists = false;
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             if (d.FileHash == fileHash) // Gleicher Hash gefunden?
             {
-                existingDoc = d; // Dokument existiert bereits
-                docExists = true; // Setze Flag
+                existingDoc = d;
+                docExists = true;
                 break;
             }
         }
@@ -37,7 +37,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             return existingDoc.Id; // Gib existierende ID zurück (verhindert Duplikate)
         }
 
-        Document newDoc = new Document(); // Erstelle neues Dokument-Objekt
+        Document newDoc = new Document();
         newDoc.FileName = fileName;
         newDoc.FileHash = fileHash;
         newDoc.FileContent = fileContent;
@@ -58,7 +58,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
 
         allDocuments.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
-        return allDocuments; // Gib sortierte Liste zurück
+        return allDocuments;
     }
 
     public async Task<Document> GetDocumentByIdAsync(int documentId) // Lade einzelnes Dokument
@@ -74,8 +74,8 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             }
         }
 
-        Document notFoundDoc = new Document(); // Erstelle Dummy-Dokument für nicht gefunden
-        notFoundDoc.Id = -1; // Setze ID auf -1 als Indikator für "nicht gefunden"
+        Document notFoundDoc = new Document();
+        notFoundDoc.Id = -1; // -1 = nicht gefunden (Sentinel-Wert)
         return notFoundDoc;
     }
 
@@ -86,7 +86,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
 
-        var filtered = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        var filtered = new List<Document>();
         foreach (Document d in allDocuments) // Gehe durch alle Dokumente
         {
             string lowerFileName = d.FileName.ToLower(); // Dateiname in Kleinbuchstaben
@@ -162,14 +162,14 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
     {
         var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
 
-        ConversationDocument link = new ConversationDocument(); // Initialisiere mit neuem Objekt
-        bool linkFound = false; // Flag für gefundene Verknüpfung
+        ConversationDocument link = new ConversationDocument();
+        bool linkFound = false;
         foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
             if (cd.ConversationId == conversationId && cd.DocumentId == documentId) // Gleiche Conversation und gleiches Dokument?
             {
-                link = cd; // Verknüpfung gefunden
-                linkFound = true; // Setze Flag
+                link = cd;
+                linkFound = true;
                 break;
             }
         }
@@ -205,7 +205,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         var query = this.db.ConversationDocuments.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allLinks = await query.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
 
-        var documentIds = new List<int>(); // Erstelle leere Liste für Dokument-IDs
+        var documentIds = new List<int>();
         foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
             if (cd.ConversationId == conversationId) // Gehört zu diesem Chat?
@@ -215,7 +215,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         }
 
         var allDocuments = await this.db.Documents.ToListAsync(); // Lade alle Dokumente aus Datenbank
-        var result = new List<Document>(); // Erstelle leere Liste für Ergebnis
+        var result = new List<Document>();
 
         foreach (int docId in documentIds) // Gehe durch alle gefundenen Dokument-IDs
         {
@@ -236,7 +236,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
     public async Task DeleteDocumentAsync(int documentId) // Lösche Dokument aus Datenbank
     {
         var allLinks = await this.db.ConversationDocuments.ToListAsync(); // Lade alle Verknüpfungen aus Datenbank
-        var links = new List<ConversationDocument>(); // Erstelle leere Liste für zu löschende Verknüpfungen
+        var links = new List<ConversationDocument>();
 
         foreach (ConversationDocument cd in allLinks) // Gehe durch alle Verknüpfungen
         {
@@ -249,14 +249,14 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         this.db.ConversationDocuments.RemoveRange(links); // Entferne alle Verknüpfungen aus Datenbank
 
         var allDocuments = await this.db.Documents.ToListAsync();
-        Document doc = new Document(); // Initialisiere mit neuem Objekt
-        bool docFound = false; // Flag für Dokument gefunden
+        Document doc = new Document();
+        bool docFound = false;
         foreach (Document d in allDocuments)
         {
             if (d.Id == documentId)
             {
                 doc = d;
-                docFound = true; // Setze Flag
+                docFound = true;
                 break;
             }
         }
@@ -274,7 +274,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         using (SHA256 sha256 = SHA256.Create()) // Erstelle SHA256-Hasher (wird automatisch disposed)
         {
             byte[] contentBytes = Encoding.UTF8.GetBytes(fileContent); // Konvertiere String zu UTF8-Bytes
-            byte[] hashBytes = sha256.ComputeHash(contentBytes); // Berechne SHA256-Hash (32 Bytes)
+            byte[] hashBytes = sha256.ComputeHash(contentBytes); // Berechne SHA256-Hash
             return Convert.ToBase64String(hashBytes); // Konvertiere Hash zu Base64-String (für DB-Speicherung)
         }
     }

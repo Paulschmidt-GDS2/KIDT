@@ -2,7 +2,6 @@
 using KIDT.Services;
 using KIDT.Database;
 using Microsoft.EntityFrameworkCore;
-using Radzen; // Radzen UI-Services (Dialog, Notification, Tooltip, ContextMenu)
 
 namespace KIDT
 {
@@ -20,14 +19,6 @@ namespace KIDT
 
             builder.Services.AddMauiBlazorWebView();
 
-            // Radzen.Blazor: Registriere DI-Services, die von Radzen-Komponenten benötigt werden.
-            // Hinweis: Diese Services stellen Funktionalität für Dialoge, Notifications,
-            // Tooltips und Context-Menus bereit und müssen im DI-Container verfügbar sein.
-            builder.Services.AddScoped<DialogService>();
-            builder.Services.AddScoped<Radzen.NotificationService>();
-            builder.Services.AddScoped<TooltipService>();
-            builder.Services.AddScoped<ContextMenuService>();
-
             // DbContext als Transient (jede Operation bekommt eigene Instanz - wichtig für MAUI!)
             builder.Services.AddDbContext<ChatDbContext>(ServiceLifetime.Transient);
 
@@ -39,7 +30,7 @@ namespace KIDT
             builder.Services.AddSingleton<ThumbnailGenerator>();
             builder.Services.AddSingleton<AppNotificationService>(); // Singleton für Termin-Benachrichtigungen
             builder.Services.AddSingleton<KIDT.Services.ThemeService>(); // Theme-System (visuell)
-            builder.Services.AddSingleton<ITypewriterStreamingService, TypewriterStreamingService>(); // Typewriter-Animations-Service
+            builder.Services.AddSingleton<KIDT.Services.ITitleBarService, KIDT.Platforms.Windows.TitleBarService>(); // Titelleisten-Farbe pro Theme
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();

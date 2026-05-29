@@ -9,6 +9,7 @@
 @inject NavigationManager Navigation
 @inject AppNotificationService AppNotificationService
 @inject KIDT.Services.ThemeService ThemeService
+@inject KIDT.Services.ITitleBarService TitleBarService
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -116,6 +117,7 @@
         {
             hasRendered = true;
             await JS.InvokeVoidAsync("setTheme", ThemeService.CurrentTheme); // Gespeichertes Theme anwenden
+            TitleBarService.ApplyTheme(ThemeService.CurrentTheme); // Titelleiste beim Start einfärben
             ThemeService.ThemeChanged += OnThemeChangedSync;
             System.Diagnostics.Debug.WriteLine($"[MAINLAYOUT] OnAfterRenderAsync firstRender - notificationComponent is null? {notificationComponent == null}");
             await Task.Delay(3000);
@@ -155,6 +157,7 @@
         InvokeAsync(async () =>
         {
             await JS.InvokeVoidAsync("setTheme", ThemeService.CurrentTheme);
+            TitleBarService.ApplyTheme(ThemeService.CurrentTheme); // Titelleiste sofort mitfärben
             StateHasChanged();
         });
     }

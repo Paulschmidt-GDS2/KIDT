@@ -1,0 +1,1025 @@
+using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
+using Microsoft.Extensions.DependencyInjection;
+using KIDT.Models;
+
+namespace KIDT.Components.Pages;
+
+public partial class Home
+{
+    [Parameter]
+    public int ChatId { get; set; }
+
+    // Nachrichtenklasse zum Unterscheiden von Benutzer und Assistent
+    private class ChatMessage // Klasse für eine Chat-Nachricht
+    {
+        public string Text { get; set; } = string.Empty;
+        public bool IsUser { get; set; }
+        public bool IsLoading { get; set; }
+        public string DisplayText { get; set; } = string.Empty;
+        public string LoadingText { get; set; } = string.Empty; // Label nach 2.5s (z.B. "LLM denkt...")
+        public List<Document> FoundDocuments { get; set; } = new List<Document>();
+        public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
+    }
+
+    private List<ChatMessage> Messages = new();
+    private int currentConversationId;
+    private bool isSaving = false;
+    private ElementReference textareaRef;
+    private ElementReference messagesRef;
+
+    // Eingabe: wächst stufenweise pro Zeile
+    private const int MaxRows = 19;
+    private const int Cols = 60;
+    private int rows = 1;
+
+    private string inputText = string.Empty;
+    private string InputText
+    {
+        get { return inputText; } // liefert aktuellen Text zurück
+        set // Setter: Wird bei jeder Eingabe aufgerufen
+        {
+            if (value == null) value = string.Empty; // null zu leerem String konvertieren (value = neuer Wert der gesetzt wird)
+            inputText = value; // Feld setzen
+            UpdateRows(); // Zeilenanzahl neu berechnen
+        }
+    }
+
+    private string UploadedFileName = string.Empty;
+    private int currentDocumentId = 0;
+    private CancellationTokenSource? cancelSource; // Abbruch-Token für laufende AI-Anfragen
+    private bool canAbort = false; // Flag: Abbrechen-Button nur sichtbar vor erstem Chunk
+
+    // Edit-Dialog Variablen
+    private bool showEventEditDialog = false;
+    private CalendarEvent? editingEvent = null;
+    private string editEventTitle = string.Empty;
+    private bool editIsAllDay = true;
+    private string editTime = "12:00";
+    private string editEndTime = "13:00";
+    private int editTimeHour = 12;
+    private int editTimeMinute = 0;
+    private int editEndTimeHour = 13;
+    private int editEndTimeMinute = 0;
+    private int editColorIndex = 0;
+    private int? editReminderMinutes = null;
+    private string[] editAvailableColors = { "#848877", "#A8C5DD", "#F4C2B8", "#C3E5A4", "#F7DC9F", "#D4B5E8", "#FFB6C1", "#B0D9B0" };
+
+    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
+    {
+        var backgroundTask = Task.Run(Chat.InitializeAsync); // Starte KI-Modell-Laden im Hintergrund
+
+        KIDT.Services.ChatEventService.OnNewChatRequested += HandleNewChatRequest; // Registriere Event für Neuer-Chat-Button
+
+        if (ChatId > 0) // Prüfe ob bestehender Chat geladen werden soll
+        {
+            currentConversationId = ChatId; // Übernehme Chat-ID aus URL
+
+            await Task.Yield(); // Gib UI-Thread frei
+
+            List<KIDT.Models.Message> dbMessages;
+            List<KIDT.Models.Document> files;
+
+            using (var scope1 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Messages
+            using (var scope2 = ServiceProvider.CreateScope()) // Erstelle separate DB-Context für Files
+            {
+                var dbService1 = scope1.ServiceProvider.GetRequiredService<KIDT.Database.ChatDbService>(); // Hole DB-Service 1
+                var docDbService = scope2.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+
+                var messagesTask = dbService1.LoadMessagesAsync(currentConversationId); // Starte Messages-Laden
+                var filesTask = docDbService.GetDocumentsForConversationAsync(currentConversationId); // Starte Dokumente-Laden
+
+                await Task.WhenAll(messagesTask, filesTask); // Warte bis beide fertig (parallel)
+
+                dbMessages = await messagesTask; // Hole Ergebnis Messages
+                files = await filesTask; // Hole Ergebnis Documents
+            }
+
+            foreach (KIDT.Models.Message dbMsg in dbMessages) // Durchlaufe alle geladenen Messages
+            {
+                if (dbMsg.Text.StartsWith("[DocID:")) continue; // Interne Marker nicht anzeigen
+                var chatMsg = new ChatMessage { Text = dbMsg.Text, IsUser = dbMsg.IsUser }; // Erstelle ChatMessage-Objekt
+
+                if (!string.IsNullOrEmpty(dbMsg.DocumentIdsJson)) // Prüfe ob Dokumente verknüpft sind
+                {
+                    try
+                    {
+                        var docIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.DocumentIdsJson); // Deserialisiere JSON zu Liste
+                        if (docIds != null && docIds.Count > 0) // Prüfe ob Dokument-IDs vorhanden
+                        {
+                            using var docScope = ServiceProvider.CreateScope(); // Erstelle DB-Scope für Dokumente
+                            var docDbService = docScope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+
+                            foreach (var docId in docIds) // Durchlaufe alle Dokument-IDs
+                            {
+                                var doc = await docDbService.GetDocumentByIdAsync(docId); // Lade Dokument aus DB
+                                if (doc != null) chatMsg.FoundDocuments.Add(doc); // Füge zur Liste hinzu
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD_DOCS] Fehler beim Laden von Dokumenten: {ex.Message}");
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(dbMsg.EventIdsJson)) // Prüfe ob Events verknüpft sind
+                {
+                    try
+                    {
+                        var eventIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.EventIdsJson); // Deserialisiere JSON zu Liste
+                        if (eventIds != null && eventIds.Count > 0) // Prüfe ob Event-IDs vorhanden
+                        {
+                            using var calScope = ServiceProvider.CreateScope(); // Erstelle DB-Scope für Events
+                            var calendarService = calScope.ServiceProvider.GetRequiredService<KIDT.Services.CalendarService>(); // Hole Calendar-Service
+
+                            foreach (var eventId in eventIds) // Durchlaufe alle Event-IDs
+                            {
+                                var evt = await calendarService.GetEventByIdAsync(eventId); // Lade Event aus DB
+                                if (evt != null) chatMsg.FoundEvents.Add(evt); // Füge zur Liste hinzu
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD_EVENTS] Fehler beim Laden von Events: {ex.Message}");
+                    }
+                }
+
+                if (dbMsg.IsUser) // Prüfe ob User-Nachricht
+                {
+                    chatMsg.DisplayText = dbMsg.Text; // Übernehme Text für Anzeige
+                    Messages.Add(chatMsg); // Füge zur Nachrichten-Liste hinzu
+                }
+                else // Assistent-Nachricht
+                {
+                    chatMsg.DisplayText = dbMsg.Text; // Übernehme Text direkt (kein Typewriter beim Laden)
+                    Messages.Add(chatMsg); // Füge zur Nachrichten-Liste hinzu
+                }
+            }
+
+            if (files.Count > 0) // Prüfe ob Dateien vorhanden
+            {
+                UploadedFileName = files[0].FileName; // Zeige erste Datei im Badge
+            }
+
+            StateHasChanged(); // Aktualisiere UI komplett
+        }
+        else // Kein ChatId in URL = Neuer Chat
+        {
+            currentConversationId = 0; // Setze auf 0 (wird bei erster Nachricht erstellt)
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) // Wird nach jedem Render aufgerufen
+    {
+        if (firstRender) // Nur beim ersten Render
+        {
+            var dotnetRef = DotNetObjectReference.Create(this); // Erstelle Referenz für JavaScript-Callback
+            await JSRuntime.InvokeVoidAsync("textareaHelper.setupEnterHandler", "chatTextarea", dotnetRef); // Registriere Enter-Handler
+            await JSRuntime.InvokeVoidAsync("chatScrollHelper.init", messagesRef); // Initialisiere Auto-Scroll
+        }
+
+        // Nach jedem Render: Auto-Scroll (außer User scrollt manuell)
+        await JSRuntime.InvokeVoidAsync("chatScrollHelper.scrollToBottom");
+    }
+
+    [JSInvokable]
+    public async Task OnEnterPressed() // Wird von JavaScript aufgerufen wenn Enter gedrückt wird (ohne Shift!)
+    {
+        if (isSaving) return; // Verhindert Doppel-Aufruf während Antwort läuft
+        string textToSend = InputText; // Speichere Text
+        InputText = string.Empty; // Leere sofort (ruft UpdateRows() auf ? rows = 1!)
+        await SendMessage(textToSend); // Sende Nachricht
+    }
+
+    private async void HandleNewChatRequest() // Event-Handler für Neuer-Chat-Button
+    {
+        if (isSaving) // Prüfe ob Speicherung läuft
+        {
+            return; // Warte bis fertig
+        }
+
+        bool hasContent = Messages.Count > 0 || !string.IsNullOrEmpty(UploadedFileName); // Prüfe ob Chat Nachrichten oder Datei hat
+
+        if (hasContent) // Chat hat Content
+        {
+            await ResetChat(); // Setze Chat zurück
+        }
+    }
+
+    public void Dispose() // Wird beim Entfernen der Komponente aufgerufen
+    {
+        KIDT.Services.ChatEventService.OnNewChatRequested -= HandleNewChatRequest; // Event-Listener entfernen
+    }
+
+    private void UpdateRows() // Methode die aus inputText die sichtbaren Zeilen berechnet und rows begrenzt
+    {
+        if (string.IsNullOrEmpty(inputText)) // Wenn leer, setze auf 1 Zeile
+        {
+            rows = 1;
+            return;
+        }
+
+        var lines = inputText.Split('\n'); // Splitte bei Newlines
+        int total = 0; // Zähler für sichtbare Zeilen
+        foreach (var line in lines) // Durchlaufe alle Zeilen
+        {
+            int wraps = (int)Math.Ceiling(line.Length / (double)Cols); // berechne Zeilenumbrüche
+            if (wraps < 1) wraps = 1; // mindestens eine Zeile
+            total += wraps; // aufaddieren
+        }
+        rows = Math.Clamp(total, 1, MaxRows); // auf Bereich beschränken (min 1, max 19)
+    }
+
+    private async Task TypewriterEffect(ChatMessage message, string fullText) // Typewriter-Effekt (adaptive steps, gleicher Rhythmus wie Streaming-Drain)
+    {
+        message.DisplayText = ""; // Start mit leerem Text
+        int displayedLength = 0;
+
+        while (displayedLength < fullText.Length) // Solange noch Text zum Anzeigen
+        {
+            int remaining = fullText.Length - displayedLength; // Verbleibende Zeichen
+            int step = remaining > 80 ? 3 : 2; // Adaptiv: bei viel Text schneller (gleiche Logik wie Streaming-Drain)
+            displayedLength = Math.Min(displayedLength + step, fullText.Length); // Sicher begrenzen
+            message.DisplayText = fullText[..displayedLength]; // Zeige Fortschritt
+            StateHasChanged(); // UI aktualisieren
+            await Task.Delay(22); // ~45fps, gleicher Takt wie Streaming-Drain
+        }
+
+        message.Text = fullText; // Setze vollständigen Text
+        StateHasChanged(); // Final UI update
+    }
+
+    private async Task AbortMessage() // Aktuelle AI-Anfrage abbrechen
+    {
+        canAbort = false; // Button sofort ausblenden
+        StateHasChanged();
+        if (cancelSource != null) // Token-Source vorhanden?
+        {
+            cancelSource.Cancel(); // HTTP-Request zu Ollama/Gemini abbrechen
+        }
+    }
+
+    private string GetSendClass() // CSS-Klassen für Send/Abort-Button
+    {
+        if (isSaving && canAbort) // Abbruch möglich: aborting-Klasse für Rot-Hover
+        {
+            return "chat-send aborting";
+        }
+        return "chat-send";
+    }
+
+    private string GetSendTitle() // Tooltip-Text für Send/Abort-Button
+    {
+        if (isSaving) // Sendet gerade?
+        {
+            return "Abbrechen";
+        }
+        return "Senden";
+    }
+
+    private string GetActionsClass() // CSS-Klassen für chat-actions Container
+    {
+        string cls = string.Empty;
+        if (!string.IsNullOrEmpty(InputText) || isSaving) // Aktiv wenn Text vorhanden oder am Senden
+        {
+            cls = "active";
+        }
+        if (isSaving && !canAbort) // Streaming: kein Abbruch mehr möglich
+        {
+            if (cls.Length > 0) cls += " ";
+            cls += "no-abort";
+        }
+        return cls;
+    }
+
+    private async Task OnSendOrAbort() // Send/Abbruch-Button Handler
+    {
+        if (!isSaving) // Nicht am Senden: Nachricht abschicken
+        {
+            if (string.IsNullOrWhiteSpace(InputText)) return;
+            string textToSend = InputText;
+            InputText = string.Empty;
+            await SendMessage(textToSend);
+        }
+        else if (canAbort) // Wartet auf LLM: Abbruch möglich
+        {
+            await AbortMessage();
+        }
+        // isSaving && !canAbort: Streaming läuft, kein Abbruch
+    }
+
+    private async Task SendMessage(string text) // Methode zum Senden der Nachricht (Text als Parameter!)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return; // Leere oder Whitespace-Nachrichten nicht senden
+        text = text.Trim(); // Trimme Whitespace
+
+        isSaving = true; // Setze Flag: Speicherung läuft
+        cancelSource = new CancellationTokenSource(); // Neuen Abbruch-Token erstellen
+
+        // InputText und rows wurden bereits in HandleKeyDown zurückgesetzt!
+
+        // 2. SOFORT: Nachricht in UI anzeigen
+        Messages.Add(new ChatMessage { Text = text, DisplayText = text, IsUser = true }); // Benutzer-Nachricht hinzufügen
+        StateHasChanged(); // UI sofort aktualisieren (User sieht Nachricht sofort!)
+        await JSRuntime.InvokeVoidAsync("chatScrollHelper.forceScrollToBottom"); // Scroll nach unten (erzwungen)
+
+        // 3. SOFORT: Loading-Nachricht anzeigen
+        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Nachricht erstellen
+        Messages.Add(loadingMessage); // Loading-Nachricht hinzufügen (vom Assistenten)
+        canAbort = true; // Abbrechen-Button einblenden
+        StateHasChanged(); // UI aktualisieren für Loading-Anzeige
+
+        // Label-Task: nach 2.5s "KI denkt nach_" anzeigen (nur bei längeren Anfragen sichtbar)
+        var loadingLabelCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2500, loadingLabelCts.Token); // Warte 2.5s
+                await InvokeAsync(() =>
+                {
+                    loadingMessage.LoadingText = "KI denkt nach"; // Label setzen
+                    StateHasChanged();
+                });
+            }
+            catch (OperationCanceledException) { } // Schnelle Antwort: kein Label
+        });
+
+        // 4. PARALLEL: DB-Speicherung + AI-Anfrage (kein await = blockiert nicht!)
+        int conversationIdForSave = currentConversationId; // Kopiere ID für async Task
+
+        if (currentConversationId == 0) // Check: Ist noch keine Conversation erstellt?
+        {
+            currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Erstelle Conversation (muss sync sein)
+            conversationIdForSave = currentConversationId;
+        }
+
+        // DB-Speicherung läuft echt parallel zur AI – KEIN await vor dem Stream!
+        var saveUserMessageTask = Task.Run(async () =>
+        {
+            await Db.SaveMessageAsync(conversationIdForSave, true, text);
+            await Db.UpdateConversationTitleAsync(conversationIdForSave);
+        });
+
+        // Starte MinDelay (Loading bleibt mindestens 1.6s sichtbar)
+        var minDelayTask = Task.Delay(1600);
+
+        // Erstelle Assistent-Nachricht (wird erst nach erstem Chunk hinzugefügt!)
+        var assistantMessage = new ChatMessage
+        {
+            Text = "",
+            DisplayText = "",
+            IsUser = false,
+            IsLoading = false
+        };
+
+        string fullMessage = string.Empty;
+        int displayedLength = 0;
+        bool streamComplete = false;
+        List<Document> foundDocuments = new List<Document>();
+        List<CalendarEvent> foundEvents = new List<CalendarEvent>();
+        bool firstChunkReceived = false;
+
+        // Typewriter-Drain-Task: läuft bei 60fps unabhängig vom Stream
+        var drainTask = Task.Run(async () =>
+        {
+            while (!streamComplete || displayedLength < fullMessage.Length)
+            {
+                await InvokeAsync(() =>
+                {
+                    int total = fullMessage.Length;
+                    if (displayedLength < total)
+                    {
+                        int lag = total - displayedLength;
+                        int step = lag > 80 ? 3 : 2; // leicht adaptiv, max 3 Zeichen pro Frame
+                        displayedLength = Math.Min(displayedLength + step, total);
+                        assistantMessage.DisplayText = fullMessage[..displayedLength];
+                        StateHasChanged();
+                    }
+                });
+                await Task.Delay(22); // ~45fps für sichtbaren Typewriter-Rhythmus
+            }
+            // Sicherstellung: alles angezeigt
+            await InvokeAsync(() =>
+            {
+                assistantMessage.DisplayText = fullMessage;
+                StateHasChanged();
+            });
+        });
+
+        bool wasCancelled = false; // Flag: Wurde die Anfrage abgebrochen?
+
+        // STREAMING: Empfange Token für Token und fülle Puffer
+        try
+        {
+            await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave, false, cancelSource.Token).WithCancellation(cancelSource.Token))
+            {
+                if (!firstChunkReceived) // Erster Chunk empfangen?
+                {
+                    firstChunkReceived = true; // Setze Flag
+                    canAbort = false; // Abbrechen-Button ausblenden (Antwort läuft)
+                    loadingLabelCts.Cancel(); // Label-Task abbrechen
+                    await minDelayTask; // Warte bis MinDelay vorbei (Loading bleibt mind. 3 Sekunden!)
+                    Messages.Remove(loadingMessage); // Entferne Loading-Nachricht
+                    Messages.Add(assistantMessage); // Füge Assistent-Nachricht hinzu
+                    StateHasChanged(); // UI aktualisieren
+                }
+
+                if (!string.IsNullOrEmpty(chunk.TextChunk)) // Chunk enthält Text?
+                {
+                    fullMessage += chunk.TextChunk; // Nur in Puffer – Drain-Task zeigt es an
+                }
+
+                if (chunk.IsComplete) // Stream ist komplett?
+                {
+                    foundDocuments = chunk.FoundDocuments; // Setze gefundene Dokumente
+                    foundEvents = chunk.FoundEvents; // Setze gefundene Events
+                    assistantMessage.FoundDocuments = foundDocuments; // Füge zu Nachricht hinzu
+                    assistantMessage.FoundEvents = foundEvents; // Setze gefundene Termine
+                    break; // Stream beenden
+                }
+            }
+        }
+        catch (OperationCanceledException) // Anfrage wurde durch Abort-Button abgebrochen
+        {
+            wasCancelled = true; // Abbruch-Flag setzen
+        }
+
+        loadingLabelCts.Cancel(); // Label-Task in jedem Fall beenden
+        streamComplete = true; // Signal an Drain-Task
+        await Task.WhenAll(drainTask, saveUserMessageTask); // Drain + DB-Save parallel abwarten
+
+        if (wasCancelled) // Abbruch: UI aufräumen
+        {
+            if (!firstChunkReceived) // Noch keine Antwort gezeigt? → Loading entfernen
+            {
+                Messages.Remove(loadingMessage);
+            }
+            else if (string.IsNullOrEmpty(fullMessage)) // Partielle leere Nachricht? → entfernen
+            {
+                Messages.Remove(assistantMessage);
+            }
+
+            cancelSource.Dispose(); // Token-Source freigeben
+            cancelSource = new CancellationTokenSource(); // Neuen Token für nächste Anfrage bereitstellen
+            isSaving = false; // Speicherung abgeschlossen
+            StateHasChanged();
+            return; // Nicht in DB speichern
+        }
+
+        assistantMessage.Text = fullMessage; // Setze vollständigen Text
+        StateHasChanged(); // Final UI update
+
+        // Speichere Assistant-Antwort im Hintergrund
+        await Task.Run(async () =>
+        {
+            var docIds = new List<int>(); // Erstelle Liste für Dokument-IDs
+            foreach (var d in foundDocuments) // Durchlaufe alle Dokumente
+            {
+                docIds.Add(d.Id); // Füge ID hinzu
+            }
+
+            var eventIds = new List<int>(); // Erstelle Liste für Event-IDs
+            foreach (var e in foundEvents) // Durchlaufe alle Events
+            {
+                eventIds.Add(e.Id); // Füge ID hinzu
+            }
+
+            await Db.SaveMessageAsync(conversationIdForSave, false, fullMessage, docIds, eventIds); // Speichere mit DocumentIds und EventIds
+        });
+
+        cancelSource.Dispose(); // Token-Source nach normalem Abschluss freigeben
+        cancelSource = new CancellationTokenSource(); // Neuen Token für nächste Anfrage bereitstellen
+        isSaving = false; // Speicherung abgeschlossen
+        StateHasChanged(); // Button-Zustand zurücksetzen (slide out)
+    }
+
+    private async Task OnUploadClick() // Upload-Button geklickt: Öffnet Datei-Dialog und lädt Datei
+    {
+        try
+        {
+            var result = await FilePicker.PickAsync(new PickOptions // Öffne Datei-Auswahl-Dialog (FilePicker: Windows-Explorer öffnen)
+            {
+                PickerTitle = "Wähle eine Datei aus", // Dialog-Titel
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>> // Erlaubte Dateitypen
+                {
+                    { DevicePlatform.WinUI, new[] { ".pdf", ".txt", ".md", ".json" } } // PDF, TXT, MD, JSON
+                })
+            });
+
+            if (result != null) // Check: Hat User eine Datei ausgewählt?
+            {
+                System.Diagnostics.Debug.WriteLine($"[UPLOAD] START - Datei ausgewählt: {result.FileName}");
+
+                // 1. SOFORT: Badge anzeigen
+                UploadedFileName = result.FileName; // Zeige Dateiname sofort im Badge
+                StateHasChanged(); // UI aktualisieren um Badge anzuzeigen
+
+                // 2. SOFORT: Loading-Nachricht anzeigen
+                Messages.Add(new ChatMessage { Text = "Datei wird geladen...", IsUser = false, IsLoading = true }); // Zeige Loading-Nachricht
+                StateHasChanged(); // UI aktualisieren
+
+                // 3. Datei hochladen und Text extrahieren
+                string uploadResult = await Chat.UploadFileAsync(result.FullPath); // Lade Datei über ChatMcpService
+
+                Messages.RemoveAt(Messages.Count - 1); // Entferne Loading-Nachricht
+
+                // 4. SOFORT: Ergebnis-Nachricht anzeigen
+                var uploadMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
+                Messages.Add(uploadMessage);
+                StateHasChanged(); // UI sofort aktualisieren
+
+                if (uploadResult.StartsWith("Fehler")) // Check: War Upload fehlgeschlagen?
+                {
+                    UploadedFileName = string.Empty; // Entferne Badge bei Fehler
+                    await TypewriterEffect(uploadMessage, uploadResult); // Fehler mit Typewriter
+                    StateHasChanged();
+                }
+                else // Upload erfolgreich
+                {
+                    // 5. PARALLEL: Typewriter + DB-Speicherung
+                    int conversationIdForSave = currentConversationId;
+
+                    if (currentConversationId == 0) // Conversation erstellen falls nötig
+                    {
+                        currentConversationId = await Db.CreateConversationAsync("Neuer Chat");
+                        conversationIdForSave = currentConversationId;
+                    }
+
+                    // Extrahierten Datei-Inhalt holen (vor dem Task, solange currentFileContent noch gesetzt ist)
+                    string extractedFileText = Chat.GetCurrentFileContent(); // Echter Datei-Text für ExtractedText in DB
+
+                    // Speicherung im Hintergrund während Typewriter läuft
+                    var saveFileTask = Task.Run(async () =>
+                    {
+                        // 1. Generiere Thumbnail
+                        string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath);
+
+                        // 2. Speichere in Documents (global, für Dokumente-Seite)
+                        int documentId = 0; // ID des gespeicherten Dokuments
+                        using (var scope = ServiceProvider.CreateScope()) // Erstelle DB-Scope für Document-Speicherung
+                        {
+                            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+                            string fileExtension = System.IO.Path.GetExtension(result.FileName).ToLower(); // Hole Datei-Endung (z.B. ".pdf")
+                            string fileType = fileExtension switch // Bestimme Dateityp
+                            {
+                                ".pdf" => "pdf",
+                                ".txt" => "txt",
+                                ".md" => "md",
+                                ".json" => "json",
+                                _ => "unknown"
+                            };
+
+                            string fileContent;
+                            if (fileType == "pdf") // PDF muss als Base64 gespeichert werden
+                            {
+                                byte[] pdfBytes = await File.ReadAllBytesAsync(result.FullPath); // Lese PDF als Bytes
+                                fileContent = Convert.ToBase64String(pdfBytes); // Konvertiere zu Base64
+                            }
+                            else // Text-Dateien können direkt gelesen werden
+                            {
+                                fileContent = await File.ReadAllTextAsync(result.FullPath); // Lese als Text
+                            }
+
+                            documentId = await docDbService.SaveDocumentAsync(result.FileName, fileContent, fileType, extractedFileText, thumbnail); // Speichere mit echtem extrahiertem Text als ExtractedText
+
+                            await docDbService.LinkDocumentToConversationAsync(documentId, conversationIdForSave); // Verknüpfe Dokument mit Chat
+                        }
+
+                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult); // Speichere Upload-Nachricht in DB
+
+                        if (documentId > 0) // DocID als Context-Marker speichern (für RouterService analyze_document)
+                        {
+                            await Db.SaveMessageAsync(conversationIdForSave, false, $"[DocID: {documentId}]"); // RouterService extrahiert diese ID aus History
+                        }
+
+                        await Db.UpdateConversationTitleAsync(conversationIdForSave); // Aktualisiere Chat-Titel
+
+                        return documentId; // Gib Dokument-ID zurück (wichtig für currentDocumentId!)
+                    });
+
+                    await TypewriterEffect(uploadMessage, uploadResult); // Zeige Upload-Nachricht mit Typewriter
+
+                    int uploadedDocId = await saveFileTask; // Warte bis DB-Speicherung fertig
+                    currentDocumentId = uploadedDocId; // Speichere Dokument-ID für späteres Entfernen
+                    System.Diagnostics.Debug.WriteLine($"[UPLOAD] currentDocumentId gesetzt: {currentDocumentId}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            UploadedFileName = string.Empty;
+            var errorMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
+            Messages.Add(errorMessage);
+            await TypewriterEffect(errorMessage, $"Fehler beim Datei-Upload: {ex.Message}");
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveFile() // Entferne angehängte Datei
+    {
+        UploadedFileName = string.Empty; // Lösche Dateiname aus Badge
+        Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
+
+        if (currentDocumentId > 0 && currentConversationId > 0) // Prüfe ob Dokument verknüpft ist
+        {
+            try
+            {
+                using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+                var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+                bool removed = await docDbService.UnlinkDocumentFromConversationAsync(currentDocumentId, currentConversationId); // Lösche Verknüpfung in DB
+                System.Diagnostics.Debug.WriteLine($"[REMOVE] Verknüpfung entfernt: {removed}, DocId: {currentDocumentId}, ConvId: {currentConversationId}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[REMOVE] Fehler beim Entfernen der Verknüpfung: {ex.Message}");
+            }
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"[REMOVE] Keine Verknüpfung zu entfernen: DocId={currentDocumentId}, ConvId={currentConversationId}");
+        }
+
+        currentDocumentId = 0; // Setze ID zurück
+
+        var confirmMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = false };
+        Messages.Add(confirmMessage);
+        await TypewriterEffect(confirmMessage, "Datei wurde entfernt."); // Zeige Bestätigung mit Typewriter
+        StateHasChanged();
+    }
+
+    private async Task ResetChat() // Setze Chat komplett zurück
+    {
+        Messages.Clear(); // Lösche alle Nachrichten
+        InputText = string.Empty; // Leere Eingabefeld
+        rows = 1; // Setze Textarea auf 1 Zeile
+        UploadedFileName = string.Empty; // Entferne Datei-Badge
+        Chat.ClearFile(); // Entferne Datei aus ChatCoordinator
+
+        currentConversationId = 0; // Setze Conversation-ID zurück
+
+        Navigation.NavigateTo("/", forceLoad: true); // Navigiere zu Start (force reload)
+        StateHasChanged();
+
+        await Task.CompletedTask;
+    }
+
+    private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-Anwendung
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+            var doc = await docDbService.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
+            if (doc == null) // Dokument nicht gefunden
+            {
+                return;
+            }
+
+            string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName); // Erstelle Pfad in Temp-Ordner
+
+            if (doc.FileType == "pdf") // PDF muss von Base64 konvertiert werden
+            {
+                try
+                {
+                    await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); // Konvertiere Base64 zu Bytes und schreibe
+                }
+                catch (FormatException) // Fallback falls nicht Base64
+                {
+                    await File.WriteAllTextAsync(tempPath, doc.FileContent);
+                }
+            }
+            else // Text-Dateien direkt schreiben
+            {
+                await File.WriteAllTextAsync(tempPath, doc.FileContent);
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
+        }
+        catch (Exception ex)
+        {
+            Messages.Add(new ChatMessage { Text = $"Fehler: {ex.Message}", DisplayText = $"Fehler: {ex.Message}", IsUser = false });
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddDocumentToChat(int documentId) // Füge Dokument zum Chat hinzu
+    {
+        try
+        {
+            if (currentConversationId == 0) // Prüfe ob Conversation existiert
+            {
+                currentConversationId = await Db.CreateConversationAsync("Neuer Chat"); // Erstelle neue Conversation
+            }
+
+            using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+            var docDbService = scope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>(); // Hole Document-DB-Service
+
+            var doc = await docDbService.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
+
+            if (doc != null) // Dokument gefunden
+            {
+                UploadedFileName = doc.FileName; // Zeige Dateiname im Badge
+                currentDocumentId = doc.Id; // Speichere ID für späteres Entfernen
+                StateHasChanged();
+            }
+
+            bool success = await docDbService.LinkDocumentToConversationAsync(documentId, currentConversationId); // Verknüpfe Dokument mit Chat
+
+            var confirmMsg = new ChatMessage
+            {
+                Text = string.Empty,
+                DisplayText = string.Empty,
+                IsUser = false
+            };
+            Messages.Add(confirmMsg);
+            StateHasChanged();
+
+            if (success) // Verknüpfung erfolgreich
+            {
+                string fileName = "Unbekannt";
+                if (doc != null)
+                {
+                    fileName = doc.FileName;
+                }
+                await TypewriterEffect(confirmMsg, $"Dokument '{fileName}' wurde zum Chat hinzugefügt."); // Zeige Erfolgs-Nachricht
+            }
+            else // Dokument war bereits verknüpft
+            {
+                string fileName = "Unbekannt";
+                if (doc != null)
+                {
+                    fileName = doc.FileName;
+                }
+                await TypewriterEffect(confirmMsg, $"Dokument '{fileName}' ist bereits im Chat verknüpft."); // Zeige Info-Nachricht
+            }
+        }
+        catch (Exception ex)
+        {
+            var errorMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(errorMsg);
+            StateHasChanged();
+            await TypewriterEffect(errorMsg, $"Fehler: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteEventFromChat(int eventId) // Lösche Termin direkt aus Event-Card
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope(); // Erstelle DB-Scope
+            var calendarService = scope.ServiceProvider.GetRequiredService<KIDT.Services.CalendarService>(); // Hole Calendar-Service
+
+            var calendarEvent = await calendarService.GetEventByIdAsync(eventId); // Lade Event aus DB
+            string eventTitle = "Unbekannt";
+            if (calendarEvent != null)
+            {
+                eventTitle = calendarEvent.Title;
+            }
+
+            await calendarService.DeleteEventAsync(eventId); // Lösche Event aus DB
+
+            // Entferne Event aus allen Messages
+            foreach (var msg in Messages)
+            {
+                if (msg.FoundEvents.Count > 0)
+                {
+                    var eventToRemove = msg.FoundEvents.FirstOrDefault(e => e.Id == eventId);
+                    if (eventToRemove != null)
+                    {
+                        msg.FoundEvents.Remove(eventToRemove);
+                    }
+                }
+            }
+
+            var confirmMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(confirmMsg);
+            StateHasChanged();
+            await TypewriterEffect(confirmMsg, $"Termin '{eventTitle}' wurde gelöscht.");
+        }
+        catch (Exception ex)
+        {
+            var errorMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(errorMsg);
+            StateHasChanged();
+            await TypewriterEffect(errorMsg, $"Fehler: {ex.Message}");
+        }
+    }
+
+    private async Task OpenEventEditDialog(int eventId) // Öffnet Edit-Dialog für Termin
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var calendarService = scope.ServiceProvider.GetRequiredService<KIDT.Services.CalendarService>();
+
+            editingEvent = await calendarService.GetEventByIdAsync(eventId);
+            if (editingEvent == null) return;
+
+            editEventTitle = editingEvent.Title;
+            editIsAllDay = editingEvent.IsAllDay;
+            editColorIndex = editingEvent.ColorIndex;
+            editReminderMinutes = editingEvent.ReminderMinutesBefore;
+
+            editTime = editingEvent.HasTime ? editingEvent.Time.ToString(@"hh\:mm") : "12:00"; // Startzeit laden
+            editEndTime = editingEvent.HasEndTime ? editingEvent.EndTime.ToString(@"hh\:mm") : "13:00"; // Endzeit laden
+
+            if (editingEvent.HasTime) // Stunden- und Minuten-Felder initialisieren
+            {
+                editTimeHour = editingEvent.Time.Hours;
+                editTimeMinute = editingEvent.Time.Minutes;
+            }
+            else
+            {
+                editTimeHour = 12;
+                editTimeMinute = 0;
+            }
+            if (editingEvent.HasEndTime)
+            {
+                editEndTimeHour = editingEvent.EndTime.Hours;
+                editEndTimeMinute = editingEvent.EndTime.Minutes;
+            }
+            else
+            {
+                editEndTimeHour = 13;
+                editEndTimeMinute = 0;
+            }
+
+            showEventEditDialog = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[EDIT] Fehler beim Öffnen: {ex.Message}");
+        }
+    }
+
+    private int ClampHour(int h) // Begrenzt Stunden auf 0-23
+    {
+        if (h < 0) return 0; // Untergrenze
+        if (h > 23) return 23; // Obergrenze
+        return h;
+    }
+
+    private int ClampMinute(int m) // Begrenzt Minuten auf 0-59
+    {
+        if (m < 0) return 0; // Untergrenze
+        if (m > 59) return 59; // Obergrenze
+        return m;
+    }
+
+    private string FormatTimeStr(int h, int m) // Erstellt Zeit-String "HH:MM" aus Stunden und Minuten
+    {
+        return $"{h:D2}:{m:D2}";
+    }
+
+    private void OnEditStartHourChanged(ChangeEventArgs e) // Handler: Stunden der Startzeit (Edit-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h); // Eingabe parsen
+            h = ClampHour(h); // Gültigkeitsbereich erzwingen
+        }
+        editTimeHour = h;
+        editTime = FormatTimeStr(editTimeHour, editTimeMinute); // String für SaveEventEdit aktualisieren
+    }
+
+    private void OnEditStartMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Startzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editTimeMinute = m;
+        editTime = FormatTimeStr(editTimeHour, editTimeMinute);
+    }
+
+    private void OnEditEndHourChanged(ChangeEventArgs e) // Handler: Stunden der Endzeit (Edit-Dialog)
+    {
+        int h = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out h);
+            h = ClampHour(h);
+        }
+        editEndTimeHour = h;
+        editEndTime = FormatTimeStr(editEndTimeHour, editEndTimeMinute);
+    }
+
+    private void OnEditEndMinuteChanged(ChangeEventArgs e) // Handler: Minuten der Endzeit (Edit-Dialog)
+    {
+        int m = 0;
+        if (e.Value != null)
+        {
+            int.TryParse($"{e.Value}", out m);
+            m = ClampMinute(m);
+        }
+        editEndTimeMinute = m;
+        editEndTime = FormatTimeStr(editEndTimeHour, editEndTimeMinute);
+    }
+
+    private async Task SaveEventEdit() // Speichert Änderungen am Termin
+    {
+        if (editingEvent == null) return;
+
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var calendarService = scope.ServiceProvider.GetRequiredService<KIDT.Services.CalendarService>();
+
+            editingEvent.Title = editEventTitle.Trim();
+            editingEvent.IsAllDay = editIsAllDay;
+            editingEvent.ColorIndex = editColorIndex;
+
+            if (editingEvent.ReminderMinutesBefore != editReminderMinutes)
+            {
+                editingEvent.ReminderMinutesBefore = editReminderMinutes;
+                editingEvent.ReminderShown = false;
+            }
+
+            if (!editIsAllDay && TimeSpan.TryParse(editTime, out TimeSpan parsedTime)) // Startzeit gültig?
+            {
+                editingEvent.Time = parsedTime; // Setze Startzeit
+                editingEvent.HasTime = true; // Flag setzen
+
+                TimeSpan parsedEnd; // Variable für Endzeit
+                bool endParsed = TimeSpan.TryParse(editEndTime, out parsedEnd); // Parse Endzeit
+                if (endParsed && parsedEnd > parsedTime) // Endzeit gültig und nach Startzeit?
+                {
+                    editingEvent.EndTime = parsedEnd; // Setze Endzeit
+                    editingEvent.HasEndTime = true; // Flag setzen
+                }
+                else // Endzeit ungültig oder vor Startzeit
+                {
+                    editingEvent.EndTime = TimeSpan.Zero; // Endzeit zurücksetzen
+                    editingEvent.HasEndTime = false; // Flag zurücksetzen
+                }
+            }
+            else // Ganztägig oder keine gültige Zeit
+            {
+                editingEvent.Time = TimeSpan.Zero; // Zeiten zurücksetzen
+                editingEvent.HasTime = false;
+                editingEvent.EndTime = TimeSpan.Zero;
+                editingEvent.HasEndTime = false;
+            }
+
+            await calendarService.UpdateEventAsync(editingEvent);
+
+            // Update in allen Messages
+            foreach (var msg in Messages)
+            {
+                foreach (var evt in msg.FoundEvents)
+                {
+                    if (evt.Id == editingEvent.Id)
+                    {
+                        evt.Title = editingEvent.Title;
+                        evt.IsAllDay = editingEvent.IsAllDay;
+                        evt.Time = editingEvent.Time;
+                        evt.HasTime = editingEvent.HasTime;
+                        evt.EndTime = editingEvent.EndTime;
+                        evt.HasEndTime = editingEvent.HasEndTime;
+                        evt.ColorIndex = editingEvent.ColorIndex;
+                        evt.ReminderMinutesBefore = editingEvent.ReminderMinutesBefore;
+                        evt.ReminderShown = editingEvent.ReminderShown;
+                    }
+                }
+            }
+
+            showEventEditDialog = false;
+            StateHasChanged();
+
+            var confirmMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(confirmMsg);
+            StateHasChanged();
+            await TypewriterEffect(confirmMsg, $"Termin '{editingEvent.Title}' wurde aktualisiert.");
+        }
+        catch (Exception ex)
+        {
+            var errorMsg = new ChatMessage { Text = string.Empty, DisplayText = string.Empty, IsUser = false };
+            Messages.Add(errorMsg);
+            StateHasChanged();
+            await TypewriterEffect(errorMsg, $"Fehler: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteEventFromDialog() // Löscht Termin aus Edit-Dialog
+    {
+        if (editingEvent == null) return;
+
+        await DeleteEventFromChat(editingEvent.Id);
+        showEventEditDialog = false;
+        StateHasChanged();
+    }
+
+    private void CloseEventEditDialog() // Schließt Edit-Dialog
+    {
+        showEventEditDialog = false;
+        editingEvent = null;
+        StateHasChanged();
+    }
+}

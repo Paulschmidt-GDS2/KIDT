@@ -22,7 +22,7 @@ public class AppNotificationService : IDisposable // Service für App-weite Bena
     {
         if (_isRunning) return; // Bereits gestartet? Abbruch
 
-        _isRunning = true; // Setze Flag
+        _isRunning = true;
         _timer = new System.Threading.Timer( // Erstelle Timer
             async _ => await CheckForDueRemindersAsync(), // Callback: Prüfe auf fällige Erinnerungen
             null, // Kein State
@@ -43,27 +43,27 @@ public class AppNotificationService : IDisposable // Service für App-weite Bena
             return; // Abbruch: Nur 1x pro App-Start zeigen
         }
 
-        _startupNotificationShown = true; // Setze Flag (verhindert doppelte Anzeige)
+        _startupNotificationShown = true; // verhindert doppelte Anzeige
 
         System.Diagnostics.Debug.WriteLine("[NOTIFICATION_SERVICE] Lade Termine aus DB...");
 
         using var scope = _serviceProvider.CreateScope(); // Erstelle DB-Scope
         var dbContext = scope.ServiceProvider.GetRequiredService<ChatDbContext>(); // Hole DB-Context
 
-        var now = DateTime.Now; // Aktueller Zeitpunkt
+        var now = DateTime.Now;
         var upcomingEvents = await dbContext.CalendarEvents // Lade nächste 3 Termine
             .Where(e => e.Start >= now.Date) // Filter: Heute oder später
-            .OrderBy(e => e.Start) // Sortiere nach Datum
+            .OrderBy(e => e.Start)
             .ThenBy(e => e.Time) // Bei gleichem Datum: Nach Uhrzeit
             .Take(3) // Nimm nur die ersten 3
-            .ToListAsync(); // Führe Query aus
+            .ToListAsync();
 
         System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_SERVICE] {upcomingEvents.Count} Termine gefunden");
 
         var notification = new NotificationData // Erstelle Notification-Objekt
         {
-            Type = NotificationType.StartupOverview, // Typ: Startup-Overview
-            Events = upcomingEvents // Liste der nächsten 3 Termine
+            Type = NotificationType.StartupOverview,
+            Events = upcomingEvents
         };
 
         System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_SERVICE] Feuere OnNotificationRequested Event - Subscribers: {OnNotificationRequested?.GetInvocationList().Length ?? 0}");
@@ -78,15 +78,15 @@ public class AppNotificationService : IDisposable // Service für App-weite Bena
             using var scope = _serviceProvider.CreateScope(); // Erstelle DB-Scope
             var dbContext = scope.ServiceProvider.GetRequiredService<ChatDbContext>(); // Hole DB-Context
 
-            var now = DateTime.Now; // Aktueller Zeitpunkt
+            var now = DateTime.Now;
 
             var dueEvents = await dbContext.CalendarEvents // Lade Termine mit noch nicht gezeigten Erinnerungen
                 .Where(e => e.ReminderMinutesBefore != null && !e.ReminderShown) // Filter: Hat Erinnerung UND noch nicht gezeigt
-                .ToListAsync(); // Führe Query aus
+                .ToListAsync();
 
             foreach (var ev in dueEvents) // Durchlaufe alle Kandidaten
             {
-                DateTime reminderTime; // Variable für berechneten Erinnerungszeitpunkt
+                DateTime reminderTime;
 
                 if (ev.HasTime && !ev.IsAllDay) // Termin mit Uhrzeit?
                 {
@@ -102,14 +102,14 @@ public class AppNotificationService : IDisposable // Service für App-weite Bena
                 {
                     System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_SERVICE] Erinnerung fällig für: {ev.Title} (ID: {ev.Id})");
 
-                    ev.ReminderShown = true; // Markiere Erinnerung als gezeigt
+                    ev.ReminderShown = true;
                     dbContext.CalendarEvents.Update(ev); // Update in DB
                     await dbContext.SaveChangesAsync(); // Speichere Änderung
 
                     var notification = new NotificationData // Erstelle Notification-Objekt
                     {
-                        Type = NotificationType.EventReminder, // Typ: Event-Erinnerung
-                        Events = new List<CalendarEvent> { ev } // Einzelnes Event in Liste
+                        Type = NotificationType.EventReminder,
+                        Events = new List<CalendarEvent> { ev }
                     };
 
                     OnNotificationRequested?.Invoke(notification); // Feuere Event (MainLayout zeigt Notification)
@@ -125,7 +125,7 @@ public class AppNotificationService : IDisposable // Service für App-weite Bena
     public void Dispose() // Räumt Service auf beim Beenden
     {
         _timer?.Dispose(); // Timer stoppen und freigeben
-        _isRunning = false; // Setze Flag zurück
+        _isRunning = false;
         System.Diagnostics.Debug.WriteLine("[NOTIFICATION_SERVICE] Service beendet");
     }
 }

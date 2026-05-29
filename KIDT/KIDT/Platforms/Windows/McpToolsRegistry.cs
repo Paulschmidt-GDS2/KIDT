@@ -1,26 +1,17 @@
-﻿using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel;
 using System.Reflection;
 using KIDT.Database;
 using ModelContextProtocol.Server;
 
 namespace KIDT.Services;
 
-/// <summary>
-/// Helper-Klasse zum Registrieren von MCP-Tools in Semantic Kernel.
-/// Lädt automatisch alle Klassen mit [McpServerToolType] Attribut und registriert deren Methoden als Kernel-Funktionen.
-/// Wird vom RouterService aufgerufen um Document-Tools zu registrieren (search_documents, add_document_to_chat).
-/// </summary>
 public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-Tools automatisch per Reflection
 {
-    /// <summary>
-    /// Registriert alle MCP-Tools als Kernel-Funktionen (wird von RouterService.ProcessAsync aufgerufen).
-    /// Sucht automatisch nach Klassen mit [McpServerToolType] Attribut und registriert deren [McpServerTool]-Methoden.
-    /// </summary>
     public static void RegisterTools(Kernel kernel, DocumentDbService docDbService, CalendarService calendarService, int currentConversationId) // Hauptmethode: Registriert alle Tools im Kernel
     {
         var assembly = Assembly.GetExecutingAssembly(); // Hole aktuelles Assembly
         var allTypes = assembly.GetTypes(); // Hole alle Typen im Assembly
-        var toolTypes = new List<Type>(); // Liste für Tool-Typen
+        var toolTypes = new List<Type>();
         foreach (var t in allTypes) // Durchlaufe alle Typen
         {
             if (t.GetCustomAttribute<McpServerToolTypeAttribute>() != null) // Hat [McpServerToolType]-Attribut?
@@ -52,7 +43,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                     toolInstance = Activator.CreateInstance(toolType); // Fallback: Parameterloser Constructor
                 }
 
-                if (toolInstance == null) continue; // Instanz-Erstellung fehlgeschlagen? ? Überspringe
+                if (toolInstance == null) continue; // Instanz-Erstellung fehlgeschlagen → Überspringe
 
                 var allMethods = toolType.GetMethods(BindingFlags.Public | BindingFlags.Instance); // Finde alle public Instance-Methoden
                 var toolMethods = new List<MethodInfo>();
@@ -71,7 +62,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                     var function = KernelFunctionFactory.CreateFromMethod( // Erstelle Kernel-Funktion aus Methode
                         method,
                         toolInstance,
-                        functionName: ConvertToPythonCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments ? search_documents)
+                        functionName: ConvertToPythonCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments → search_documents)
                     );
 
                     functions.Add(function);
@@ -80,8 +71,8 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 if (functions.Count > 0) // Mindestens eine Funktion gefunden?
                 {
                     kernel.ImportPluginFromFunctions( // Registriere Plugin im Kernel
-                        toolType.Name.Replace("Tools", ""), // Plugin-Name ohne "Tools"-Suffix (DocumentTools ? Document)
-                        functions // Liste der Kernel-Funktionen
+                        toolType.Name.Replace("Tools", ""), // Plugin-Name ohne "Tools"-Suffix (DocumentTools → Document)
+                        functions
                     );
                 }
             }
@@ -92,15 +83,11 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
         }
     }
 
-    /// <summary>
-    /// Konvertiert PascalCase zu snake_case (z.B. SearchDocuments ? search_documents).
-    /// Wird verwendet um C#-Methoden-Namen zu Python-Style-Function-Namen zu konvertieren.
-    /// </summary>
-    private static string ConvertToPythonCase(string name) // Hilfsmethode: PascalCase ? snake_case
+    private static string ConvertToPythonCase(string name) // Hilfsmethode: PascalCase → snake_case
     {
-        if (string.IsNullOrEmpty(name)) return name; // Leer? ? Gib zurück
+        if (string.IsNullOrEmpty(name)) return name;
 
-        var result = new System.Text.StringBuilder(); // StringBuilder für Ergebnis
+        var result = new System.Text.StringBuilder();
         result.Append(char.ToLower(name[0])); // Erstes Zeichen lowercase
 
         for (int i = 1; i < name.Length; i++) // Durchlaufe restliche Zeichen
@@ -108,14 +95,14 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
             if (char.IsUpper(name[i])) // Uppercase-Zeichen?
             {
                 result.Append('_'); // Füge Underscore hinzu
-                result.Append(char.ToLower(name[i])); // Füge Zeichen lowercase hinzu
+                result.Append(char.ToLower(name[i]));
             }
             else
             {
-                result.Append(name[i]); // Füge Zeichen unverändert hinzu
+                result.Append(name[i]);
             }
         }
 
-        return result.ToString(); // Gib snake_case-String zurück
+        return result.ToString();
     }
 }
