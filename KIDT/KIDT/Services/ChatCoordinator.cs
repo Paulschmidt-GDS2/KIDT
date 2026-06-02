@@ -70,8 +70,10 @@ public class ChatCoordinator : IAsyncDisposable
         var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>();
         var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>();
 
+        cancellationToken.ThrowIfCancellationRequested(); // Abbruch vor Router-Aufruf prüfen
+
         bool hasFile = !string.IsNullOrEmpty(this.currentFileName);
-        RouterResponse routerResponse = await this.router.ProcessAsync(userMessage, hasFile, conversationId);
+        RouterResponse routerResponse = await this.router.ProcessAsync(userMessage, hasFile, conversationId, cancellationToken);
 
         System.Diagnostics.Debug.WriteLine($"[COORDINATOR] Router-Ergebnis: ShouldRoute={routerResponse.ShouldRoute}, Reason={routerResponse.Reason}, ToolWasUsed={routerResponse.ToolWasUsed}");
 
@@ -86,7 +88,8 @@ public class ChatCoordinator : IAsyncDisposable
                 TextChunk = responseText,
                 IsComplete = true,
                 FoundDocuments = routerResponse.FoundDocuments,
-                FoundEvents = routerResponse.FoundEvents
+                FoundEvents = routerResponse.FoundEvents,
+                ModelLabel = "gemini-2.5-flash-lite via OpenRouter" // Router-Modell antwortet direkt
             };
             yield break;
         }
@@ -129,7 +132,8 @@ public class ChatCoordinator : IAsyncDisposable
             TextChunk = result,
             IsComplete = true,
             FoundDocuments = new List<Document>(), // Bei DataAnalysis keine Cards (schon beim Suchen gezeigt)
-            FoundEvents = routerResponse.FoundEvents
+            FoundEvents = routerResponse.FoundEvents,
+            ModelLabel = "qwen3.5:9b via Ollama" // DataAnalysis-Modell antwortet
         };
     }
 

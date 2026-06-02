@@ -234,7 +234,7 @@
 }
 
 /* Icon im Delete-Button */
-.delete-btn img {
+.delete-btn img, .delete-btn .delete-svg {
     width: 16px; /* Icon-Breite */
     height: 16px; /* Icon-Höhe */
     display: block; /* Verhindert Inline-Spacing */
@@ -242,7 +242,7 @@
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
 @media (min-width: 1400px) {
-    .delete-btn img {
+    .delete-btn img, .delete-btn .delete-svg {
         width: 21px; /* 16px * 1.3 = 20.8px ? 21px */
         height: 21px; /* 16px * 1.3 = 20.8px ? 21px */
     }
@@ -541,7 +541,7 @@
 }
 
 /* Icon im Delete-Button */
-.document-delete-btn img {
+.document-delete-btn img, .document-delete-btn .delete-svg {
     width: 18px; /* Icon-Breite */
     height: 18px; /* Icon-Höhe */
     display: block; /* Verhindert Inline-Spacing */
@@ -554,7 +554,7 @@
         margin-left: 21px; /* 16px * 1.3 = 21px */
     }
 
-    .document-delete-btn img {
+    .document-delete-btn img, .document-delete-btn .delete-svg {
         width: 23px; /* 18px * 1.3 = 23.4px ? 23px */
         height: 23px; /* 18px * 1.3 = 23.4px ? 23px */
     }
@@ -613,6 +613,620 @@
     overflow: hidden; /* überfluss verstecken */
     text-overflow: ellipsis; /* Auslassungspunkte */
     white-space: nowrap; /* Kein Zeilenumbruch */
+}
+
+/* === BREADCRUMB-NAVIGATION (In Ordner) === */
+
+/* Breadcrumb-Leiste: "← Alle Dokumente › FolderName" */
+.folder-nav-bar {
+    display: flex; /* Flexbox für horizontale Anordnung */
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(var(--clr-text-rgb), 0.12); /* Dezente Trennlinie */
+}
+
+/* Klickbarer "Alle Dokumente"-Link */
+.breadcrumb-link {
+    background: none;
+    border: none;
+    color: var(--clr-text);
+    opacity: 0.5; /* Gedämpft = sekundär */
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.15s ease;
+}
+
+.breadcrumb-link:hover {
+    opacity: 1;
+}
+
+/* Trennzeichen "›" zwischen den Breadcrumb-Stufen */
+.breadcrumb-sep {
+    color: var(--clr-text);
+    opacity: 0.25;
+    font-size: 15px;
+    user-select: none;
+}
+
+/* Aktueller Ordnername (aktive Stufe) */
+.breadcrumb-active {
+    color: var(--clr-text);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* === SEKTION-TRENNZEILEN (Ordner / Dokumente) === */
+
+/* Zeile mit Label links und Linie rechts */
+.explorer-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 10px 0;
+}
+
+/* Kleines Label (z.B. "ORDNER", "DOKUMENTE") */
+.section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--clr-text);
+    opacity: 0.4;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+/* Dekorative Linie rechts vom Label */
+.section-line {
+    flex: 1; /* Nimmt restlichen Platz */
+    height: 1px;
+    background: rgba(var(--clr-text-rgb), 0.12);
+}
+
+/* === ORDNER ERSTELLEN – BUTTON === */
+
+/* Kleiner "+ Neu"-Button (rechts in der Sektion-Header-Zeile) */
+.folder-new-btn {
+    background: transparent;
+    border: 1px solid rgba(var(--clr-text-rgb), 0.4);
+    border-radius: 4px;
+    color: var(--clr-text);
+    opacity: 0.7;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.folder-new-btn:hover {
+    opacity: 1;
+    background: rgba(var(--clr-surface-rgb), 0.35);
+}
+
+.folder-new-btn:active {
+    transform: scale(0.96);
+}
+
+/* === ORDNER ERSTELLEN – INLINE EINGABEZEILE === */
+
+/* Eingabe-Zeile (erscheint als erste Zeile in der Ordner-Liste) */
+.folder-create-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border: 2px solid var(--clr-text); /* Voller Rahmen wie dialog-input */
+    border-radius: 6px;
+    margin-bottom: 8px;
+    gap: 10px;
+    animation: row-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Text-Input für neuen Ordnernamen */
+.folder-create-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid rgba(var(--clr-text-rgb), 0.35); /* Dezenter Rahmen rundum */
+    border-radius: 3px;
+    color: var(--clr-text);
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none; /* Kein Browser-Standard-Outline */
+    transition: border-color 0.15s ease;
+}
+
+/* Placeholder-Text gut sichtbar machen (wie Termin-Dialog) */
+.folder-create-input::placeholder {
+    color: rgba(var(--clr-text-rgb), 0.55);
+    opacity: 1; /* Volle Opazität damit Farbe greift */
+}
+
+/* Fokus: Rahmen heller, kein blauer Outline */
+.folder-create-input:focus {
+    outline: none;
+    border-color: rgba(var(--clr-text-rgb), 0.75); /* Heller, nicht blau */
+}
+
+/* Bestätigen-Button (✓) */
+.folder-confirm-btn {
+    background: transparent;
+    border: 1px solid rgba(var(--clr-text-rgb), 0.5);
+    border-radius: 4px;
+    color: var(--clr-text);
+    padding: 5px 11px;
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+}
+
+.folder-confirm-btn:hover {
+    background: rgba(var(--clr-text-rgb), 0.1);
+}
+
+/* Abbrechen-Button (✕) */
+.folder-cancel-btn {
+    background: transparent;
+    border: 1px solid rgba(var(--clr-text-rgb), 0.5);
+    border-radius: 4px;
+    color: var(--clr-text);
+    padding: 5px 11px;
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+    opacity: 0.7;
+}
+
+.folder-cancel-btn:hover {
+    background: rgba(var(--clr-text-rgb), 0.1);
+    opacity: 1;
+}
+
+/* === ORDNER-ZEILE === */
+
+/* Einzelne Ordner-Zeile */
+.folder-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 2px solid var(--clr-text);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: rgba(var(--clr-surface-rgb), 0.08); /* Ganz leichte Tönung vs. Dokument-Zeilen */
+    cursor: pointer;
+    transition: background 0.2s ease,
+                transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.2s ease;
+    position: relative;
+    animation: row-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.folder-row:hover {
+    background: rgba(var(--clr-surface-rgb), 0.45);
+    transform: translateX(3px);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+}
+
+.folder-row:active {
+    transform: scale(0.99) translateX(3px);
+}
+
+/* Ordner-Zeile wird entfernt */
+.folder-row.removing {
+    animation: row-out 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* Löschen-Button bei Hover einblenden */
+.folder-row:hover .document-delete-btn {
+    opacity: 0.7;
+}
+
+/* === ORDNER-ICON (reine CSS-Ordner-Form) === */
+
+/* Icon-Box: gleiche Größe wie document-thumbnail */
+.folder-icon-box {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    margin-right: 16px;
+    background: rgba(var(--clr-surface-rgb), 0.55);
+    border-radius: 4px;
+    position: relative;
+}
+
+/* Ordner-Körper (breites Rechteck, untere 2/3 der Box) */
+.folder-icon-box::before {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 19px;
+    background: rgba(var(--clr-text-rgb), 0.38);
+    border-radius: 1px 3px 3px 3px;
+    bottom: 8px;
+    left: 9px;
+}
+
+/* Ordner-Tab (kleines Rechteck oben-links = Reiter) */
+.folder-icon-box::after {
+    content: '';
+    position: absolute;
+    width: 13px;
+    height: 5px;
+    background: rgba(var(--clr-text-rgb), 0.38);
+    border-radius: 2px 2px 0 0;
+    bottom: 27px; /* 8px body-bottom + 19px body-height */
+    left: 9px;
+}
+
+/* === MANUELLES VERSCHIEBEN === */
+
+/* Wrapper um document-row + dropdown (ersetzt margin-bottom der Row) */
+.doc-with-dropdown {
+    margin-bottom: 8px;
+}
+
+.doc-with-dropdown .document-row {
+    margin-bottom: 0; /* Margin jetzt am Wrapper */
+}
+
+/* Verschieben-Button (erscheint auf Hover links vom Löschen-Button) */
+.move-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    opacity: 0; /* Standard unsichtbar */
+    transition: opacity 0.2s ease;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+
+/* Auf Hover der Row einblenden */
+.document-row:hover .move-btn {
+    opacity: 0.6;
+}
+
+.move-btn:hover {
+    opacity: 1 !important;
+}
+
+.move-svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    color: currentColor; /* erbt Themenfarbe */
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+/* Löschen-SVG (X-Symbol) */
+.delete-svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    color: currentColor;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.upload-svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    color: currentColor;
+    pointer-events: none;
+}
+
+/* Ordner-Auswahl Dropdown */
+.move-dropdown {
+    background: var(--clr-surface);
+    border: 2px solid var(--clr-text);
+    border-top: none; /* Nahtlos unter der Row */
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+    animation: dropdown-slide 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dropdown-slide {
+    from { opacity: 0; transform: translateY(-5px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Einzelne Ziel-Option im Dropdown */
+.move-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    color: var(--clr-text);
+    font-size: 14px;
+    border-bottom: 1px solid rgba(var(--clr-text-rgb), 0.08);
+    transition: background 0.12s ease;
+}
+
+.move-option:last-child {
+    border-bottom: none;
+}
+
+.move-option:hover {
+    background: rgba(var(--clr-text-rgb), 0.07);
+}
+
+/* Mini-Ordner-Icon im Dropdown */
+.move-option-folder-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    background: rgba(var(--clr-surface-rgb), 0.6);
+    border-radius: 2px;
+    position: relative;
+}
+
+.move-option-folder-icon::before {
+    content: '';
+    position: absolute;
+    width: 13px;
+    height: 8px;
+    background: rgba(var(--clr-text-rgb), 0.38);
+    border-radius: 0 2px 2px 2px;
+    bottom: 3px;
+    left: 3px;
+}
+
+.move-option-folder-icon::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 2px;
+    background: rgba(var(--clr-text-rgb), 0.38);
+    border-radius: 1px 1px 0 0;
+    bottom: 11px;
+    left: 3px;
+}
+
+/* Mini-Root-Icon im Dropdown (Dokument ohne Ordner) */
+.move-option-root-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    background: rgba(var(--clr-text-rgb), 0.08);
+    border-radius: 2px;
+    position: relative;
+}
+
+.move-option-root-icon::before {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 12px;
+    background: rgba(var(--clr-text-rgb), 0.28);
+    border-radius: 1px;
+    top: 4px;
+    left: 5px;
+}
+
+/* Fullscreen-Modus: Proportional 1.3x */
+@media (min-width: 1600px) {
+    .folder-nav-bar {
+        margin-bottom: 26px;
+        padding-bottom: 18px;
+    }
+
+    .breadcrumb-link,
+    .breadcrumb-sep,
+    .breadcrumb-active {
+        font-size: 18px;
+    }
+
+    .section-label {
+        font-size: 14px;
+    }
+
+    .folder-new-btn {
+        font-size: 15px;
+        padding: 4px 13px;
+    }
+
+    .folder-row {
+        padding: 16px 21px;
+        margin-bottom: 10px;
+    }
+
+    .folder-icon-box {
+        width: 62px;
+        height: 62px;
+        margin-right: 21px;
+    }
+
+    .folder-icon-box::before {
+        width: 39px;
+        height: 25px;
+        bottom: 10px;
+        left: 12px;
+    }
+
+    .folder-icon-box::after {
+        width: 17px;
+        height: 7px;
+        bottom: 35px;
+        left: 12px;
+    }
+
+    .folder-create-row {
+        padding: 13px 18px;
+        margin-bottom: 10px;
+    }
+
+    .folder-create-input {
+        font-size: 18px;
+        padding: 8px 12px;
+    }
+
+    .move-svg {
+        width: 23px;
+        height: 23px;
+    }
+
+    .move-option {
+        font-size: 18px;
+        padding: 13px 21px;
+    }
+}
+
+/* === KOPIEREN-BUTTON === */
+
+/* Kopieren-Button (erscheint links vom Verschieben-Button auf Hover) */
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    opacity: 0; /* Standard unsichtbar */
+    transition: opacity 0.2s ease;
+    margin-left: 4px;
+    flex-shrink: 0;
+    position: relative; /* Für CSS-Icon mit Pseudo-Elementen */
+    width: 34px; /* Gleiche Breite wie move-btn (inkl. padding) */
+    height: 34px;
+}
+
+/* Auf Hover der Row einblenden */
+.document-row:hover .copy-btn {
+    opacity: 0.6;
+}
+
+.copy-btn:hover {
+    opacity: 1 !important;
+}
+
+/* SVG-Copy-Icon: zwei überlappende Seiten (Windows-Style) */
+.copy-svg {
+    width: 18px; /* Gleiche Größe wie move-btn img */
+    height: 18px;
+    display: block;
+    color: currentColor; /* erbt die Textfarbe vom Button */
+    flex-shrink: 0;
+}
+
+/* Fullscreen-Modus */
+@media (min-width: 1600px) {
+    .copy-btn {
+        padding: 10px;
+        width: 43px;
+        height: 43px;
+    }
+
+    .copy-svg {
+        width: 23px;
+        height: 23px;
+    }
+}
+
+/* === SELEKTION === */
+
+/* Ausgewählte Dokument-Zeile: dickerer Rand in App-Farbe (kein Blau) */
+.document-row.selected {
+    border-width: 3px; /* Dicker als normaler 2px-Rand */
+    border-color: var(--clr-text); /* App-Farbe statt Blau */
+    background: rgba(var(--clr-surface-rgb), 0.2);
+}
+
+/* === EINFÜGEN-LEISTE (In Ordner) === */
+
+/* Leiste mit Einfügen-Button, erscheint wenn Zwischenablage belegt */
+.paste-bar {
+    margin-bottom: 12px;
+    animation: row-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Einfügen-Button */
+.paste-btn {
+    width: 100%;
+    padding: 10px 16px;
+    background: transparent;
+    border: 1px dashed rgba(var(--clr-text-rgb), 0.45); /* Gestrichelt = Einfüge-Aktion */
+    border-radius: 6px;
+    color: var(--clr-text);
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+    opacity: 0.75;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.paste-btn:hover {
+    background: rgba(var(--clr-surface-rgb), 0.3);
+    opacity: 1;
+}
+
+.paste-btn:active {
+    transform: scale(0.99);
+}
+
+/* === UPLOAD-BUTTON (in Section-Header) === */
+
+/* Icon-Button für Datei-Upload — ähnlich dem Chat-Upload-Button */
+.upload-new-btn {
+    background: var(--clr-surface);
+    border: 2px solid var(--clr-text);
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-right: 4px;
+    width: 36px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+    opacity: 0.85;
+}
+
+.upload-new-btn:hover {
+    background: var(--clr-surface-dark, rgba(var(--clr-surface-rgb), 0.8));
+    opacity: 1;
+}
+
+.upload-new-btn:active {
+    transform: scale(0.95);
+}
+
+.upload-new-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Icon im Upload-Button (jetzt als SVG — erbt Themenfarbe) */
+.upload-btn-icon,
+.upload-svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    color: currentColor;
+    pointer-events: none;
+}
+
+@media (min-width: 1600px) {
+    .upload-new-btn {
+        width: 46px;
+        height: 36px;
+    }
+
+    .upload-btn-icon,
+    .upload-svg {
+        width: 20px;
+        height: 20px;
+    }
 }
 
 /* Empty State (keine Dokumente) */

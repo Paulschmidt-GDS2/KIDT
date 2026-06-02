@@ -56,6 +56,14 @@ public partial class RouterService
         if (functionName == "delete_calendar_event") return HandleDeleteCalendarEvent(resultText);
         if (functionName == "update_calendar_event") return HandleUpdateCalendarEvent(resultText);
         if (functionName == "add_document_to_chat") return await HandleAddDocumentToChatAsync(resultText, docDbService, foundDocuments);
+        if (functionName == "create_folder") return HandleFolderOperationResult(resultText);
+        if (functionName == "delete_folder") return HandleFolderOperationResult(resultText);
+        if (functionName == "move_document_to_folder") return HandleFolderOperationResult(resultText);
+        if (functionName == "copy_document_to_folder") return HandleFolderOperationResult(resultText);
+        if (functionName == "remove_document_from_folder") return HandleFolderOperationResult(resultText);
+        if (functionName == "list_documents_in_folder") return await HandleListDocumentsInFolderAsync(resultText, docDbService, foundDocuments);
+        if (functionName == "find_documents") return HandleFindDocumentsResult(resultText);
+        if (functionName == "list_all_folders") return HandleListAllFoldersResult(resultText);
         return null;
     }
 
@@ -216,6 +224,196 @@ public partial class RouterService
             response.DirectResponse = errorMsg;
             response.Reason = "Termin-Update fehlgeschlagen";
         }
+        return response;
+    }
+
+    private RouterResponse HandleFolderOperationResult(string resultText) // Verarbeitet Ergebnis aller Ordner-Tools (create, delete, move, copy, remove)
+    {
+        RouterResponse response = new RouterResponse();
+        response.ToolWasUsed = true;
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<FolderResultJson>(resultText);
+
+            if (result != null && result.success) // Tool wurde aufgerufen UND hat erfolgreich abgeschlossen
+            {
+                response.DirectResponse = result.message ?? "Operation ausgeführt.";
+                response.Reason = "Ordner-Operation erfolgreich";
+            }
+            else // Tool wurde aufgerufen, aber die Operation ist fehlgeschlagen
+            {
+                string errorMsg = "Die Operation konnte nicht ausgeführt werden.";
+                if (result != null && result.message != null) errorMsg = result.message;
+                response.DirectResponse = errorMsg;
+                response.Reason = "Ordner-Operation fehlgeschlagen";
+            }
+        }
+        catch // JSON-Parse-Fehler: Fallback-Antwort
+        {
+            response.DirectResponse = "Fehler beim Verarbeiten der Antwort.";
+            response.Reason = "Ordner-Operation Fehler";
+        }
+        return response;
+    }
+
+    private async Task<RouterResponse> HandleListDocumentsInFolderAsync( // Verarbeitet list_documents_in_folder → gibt Dokument-Cards zurück wie search_documents
+        string resultText, DocumentDbService docDbService, List<Document> foundDocuments)
+    {
+        var listResult = JsonSerializer.Deserialize<FolderListResultJson>(resultText);
+
+        if (listResult == null || !listResult.success || listResult.documents == null || listResult.found == 0) // Keine Dokumente?
+        {
+            RouterResponse emptyResponse = new RouterResponse();
+            string msg = "Keine Dokumente im Ordner gefunden.";
+            if (listResult != null && listResult.message != null) msg = listResult.message;
+            emptyResponse.DirectResponse = msg;
+            emptyResponse.Reason = "Ordner-Inhalt leer";
+            emptyResponse.ToolWasUsed = true;
+            return emptyResponse;
+        }
+
+        foreach (var docInfo in listResult.documents) // Vollständige Dokumente aus DB laden (für Thumbnails etc.)
+        {
+            Document doc = await docDbService.GetDocumentByIdAsync(docInfo.id);
+            if (doc != null && doc.Id > 0) foundDocuments.Add(doc);
+        }
+
+        List<string> fileNames = new List<string>(); // Dateinamen + DocIDs für Kontext-Marker
+        List<int> docIds = new List<int>();
+        foreach (Document d in foundDocuments)
+        {
+            string name = string.Empty;
+            if (d.FileName != null) name = d.FileName;
+            fileNames.Add(name);
+            docIds.Add(d.Id);
+        }
+
+        string baseMsg = listResult.message != null ? listResult.message : $"{listResult.found} Dokument(e) gefunden";
+        string message = $"{baseMsg} [DocID: {string.Join(",", docIds)}]"; // DocID-Marker für Follow-up-Analyse
+
+        RouterResponse response = new RouterResponse();
+        response.DirectResponse = message;
+        response.FoundDocuments = foundDocuments;
+        response.Reason = "Ordner-Inhalt";
+        response.ToolWasUsed = true;
+        return response;
+    }
+
+    private RouterResponse HandleListAllFoldersResult(string resultText) // Verarbeitet list_all_folders → natürlichsprachliche Ordnerliste
+    {
+        RouterResponse response = new RouterResponse();
+        response.ToolWasUsed = true;
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<AllFoldersResultJson>(resultText);
+
+            if (result == null || !result.success || result.folders == null || result.found == 0) // Keine Ordner?
+            {
+                string noFolders = "Es gibt noch keine Ordner.";
+                if (result != null && result.message != null) noFolders = result.message;
+                response.DirectResponse = noFolders;
+                response.Reason = "Ordnerliste leer";
+                return response;
+            }
+
+            var lines = new List<string>(); // Ordner als Liste aufbauen
+            foreach (FolderItemJson f in result.folders)
+            {
+                string docLabel = f.documentCount == 1 ? "1 Dokument" : $"{f.documentCount} Dokumente"; // Dokument/Dokumente
+                lines.Add($"• {f.name} ({docLabel})");
+            }
+
+            response.DirectResponse = $"{result.found} Ordner vorhanden:\n{string.Join("\n", lines)}";
+            response.Reason = "Ordner aufgelistet";
+        }
+        catch // JSON-Parse-Fehler
+        {
+            response.DirectResponse = "Fehler beim Laden der Ordnerliste.";
+            response.Reason = "list_all_folders Fehler";
+        }
+
+        return response;
+    }
+
+    private RouterResponse HandleFindDocumentsResult(string resultText) // Verarbeitet find_documents → natürlichsprachliche Standort-Aussage
+    {
+        RouterResponse response = new RouterResponse();
+        response.ToolWasUsed = true;
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<FindDocumentsResultJson>(resultText);
+
+            if (result == null || !result.success || result.documents == null || result.found == 0) // Keine Treffer?
+            {
+                string noFound = "Kein Dokument mit diesem Namen gefunden.";
+                if (result != null && result.message != null) noFound = result.message;
+                response.DirectResponse = noFound;
+                response.Reason = "Dokument-Suche ohne Ergebnis";
+                return response;
+            }
+
+            var sentences = new List<string>(); // Sätze pro Dokument aufbauen
+
+            foreach (var doc in result.documents)
+            {
+                List<string> locations = new List<string>();
+                if (doc.inFolders != null)
+                {
+                    foreach (string loc in doc.inFolders) locations.Add(loc);
+                }
+                if (locations.Count == 0) locations.Add("Hauptbereich"); // Fallback
+
+                // --- Natürlichsprachliche Formulierung ---
+                string sentence = string.Empty;
+
+                if (locations.Count == 1 && locations[0] == "Hauptbereich") // Nur im Hauptbereich
+                {
+                    sentence = $"Die Datei {doc.fileName} liegt nur im Hauptbereich (kein Ordner zugewiesen).";
+                }
+                else if (locations.Count == 1) // Genau ein Ordner
+                {
+                    sentence = $"Die Datei {doc.fileName} liegt im Ordner {locations[0]}.";
+                }
+                else // Mehrere Standorte
+                {
+                    var ordnerListe = new List<string>();
+                    bool inHauptbereich = false;
+
+                    foreach (string loc in locations)
+                    {
+                        if (loc == "Hauptbereich") inHauptbereich = true;
+                        else ordnerListe.Add(loc);
+                    }
+
+                    string ordnerText = string.Join(" und ", ordnerListe); // Ordner auflisten
+
+                    if (inHauptbereich && ordnerListe.Count == 0)
+                        sentence = $"Die Datei {doc.fileName} liegt nur im Hauptbereich.";
+                    else if (inHauptbereich && ordnerListe.Count == 1)
+                        sentence = $"Die Datei {doc.fileName} liegt im Ordner {ordnerText} und im Hauptbereich.";
+                    else if (inHauptbereich)
+                        sentence = $"Die Datei {doc.fileName} liegt in den Ordnern {ordnerText} und im Hauptbereich.";
+                    else if (ordnerListe.Count == 1)
+                        sentence = $"Die Datei {doc.fileName} liegt im Ordner {ordnerText}.";
+                    else
+                        sentence = $"Die Datei {doc.fileName} liegt in den Ordnern {ordnerText}.";
+                }
+
+                sentences.Add(sentence);
+            }
+
+            response.DirectResponse = string.Join(" ", sentences);
+            response.Reason = "Dokument-Standort";
+        }
+        catch // JSON-Parse-Fehler
+        {
+            response.DirectResponse = "Fehler beim Auslesen der Ordner-Zugehörigkeit.";
+            response.Reason = "find_documents Fehler";
+        }
+
         return response;
     }
 

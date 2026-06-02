@@ -20,6 +20,7 @@ public partial class Home
         public string LoadingText { get; set; } = string.Empty; // Label nach 2.5s (z.B. "LLM denkt...")
         public List<Document> FoundDocuments { get; set; } = new List<Document>();
         public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
+        public string ModelLabel { get; set; } = string.Empty; // Debug: welches Modell hat diese Antwort erzeugt
     }
 
     private List<ChatMessage> Messages = new();
@@ -409,7 +410,8 @@ public partial class Home
             });
         });
 
-        bool wasCancelled = false; // Flag: Wurde die Anfrage abgebrochen?
+        bool wasCancelled = false; // Flag: User hat Abbruch-Button geklickt
+        bool hadError = false; // Flag: technischer Fehler (Netzwerk, Router, etc.)
 
         // STREAMING: Empfange Token für Token und fülle Puffer
         try
@@ -438,35 +440,53 @@ public partial class Home
                     foundEvents = chunk.FoundEvents; // Setze gefundene Events
                     assistantMessage.FoundDocuments = foundDocuments; // Füge zu Nachricht hinzu
                     assistantMessage.FoundEvents = foundEvents; // Setze gefundene Termine
+                    assistantMessage.ModelLabel = chunk.ModelLabel; // Debug-Label: welches Modell hat geantwortet
                     break; // Stream beenden
                 }
             }
         }
-        catch (OperationCanceledException) // Anfrage wurde durch Abort-Button abgebrochen
+        catch (OperationCanceledException) // User hat Abbruch-Button geklickt → alles entfernen
         {
-            wasCancelled = true; // Abbruch-Flag setzen
+            wasCancelled = true;
+        }
+        catch (Exception ex) // Technischer Fehler (Netzwerk, OpenRouter, DB, etc.) → Fehlermeldung zeigen
+        {
+            hadError = true;
+            System.Diagnostics.Debug.WriteLine($"[CHAT] Fehler: {ex.Message}");
         }
 
         loadingLabelCts.Cancel(); // Label-Task in jedem Fall beenden
         streamComplete = true; // Signal an Drain-Task
         await Task.WhenAll(drainTask, saveUserMessageTask); // Drain + DB-Save parallel abwarten
 
-        if (wasCancelled) // Abbruch: UI aufräumen
+        if (wasCancelled) // Abbruch: UI aufräumen, keine Nachricht speichern
         {
-            if (!firstChunkReceived) // Noch keine Antwort gezeigt? → Loading entfernen
-            {
-                Messages.Remove(loadingMessage);
-            }
-            else if (string.IsNullOrEmpty(fullMessage)) // Partielle leere Nachricht? → entfernen
-            {
-                Messages.Remove(assistantMessage);
-            }
+            Messages.Remove(loadingMessage); // Loading entfernen (no-op wenn bereits entfernt)
+            Messages.Remove(assistantMessage); // Partielle Antwort entfernen
 
-            cancelSource.Dispose(); // Token-Source freigeben
-            cancelSource = new CancellationTokenSource(); // Neuen Token für nächste Anfrage bereitstellen
-            isSaving = false; // Speicherung abgeschlossen
+            cancelSource.Dispose();
+            cancelSource = new CancellationTokenSource();
+            isSaving = false;
+            canAbort = false;
             StateHasChanged();
-            return; // Nicht in DB speichern
+            return;
+        }
+
+        if (hadError) // Technischer Fehler: Fehlermeldung anzeigen statt leerer Chat
+        {
+            Messages.Remove(loadingMessage);
+            Messages.Remove(assistantMessage);
+
+            var errMsg = new ChatMessage();
+            errMsg.Text = "Ein Fehler ist aufgetreten. Bitte erneut versuchen.";
+            errMsg.DisplayText = "Ein Fehler ist aufgetreten. Bitte erneut versuchen.";
+            errMsg.IsUser = false;
+            Messages.Add(errMsg);
+
+            isSaving = false;
+            canAbort = false;
+            StateHasChanged();
+            return;
         }
 
         assistantMessage.Text = fullMessage; // Setze vollständigen Text

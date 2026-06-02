@@ -45,6 +45,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         newDoc.ExtractedText = extractedText;
         newDoc.ThumbnailBase64 = thumbnailBase64;
         newDoc.UploadedAt = DateTime.UtcNow;
+        newDoc.IsInRoot = true; // Neue Dateien starten im Root-Bereich
 
         this.db.Documents.Add(newDoc); // Füge Dokument zur Datenbank hinzu
         await this.db.SaveChangesAsync(); // Speichere Änderungen in Datenbank

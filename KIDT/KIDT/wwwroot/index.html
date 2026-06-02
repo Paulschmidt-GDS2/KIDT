@@ -86,6 +86,30 @@
         };
     </script>
     
+    <script>
+        // Clipboard-Helper für Dokument-Kopieren via Strg+C / Strg+V
+        window.clipboardHelper = {
+            dotnetRef: null,
+
+            register: function(dotnetRef) {
+                this.dotnetRef = dotnetRef;
+                document.addEventListener('keydown', function(e) {
+                    if (!window.clipboardHelper.dotnetRef) return;
+                    if (e.ctrlKey && e.key === 'c') { // Strg+C: Kopieren
+                        window.clipboardHelper.dotnetRef.invokeMethodAsync('OnCtrlC');
+                    }
+                    if (e.ctrlKey && e.key === 'v') { // Strg+V: Einfügen
+                        window.clipboardHelper.dotnetRef.invokeMethodAsync('OnCtrlV');
+                    }
+                });
+            },
+
+            dispose: function() {
+                this.dotnetRef = null;
+            }
+        };
+    </script>
+
     <script src="_framework/blazor.webview.js" autostart="false"></script>
 
 </body>

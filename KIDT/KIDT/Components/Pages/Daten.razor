@@ -1,9 +1,14 @@
-﻿@* Daten-Seite: Zeigt Chats und Dokumente in Tabs *@
+@* Daten-Seite: Zeigt Chats und Dokumente in Tabs *@
 @page "/daten"
 @using KIDT.Models
+@using Microsoft.JSInterop
 @inject KIDT.Database.ChatDbService ChatDb
 @inject KIDT.Database.DocumentDbService DocDb
+@inject KIDT.Database.FolderDbService FolderDb
+@inject KIDT.Services.ThumbnailGenerator ThumbGen
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
 
 <div class="page-container">
     @* Hauptcontainer für gesamte Seite *@
@@ -16,61 +21,36 @@
     @if (currentTab == "Chats") @* Chats-Tab *@
     {
         <div class="data-container">
-            @* Hauptcontainer *@
-            @if (isLoadingChats) @* Zeige Loading-Indikator *@
+            @if (isLoadingChats)
             {
-                <div class="loading-container">
-                    <p>Chats werden geladen...</p>
-                </div>
+                <div class="loading-container"><p>Chats werden geladen...</p></div>
             }
             else
             {
                 <div class="data-grid">
-                    @* Grid-Container für Chat-Cards *@
-                    @foreach (var chat in Chats) @* Durchlaufe alle Chats *@
+                    @foreach (var chat in Chats)
                     {
                         <div class="chat-card @(removingChatIds.Contains(chat.Id) ? "removing" : "")">
-                            @* Chat-Card *@
                             <button class="delete-btn" @onclick="@(() => DeleteChat(chat.Id))" @onclick:stopPropagation="true" disabled="@isDeleting" title="Chat löschen" aria-label="Chat löschen">
-                                @* Lösch-Button (disabled während Löschvorgang) *@
                                 <img src="images/remove.png" alt="Löschen" />
                             </button>
                             <div class="card-content" @onclick="@(() => OpenChat(chat.Id))">
-                                @* Klickbarer Bereich für OpenChat *@
-                                <div class="card-title">@chat.Title</div> @* Chat-Titel oben *@
-                            
-                                @if (chat.LinkedDocuments.Count > 0) @* Check: Hat dieser Chat verknüpfte Dokumente? *@
+                                <div class="card-title">@chat.Title</div>
+                                @if (chat.LinkedDocuments.Count > 0)
                                 {
                                     <div class="card-file-preview">
-                                        @* File-Vorschau mit Thumbnail *@
-                                        @if (!string.IsNullOrEmpty(chat.LinkedDocuments[0].ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
+                                        @if (!string.IsNullOrEmpty(chat.LinkedDocuments[0].ThumbnailBase64))
                                         {
                                             <img src="@("data:image/png;base64," + chat.LinkedDocuments[0].ThumbnailBase64)" alt="Vorschau" class="preview-thumbnail" />
                                         }
                                         else
-                                        @* Kein Thumbnail -> Zeige Icon *@
                                         {
-                                            @if (chat.LinkedDocuments[0].FileName.EndsWith(".pdf")) @* PDF-Icon *@
-                                            {
-                                                <img src="images/file.png" alt="PDF" class="preview-icon-large" />
-                                            }
-                                            else if (chat.LinkedDocuments[0].FileName.EndsWith(".txt"))
-                                            @* TXT-Icon *@
-                                            {
-                                                <img src="images/file.png" alt="Text" class="preview-icon-large" />
-                                            }
-                                            else
-                                            @* Sonstiges *@
-                                            {
-                                                <img src="images/file.png" alt="Datei" class="preview-icon-large" />
-                                            }
+                                            <img src="images/file.png" alt="Datei" class="preview-icon-large" />
                                         }
                                     </div>
-                                
-                                    <div class="card-filename">@chat.LinkedDocuments[0].FileName</div> @* Dateiname darunter *@
+                                    <div class="card-filename">@chat.LinkedDocuments[0].FileName</div>
                                 }
-                            
-                                <div class="card-date">@GetFormattedDate(chat.CreatedAt)</div> @* Datum ganz unten (konvertiert zu Lokalzeit) *@
+                                <div class="card-date">@GetFormattedDate(chat.CreatedAt)</div>
                             </div>
                         </div>
                     }
@@ -78,57 +58,243 @@
             }
         </div>
     }
-    else if (currentTab == "Dokumente")
-    @* Dokumente-Tab *@
+    else if (currentTab == "Dokumente") @* Dokumente-Tab *@
     {
         <div class="data-container-documents">
-            @* Hauptcontainer für Explorer-Ansicht *@
-            @if (isLoadingDocuments) @* Zeige Loading-Indikator *@
+            @if (isLoadingDocuments)
             {
-                <div class="loading-container">
-                    <p>Dokumente werden geladen...</p>
-                </div>
+                <div class="loading-container"><p>Dokumente werden geladen...</p></div>
             }
             else
             {
                 <div class="documents-explorer">
-                    @* Explorer-Container *@
-                    @if (Documents.Count == 0) @* Keine Dokumente vorhanden *@
+
+                    @* === ORDNER-ANSICHT: Breadcrumb-Navigation === *@
+                    @if (currentFolderId != null) @* In Ordner: Breadcrumb *@
                     {
-                        <div class="empty-state">
-                            <p>Keine Dokumente vorhanden</p>
+                        <div class="folder-nav-bar">
+                            <button class="breadcrumb-link" @onclick="NavigateToRoot">Alle Dokumente</button>
+                            <span class="breadcrumb-sep">›</span>
+                            <span class="breadcrumb-active">@currentFolderName</span>
                         </div>
                     }
-                    else
+
+                    @* Einfügen-Bar: in Root UND in Ordnern sichtbar wenn Zwischenablage belegt *@
+                    @if (clipboardDocId != null)
                     {
-                        @foreach (var doc in Documents) @* Durchlaufe alle Dokumente *@
+                        <div class="paste-bar">
+                            <button class="paste-btn" @onclick="PasteDocumentHere">
+                                &#128203; "@clipboardDocName" hier einfügen
+                            </button>
+                        </div>
+                    }
+
+                    @* === ROOT-ANSICHT: Ordner-Sektion === *@
+                    @if (currentFolderId == null) @* Nur in Root *@
+                    {
+                        @* Sektion-Header "Ordner" mit "+ Neu"- und Upload-Button *@
+                        <div class="explorer-section-header">
+                            <span class="section-label">Ordner</span>
+                            <div class="section-line"></div>
+                            <button class="upload-new-btn" @onclick="OnUploadClick" disabled="@isUploading" title="Datei hochladen">
+                                <svg class="upload-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 12V4M9 4L5.5 7.5M9 4L12.5 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M3 14h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                            <button class="folder-new-btn" @onclick="StartCreateFolder">+ Neu</button>
+                        </div>
+
+                        @* Inline-Eingabe: Neuen Ordner erstellen *@
+                        @if (isCreatingFolder)
                         {
-                            <div class="document-row @(removingDocumentIds.Contains(doc.Id) ? "removing" : "")" @onclick="@(() => OpenDocument(doc.Id))" @onclick:stopPropagation="true">
-                                @* Klick öffnet Dokument *@
-                                <div class="document-thumbnail">
-                                    @* Thumbnail/Icon Bereich *@
-                                    @if (!string.IsNullOrEmpty(doc.ThumbnailBase64)) @* Check: Hat Dokument ein Thumbnail? *@
-                                    {
-                                        <img src="@("data:image/png;base64," + doc.ThumbnailBase64)" alt="Vorschau" class="doc-thumb-img" />
-                                    }
-                                    else
-                                    @* Kein Thumbnail -> Zeige Icon *@
-                                    {
-                                        <img src="images/file.png" alt="@doc.FileType" class="doc-icon-img" />
-                                    }
-                                </div>
+                            <div class="folder-create-row">
+                                <div class="folder-icon-box"></div>
+                                <input class="folder-create-input"
+                                       value="@newFolderName"
+                                       @oninput="OnFolderNameInput"
+                                       @onkeydown="OnNewFolderKeyDown"
+                                       placeholder="Ordnername eingeben..." />
+                                <button class="folder-confirm-btn" @onclick="ConfirmCreateFolder" title="Erstellen">&#10003;</button>
+                                <button class="folder-cancel-btn" @onclick="CancelCreateFolder" title="Abbrechen">&#10005;</button>
+                            </div>
+                        }
+
+                        @* Ordner-Zeilen *@
+                        @foreach (var folder in Folders)
+                        {
+                            <div class="folder-row @(removingFolderIds.Contains(folder.Id) ? "removing" : "")"
+                                 @onclick="@(() => OpenFolder(folder.Id, folder.Name))">
+                                <div class="folder-icon-box"></div>
                                 <div class="document-info">
-                                    @* Info-Bereich *@
-                                    <div class="document-name">@doc.FileName</div> @* Dateiname *@
-                                    <div class="document-meta">@doc.FileType.ToUpper() • @GetFormattedDate(doc.UploadedAt)</div> @* Typ und Datum *@
+                                    <div class="document-name">@folder.Name</div>
+                                    <div class="document-meta">Ordner &bull; @GetFormattedDate(folder.CreatedAt)</div>
                                 </div>
-                                <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument löschen" aria-label="Dokument löschen">
-                                    @* Lösch-Button (stopPropagation verhindert doppeltes Event) *@
+                                <button class="document-delete-btn" @onclick="@(() => DeleteFolder(folder.Id))" @onclick:stopPropagation="true" disabled="@isDeletingFolder" title="Ordner löschen">
                                     <img src="images/remove.png" alt="Löschen" />
                                 </button>
                             </div>
                         }
+
+                        @* Sektion-Header "Dokumente" *@
+                        @if (Documents.Count > 0 && (Folders.Count > 0 || isCreatingFolder))
+                        {
+                            <div class="explorer-section-header" style="margin-top: 14px;">
+                                <span class="section-label">Dokumente</span>
+                                <div class="section-line"></div>
+                            </div>
+                        }
+
+                        @* Dokument-Zeilen in Root *@
+                        @if (Documents.Count == 0 && Folders.Count == 0 && !isCreatingFolder)
+                        {
+                            <div class="empty-state"><p>Keine Dokumente vorhanden. Datei hochladen um zu beginnen.</p></div>
+                        }
+                        else
+                        {
+                            @foreach (var doc in Documents)
+                            {
+                                <div class="doc-with-dropdown">
+                                    <div class="document-row @(removingDocumentIds.Contains(doc.Id) ? "removing" : "") @(selectedDocId == doc.Id ? "selected" : "")"
+                                         @onclick="@(() => SelectDocument(doc.Id))"
+                                         @ondblclick="@(() => OpenDocument(doc.Id))"
+                                         @onclick:stopPropagation="true">
+                                        <div class="document-thumbnail">
+                                            @if (!string.IsNullOrEmpty(doc.ThumbnailBase64))
+                                            {
+                                                <img src="@("data:image/png;base64," + doc.ThumbnailBase64)" alt="Vorschau" class="doc-thumb-img" />
+                                            }
+                                            else
+                                            {
+                                                <img src="images/file.png" alt="@doc.FileType" class="doc-icon-img" />
+                                            }
+                                        </div>
+                                        <div class="document-info">
+                                            <div class="document-name">@doc.FileName</div>
+                                            <div class="document-meta">@doc.FileType.ToUpper() &bull; @GetFormattedDate(doc.UploadedAt)</div>
+                                        </div>
+                                        @if (Folders.Count > 0) @* Kopieren + Verschieben nur wenn Ordner existieren *@
+                                        {
+                                            <button class="copy-btn" @onclick="@(() => CopyToClipboard(doc.Id, doc.FileName))" @onclick:stopPropagation="true" title="Kopieren (Strg+C)">
+                                                <svg class="copy-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <rect x="5" y="1" width="11" height="13" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+                                                    <rect x="2" y="4" width="11" height="13" rx="1.5" stroke="currentColor" stroke-width="1.6" fill="var(--clr-surface, #fff)"/>
+                                                </svg>
+                                            </button>
+                                            <button class="move-btn" @onclick="@(() => ToggleMoveDropdown(doc.Id))" @onclick:stopPropagation="true" title="In Ordner verschieben">
+                                                <svg class="move-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <rect x="2" y="11" width="14" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                                                    <path d="M9 2v9M9 11l-3-3M9 11l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
+                                        }
+                                        <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument löschen">
+                                            <svg class="delete-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    @if (moveDropdownDocId == doc.Id)
+                                    {
+                                        <div class="move-dropdown">
+                                            @foreach (var folder in Folders)
+                                            {
+                                                <div class="move-option" @onclick="@(() => MoveDocumentTo(doc.Id, folder.Id))">
+                                                    <div class="move-option-folder-icon"></div>
+                                                    @folder.Name
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
                     }
+
+                    @* === IN ORDNER: Dokument-Liste === *@
+                    @if (currentFolderId != null)
+                    {
+                        @* Upload-Button auch im Ordner *@
+                        <div class="explorer-section-header" style="margin-bottom: 12px;">
+                            <span class="section-label">Dokumente</span>
+                            <div class="section-line"></div>
+                            <button class="upload-new-btn" @onclick="OnUploadClick" disabled="@isUploading" title="Datei hochladen">
+                                <svg class="upload-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 12V4M9 4L5.5 7.5M9 4L12.5 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M3 14h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        @if (Documents.Count == 0)
+                        {
+                            <div class="empty-state"><p>Keine Dokumente in diesem Ordner</p></div>
+                        }
+                        else
+                        {
+                            @foreach (var doc in Documents)
+                            {
+                                <div class="doc-with-dropdown">
+                                    <div class="document-row @(removingDocumentIds.Contains(doc.Id) ? "removing" : "") @(selectedDocId == doc.Id ? "selected" : "")"
+                                         @onclick="@(() => SelectDocument(doc.Id))"
+                                         @ondblclick="@(() => OpenDocument(doc.Id))"
+                                         @onclick:stopPropagation="true">
+                                        <div class="document-thumbnail">
+                                            @if (!string.IsNullOrEmpty(doc.ThumbnailBase64))
+                                            {
+                                                <img src="@("data:image/png;base64," + doc.ThumbnailBase64)" alt="Vorschau" class="doc-thumb-img" />
+                                            }
+                                            else
+                                            {
+                                                <img src="images/file.png" alt="@doc.FileType" class="doc-icon-img" />
+                                            }
+                                        </div>
+                                        <div class="document-info">
+                                            <div class="document-name">@doc.FileName</div>
+                                            <div class="document-meta">@doc.FileType.ToUpper() &bull; @GetFormattedDate(doc.UploadedAt)</div>
+                                        </div>
+                                        <button class="copy-btn" @onclick="@(() => CopyToClipboard(doc.Id, doc.FileName))" @onclick:stopPropagation="true" title="Kopieren (Strg+C)">
+                                            <svg class="copy-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <rect x="5" y="1" width="11" height="13" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+                                                <rect x="2" y="4" width="11" height="13" rx="1.5" stroke="currentColor" stroke-width="1.6" fill="var(--clr-surface, #fff)"/>
+                                            </svg>
+                                        </button>
+                                        <button class="move-btn" @onclick="@(() => ToggleMoveDropdown(doc.Id))" @onclick:stopPropagation="true" title="Verschieben">
+                                            <svg class="move-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <rect x="2" y="11" width="14" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                                                <path d="M9 2v9M9 11l-3-3M9 11l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </button>
+                                        <button class="document-delete-btn" @onclick="@(() => DeleteDocument(doc.Id))" @onclick:stopPropagation="true" disabled="@isDeletingDocument" title="Dokument löschen">
+                                            <svg class="delete-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    @if (moveDropdownDocId == doc.Id)
+                                    {
+                                        <div class="move-dropdown">
+                                            <div class="move-option" @onclick="@(() => MoveDocumentTo(doc.Id, null))">
+                                                <div class="move-option-root-icon"></div>
+                                                Nur im Hauptbereich
+                                            </div>
+                                            @foreach (var folder in Folders)
+                                            {
+                                                @if (folder.Id != currentFolderId)
+                                                {
+                                                    <div class="move-option" @onclick="@(() => MoveDocumentTo(doc.Id, folder.Id))">
+                                                        <div class="move-option-folder-icon"></div>
+                                                        @folder.Name
+                                                    </div>
+                                                }
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                    }
+
                 </div>
             }
         </div>
@@ -138,149 +304,403 @@
 @code {
     private string currentTab = "Chats";
     private List<Conversation> Chats = new List<Conversation>();
-    private List<Document> Documents = new List<Document>();
+    private List<Document> Documents = new List<Document>(); // Dokumente der aktuellen Ansicht
+    private List<Folder> Folders = new List<Folder>();
+    private int? currentFolderId = null;
+    private string currentFolderName = string.Empty;
+    private int? moveDropdownDocId = null;
+    private int? selectedDocId = null; // Ausgewähltes Dokument (Einfachklick)
+    private int? clipboardDocId = null; // Zwischenablage (Strg+C)
+    private string clipboardDocName = string.Empty;
     private bool isDeleting = false;
     private bool isDeletingDocument = false;
+    private bool isDeletingFolder = false;
     private bool isLoadingChats = true;
     private bool isLoadingDocuments = true;
-    private List<int> removingChatIds = new List<int>(); // IDs die gerade animiert entfernt werden
-    private List<int> removingDocumentIds = new List<int>(); // IDs die gerade animiert entfernt werden
+    private bool isCreatingFolder = false;
+    private bool isUploading = false;
+    private string newFolderName = string.Empty;
+    private List<int> removingChatIds = new List<int>();
+    private List<int> removingDocumentIds = new List<int>();
+    private List<int> removingFolderIds = new List<int>();
+    private DotNetObjectReference<Daten>? dotnetRef;
 
-    protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
+    protected override async Task OnInitializedAsync() // Seite laden
     {
-        await Task.Yield(); // Gibt UI-Thread frei
-    
-        Chats = await ChatDb.LoadAllConversationsAsync(); // Lade Conversations für Listen-Anzeige
-        isLoadingChats = false; // Loading für Chats beendet
-        StateHasChanged(); // UI aktualisieren
+        await Task.Yield();
 
-        Documents = await DocDb.GetAllDocumentsAsync(); // Lade Dokumente für Listen-Anzeige
-        isLoadingDocuments = false; // Loading für Dokumente beendet
-        StateHasChanged(); // UI aktualisieren
+        Chats = await ChatDb.LoadAllConversationsAsync();
+        isLoadingChats = false;
+        StateHasChanged();
+
+        Documents = await FolderDb.GetRootDocumentsAsync(); // Root: Dateien mit IsInRoot = true
+        Folders = await FolderDb.GetAllFoldersAsync();
+        isLoadingDocuments = false;
+        StateHasChanged();
     }
 
-    private void OpenChat(int chatId) // Öffnet einen Chat
+    protected override async Task OnAfterRenderAsync(bool firstRender) // JS-Clipboard registrieren
     {
-        Navigation.NavigateTo("/chat/" + chatId); // Navigiere zu Chat mit ID
+        if (firstRender)
+        {
+            dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("clipboardHelper.register", dotnetRef);
+        }
     }
 
-    private async Task DeleteChat(int chatId) // Löscht einen Chat
+    public void Dispose()
     {
-        if (isDeleting) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+        JS.InvokeVoidAsync("clipboardHelper.dispose");
+        dotnetRef?.Dispose();
+    }
 
-        isDeleting = true; // Setze Flag
+    // --- Upload ---
 
-        // 1. EXIT-ANIMATION: Füge ID zur Removing-Liste hinzu → CSS-Klasse wird gesetzt
+    private async Task OnUploadClick() // Datei-Dialog öffnen und Datei hochladen
+    {
+        try
+        {
+            isUploading = true;
+            StateHasChanged();
+
+            var result = await FilePicker.PickAsync(new PickOptions
+            {
+                PickerTitle = "Datei auswählen",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, new[] { ".pdf", ".txt", ".md", ".json" } }
+                })
+            });
+
+            if (result == null) return; // Abgebrochen
+
+            string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath); // Thumbnail generieren
+
+            string ext = Path.GetExtension(result.FileName).ToLower();
+            string fileType = "unknown";
+            if (ext == ".pdf") fileType = "pdf";
+            else if (ext == ".txt") fileType = "txt";
+            else if (ext == ".md") fileType = "md";
+            else if (ext == ".json") fileType = "json";
+
+            string fileContent;
+            if (fileType == "pdf") // PDF → Base64
+            {
+                byte[] pdfBytes = await File.ReadAllBytesAsync(result.FullPath);
+                fileContent = Convert.ToBase64String(pdfBytes);
+            }
+            else // Textdatei → direkt lesen
+            {
+                fileContent = await File.ReadAllTextAsync(result.FullPath);
+            }
+
+            int docId = await DocDb.SaveDocumentAsync(result.FileName, fileContent, fileType, string.Empty, thumbnail);
+
+            if (currentFolderId != null && docId > 0) // Upload in Ordner: IsInRoot = false, nur im Ordner
+            {
+                await FolderDb.SetDocumentInRootAsync(docId, false);
+                await FolderDb.CopyDocumentToFolderAsync(docId, currentFolderId.Value);
+            }
+            // Upload in Root: IsInRoot = true (bereits gesetzt durch SaveDocumentAsync), kein Junction-Eintrag
+
+            await RefreshDocuments();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UPLOAD] Fehler: {ex.Message}");
+        }
+        finally
+        {
+            isUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    // --- Clipboard ---
+
+    private void SelectDocument(int docId) // Einfachklick: Dokument auswählen (Highlight)
+    {
+        if (selectedDocId == docId)
+            selectedDocId = null; // Nochmaliger Klick hebt Auswahl auf
+        else
+            selectedDocId = docId;
+        moveDropdownDocId = null; // Offenes Dropdown schließen
+        StateHasChanged();
+    }
+
+    private void CopyToClipboard(int docId, string docName) // Dokument in Zwischenablage legen
+    {
+        clipboardDocId = docId;
+        clipboardDocName = docName;
+        selectedDocId = docId;
+        StateHasChanged();
+    }
+
+    private void ClearClipboard()
+    {
+        clipboardDocId = null;
+        clipboardDocName = string.Empty;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnCtrlC() // Strg+C: Ausgewähltes Dokument kopieren
+    {
+        if (selectedDocId == null) return;
+
+        foreach (Document d in Documents)
+        {
+            if (d.Id == selectedDocId)
+            {
+                clipboardDocId = d.Id;
+                clipboardDocName = d.FileName;
+                break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnCtrlV() // Strg+V: In aktuellen Bereich einfügen (Root oder Ordner)
+    {
+        if (clipboardDocId == null) return;
+        await PasteDocumentHere();
+    }
+
+    private async Task PasteDocumentHere() // Kopiert Zwischenablage-Dokument in aktuellen Bereich
+    {
+        if (clipboardDocId == null) return;
+
+        if (currentFolderId == null) // Einfügen in Root: IsInRoot = true setzen
+        {
+            await FolderDb.CopyDocumentToRootAsync(clipboardDocId.Value);
+        }
+        else // Einfügen in Ordner: Junction-Eintrag anlegen
+        {
+            await FolderDb.CopyDocumentToFolderAsync(clipboardDocId.Value, currentFolderId.Value);
+        }
+
+        ClearClipboard(); // Paste-Bar ausblenden nach erfolgreichem Einfügen
+        await RefreshDocuments();
+        StateHasChanged();
+    }
+
+    // --- Navigation ---
+
+    private async Task OpenFolder(int folderId, string folderName) // In Ordner navigieren
+    {
+        currentFolderId = folderId;
+        currentFolderName = folderName;
+        isCreatingFolder = false;
+        moveDropdownDocId = null;
+        selectedDocId = null;
+        Documents = await FolderDb.GetDocumentsInFolderAsync(folderId);
+        StateHasChanged();
+    }
+
+    private async Task NavigateToRoot() // Zurück zu Root (Hauptbereich)
+    {
+        currentFolderId = null;
+        currentFolderName = string.Empty;
+        isCreatingFolder = false;
+        moveDropdownDocId = null;
+        selectedDocId = null;
+        await RefreshDocuments();
+        Folders = await FolderDb.GetAllFoldersAsync();
+        StateHasChanged();
+    }
+
+    private async Task RefreshDocuments() // Lädt Dokumente der aktuellen Ansicht neu
+    {
+        if (currentFolderId == null)
+            Documents = await FolderDb.GetRootDocumentsAsync(); // Root: nur Dateien mit IsInRoot = true
+        else
+            Documents = await FolderDb.GetDocumentsInFolderAsync(currentFolderId.Value);
+    }
+
+    // --- Verschieben ---
+
+    private void ToggleMoveDropdown(int docId)
+    {
+        if (moveDropdownDocId == docId)
+            moveDropdownDocId = null;
+        else
+            moveDropdownDocId = docId;
+    }
+
+    private async Task MoveDocumentTo(int docId, int? targetFolderId) // Verschiebt Dokument (alle Junction-Einträge ersetzen)
+    {
+        moveDropdownDocId = null;
+        await FolderDb.MoveDocumentToFolderAsync(docId, targetFolderId);
+        await RefreshDocuments();
+        StateHasChanged();
+    }
+
+    // --- Ordner-Verwaltung ---
+
+    private void StartCreateFolder()
+    {
+        isCreatingFolder = true;
+        newFolderName = string.Empty;
+        moveDropdownDocId = null;
+    }
+
+    private void CancelCreateFolder()
+    {
+        isCreatingFolder = false;
+        newFolderName = string.Empty;
+    }
+
+    private void OnFolderNameInput(ChangeEventArgs e)
+    {
+        if (e.Value != null)
+            newFolderName = e.Value.ToString() ?? string.Empty;
+        else
+            newFolderName = string.Empty;
+    }
+
+    private async Task OnNewFolderKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmCreateFolder();
+        else if (e.Key == "Escape") CancelCreateFolder();
+    }
+
+    private async Task ConfirmCreateFolder()
+    {
+        if (string.IsNullOrWhiteSpace(newFolderName)) return;
+
+        isCreatingFolder = false;
+        string nameToCreate = newFolderName.Trim();
+        newFolderName = string.Empty;
+
+        await FolderDb.CreateFolderAsync(nameToCreate);
+        Folders = await FolderDb.GetAllFoldersAsync();
+        StateHasChanged();
+    }
+
+    private async Task DeleteFolder(int folderId) // Ordner löschen mit Animation
+    {
+        if (isDeletingFolder) return;
+        isDeletingFolder = true;
+
+        removingFolderIds.Add(folderId);
+        StateHasChanged();
+        await Task.Delay(300);
+
+        List<Folder> updated = new List<Folder>();
+        foreach (Folder f in Folders)
+        {
+            if (f.Id != folderId) updated.Add(f);
+        }
+        Folders = updated;
+        removingFolderIds.Remove(folderId);
+        StateHasChanged();
+
+        try
+        {
+            await Task.Run(async () => await FolderDb.DeleteFolderAsync(folderId));
+            await RefreshDocuments();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Ordners: {ex.Message}");
+        }
+        finally
+        {
+            isDeletingFolder = false;
+        }
+    }
+
+    // --- Chat-Operationen ---
+
+    private void OpenChat(int chatId) { Navigation.NavigateTo("/chat/" + chatId); }
+
+    private async Task DeleteChat(int chatId)
+    {
+        if (isDeleting) return;
+        isDeleting = true;
+
         removingChatIds.Add(chatId);
         StateHasChanged();
-        await Task.Delay(340); // Warte bis Card-Animation fertig ist (0.32s + kleiner Puffer)
+        await Task.Delay(340);
 
-        // 2. Entferne aus UI nach Animation
         Chats = Chats.Where(c => c.Id != chatId).ToList();
         removingChatIds.Remove(chatId);
         StateHasChanged();
-    
-        // 2. DANN: Lösche aus DB im Hintergrund
-        try
-        {
-            await Task.Run(async () =>
-            {
-                await ChatDb.DeleteConversationAsync(chatId); // DB-Löschung im Hintergrund
-            });
-        }
-        catch (Exception ex)
-        {
-            // Bei Fehler: Chat wieder hinzufügen (Rollback)
-            System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}");
-            // Chat ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint er wieder
-        }
-        finally
-        {
-            isDeleting = false; // Flag zurücksetzen
-        }
+
+        try { await Task.Run(async () => await ChatDb.DeleteConversationAsync(chatId)); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}"); }
+        finally { isDeleting = false; }
     }
 
-    private async Task DeleteDocument(int documentId) // Löscht ein Dokument
+    // --- Dokument-Operationen ---
+
+    private async Task DeleteDocument(int documentId) // Datei von aktuellem Standort entfernen (löscht aus DB nur wenn letzte Kopie)
     {
-        if (isDeletingDocument) return; // Verhindert mehrfache gleichzeitige Lösch-Operationen
+        if (isDeletingDocument) return;
+        isDeletingDocument = true;
 
-        isDeletingDocument = true; // Setze Flag
+        if (moveDropdownDocId == documentId) moveDropdownDocId = null;
+        if (selectedDocId == documentId) selectedDocId = null;
+        if (clipboardDocId == documentId) ClearClipboard();
 
-        // 1. EXIT-ANIMATION: Row nach rechts rausschieben
         removingDocumentIds.Add(documentId);
         StateHasChanged();
-        await Task.Delay(300); // Warte bis Row-Animation fertig ist (0.28s + kleiner Puffer)
+        await Task.Delay(300);
 
-        // 2. Entferne aus UI nach Animation
-        Documents = Documents.Where(d => d.Id != documentId).ToList();
+        List<Document> updatedDocs = new List<Document>();
+        foreach (Document d in Documents)
+        {
+            if (d.Id != documentId) updatedDocs.Add(d);
+        }
+        Documents = updatedDocs;
         removingDocumentIds.Remove(documentId);
         StateHasChanged();
-    
-        // 2. DANN: Lösche aus DB im Hintergrund
+
         try
         {
+            int? locationFolderId = currentFolderId; // Standort merken bevor async
             await Task.Run(async () =>
-            {
-                await DocDb.DeleteDocumentAsync(documentId); // DB-Löschung im Hintergrund
-            });
+                await FolderDb.DeleteDocumentFromLocationAsync(documentId, locationFolderId) // Nur von diesem Standort entfernen
+            );
         }
-        catch (Exception ex)
-        {
-            // Bei Fehler: Dokument wieder hinzufügen (Rollback)
-            System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Dokuments: {ex.Message}");
-            // Dokument ist schon aus UI entfernt, aber nicht aus DB - beim nächsten Laden erscheint es wieder
-        }
-        finally
-        {
-            isDeletingDocument = false; // Flag zurücksetzen
-        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}"); }
+        finally { isDeletingDocument = false; }
     }
 
-    private string GetFormattedDate(DateTime createdAt) // Formatiert Datum korrekt
+    private string GetFormattedDate(DateTime createdAt) // Datum UTC → Lokal
     {
-        if (createdAt.Year < 2000) // Check: Ist Datum ungültig (0001 oder ähnlich)?
-        {
-            return "Unbekanntes Datum"; // Zeige Fallback
-        }
-    
-        // Behandle als UTC und konvertiere zu Lokalzeit
+        if (createdAt.Year < 2000) return "Unbekanntes Datum";
+
         DateTime localTime = createdAt.Kind == DateTimeKind.Unspecified
             ? DateTime.SpecifyKind(createdAt, DateTimeKind.Utc).ToLocalTime()
             : createdAt.ToLocalTime();
-    
-        return localTime.ToString("dd.MM.yyyy HH:mm"); // Formatiere lokal
+
+        return localTime.ToString("dd.MM.yyyy HH:mm");
     }
 
-    private async Task OpenDocument(int documentId) // Öffne Dokument in Standard-Anwendung
+    private async Task OpenDocument(int documentId) // Doppelklick: Dokument in Standard-App öffnen
     {
         try
         {
-            var doc = await DocDb.GetDocumentByIdAsync(documentId); // Lade Dokument aus DB
-            if (doc == null) // Dokument nicht gefunden
+            var doc = await DocDb.GetDocumentByIdAsync(documentId);
+            if (doc == null || doc.Id < 0) return;
+
+            string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName);
+
+            if (doc.FileType == "pdf")
             {
-                return;
+                try { await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); }
+                catch (FormatException) { await File.WriteAllTextAsync(tempPath, doc.FileContent); }
             }
-        
-            string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName); // Erstelle Pfad in Temp-Ordner
-        
-            if (doc.FileType == "pdf") // PDF muss von Base64 konvertiert werden
+            else
             {
-                try
-                {
-                    await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); // Konvertiere Base64 zu Bytes und schreibe
-                }
-                catch (FormatException) // Fallback falls nicht Base64
-                {
-                    await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
-                }
+                await File.WriteAllTextAsync(tempPath, doc.FileContent);
             }
-            else // Text-Dateien direkt schreiben
-            {
-                await File.WriteAllTextAsync(tempPath, doc.FileContent); // Schreibe als Text
-            }
-        
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true }); // Öffne Datei in Standard-App
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true });
         }
-        catch { } // Fehler ignorieren (silent fail)
+        catch { }
     }
 }

@@ -8,4 +8,5 @@ public class ChatStreamChunk // Einzelner Streaming-Chunk (Text + Status + gefun
     public bool IsComplete { get; set; } = false;
     public List<Document> FoundDocuments { get; set; } = new List<Document>();
     public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
+    public string ModelLabel { get; set; } = string.Empty; // Debug: welches Modell hat diese Antwort erzeugt
 }

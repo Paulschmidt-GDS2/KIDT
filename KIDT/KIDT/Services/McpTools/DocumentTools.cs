@@ -19,9 +19,9 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     }
 
     [McpServerTool]
-    [Description("Durchsucht alle gespeicherten Dokumente nach einem Suchbegriff. Gibt JSON mit IDs und Details zurück.")]
+    [Description("Sucht ob ein Dokument in der Bibliothek vorhanden ist und zeigt es als Card an. Aufrufen wenn User fragt ob eine Datei existiert ('Hast du', 'Gibt es', 'Suche', 'Finde') — NICHT fuer Ordner-Standort-Abfragen.")]
     public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff
-        [Description("Der Suchbegriff (wird in Dateiname und Textinhalt gesucht)")] string searchQuery)
+        [Description("Der Suchbegriff (Dateiname oder Stichwort)")] string searchQuery)
     {
         var documents = await this.docDbService.SearchDocumentsAsync(searchQuery); // Suche in DB (case-insensitive, Dateiname + ExtractedText)
 

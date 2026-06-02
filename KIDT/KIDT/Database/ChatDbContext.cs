@@ -10,6 +10,8 @@ public class ChatDbContext : DbContext
     public DbSet<Document> Documents { get; set; }
     public DbSet<ConversationDocument> ConversationDocuments { get; set; }
     public DbSet<CalendarEvent> CalendarEvents { get; set; }
+    public DbSet<Folder> Folders { get; set; }
+    public DbSet<DocumentFolder> DocumentFolders { get; set; } // Junction: Dokument↔Ordner (n:m)
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
@@ -103,5 +105,21 @@ public class ChatDbContext : DbContext
         modelBuilder.Entity<Document>()
             .HasIndex(d => d.FileHash)
             .IsUnique();
+
+        // DocumentFolder: Composite Primary Key (DocumentId + FolderId)
+        modelBuilder.Entity<DocumentFolder>()
+            .HasKey(df => new { df.DocumentId, df.FolderId });
+
+        modelBuilder.Entity<DocumentFolder>()
+            .HasOne(df => df.Document) // DocumentFolder hat ein Document
+            .WithMany(d => d.DocumentFolders) // Document hat viele DocumentFolders
+            .HasForeignKey(df => df.DocumentId)
+            .OnDelete(DeleteBehavior.Cascade); // Dokument gelöscht → alle Ordner-Links weg
+
+        modelBuilder.Entity<DocumentFolder>()
+            .HasOne(df => df.Folder) // DocumentFolder hat einen Folder
+            .WithMany() // Folder braucht keine Navigation
+            .HasForeignKey(df => df.FolderId)
+            .OnDelete(DeleteBehavior.Cascade); // Ordner gelöscht → alle Links weg
     }
 }

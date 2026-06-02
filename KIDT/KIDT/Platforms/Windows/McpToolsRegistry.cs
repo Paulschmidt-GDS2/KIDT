@@ -7,7 +7,7 @@ namespace KIDT.Services;
 
 public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-Tools automatisch per Reflection
 {
-    public static void RegisterTools(Kernel kernel, DocumentDbService docDbService, CalendarService calendarService, int currentConversationId) // Hauptmethode: Registriert alle Tools im Kernel
+    public static void RegisterTools(Kernel kernel, DocumentDbService docDbService, CalendarService calendarService, FolderDbService folderDbService, int currentConversationId) // Hauptmethode: Registriert alle Tools im Kernel
     {
         var assembly = Assembly.GetExecutingAssembly(); // Hole aktuelles Assembly
         var allTypes = assembly.GetTypes(); // Hole alle Typen im Assembly
@@ -29,6 +29,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 // Versuche verschiedene Constructor-Signaturen (DocumentTools, CalendarTools haben unterschiedliche Parameter)
                 var docConstructor = toolType.GetConstructor(new[] { typeof(DocumentDbService), typeof(int) }); // Constructor für DocumentTools
                 var calendarConstructor = toolType.GetConstructor(new[] { typeof(CalendarService) }); // Constructor für CalendarTools
+                var folderConstructor = toolType.GetConstructor(new[] { typeof(FolderDbService) }); // Constructor für FolderTools
 
                 if (docConstructor != null) // DocumentTools-Constructor gefunden?
                 {
@@ -37,6 +38,10 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                 else if (calendarConstructor != null) // CalendarTools-Constructor gefunden?
                 {
                     toolInstance = Activator.CreateInstance(toolType, calendarService); // Erstelle CalendarTools-Instanz
+                }
+                else if (folderConstructor != null) // FolderTools-Constructor gefunden?
+                {
+                    toolInstance = Activator.CreateInstance(toolType, folderDbService); // Erstelle FolderTools-Instanz
                 }
                 else // Kein passender Constructor?
                 {

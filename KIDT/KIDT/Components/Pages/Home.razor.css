@@ -148,6 +148,17 @@ body {
     color: var(--clr-text); /* Gleiche Farbe wie restlicher Chat-Text */
 }
 
+/* Debug-Label: Modell-Name über Assistent-Antwort */
+.model-debug-label {
+    display: block; /* Eigene Zeile über der Antwort */
+    font-size: 11px; /* Klein und unauffällig */
+    color: var(--clr-text); /* Gleiche Basis-Farbe */
+    opacity: 0.45; /* Deutlich gedimmt: sichtbar aber nicht ablenkend */
+    margin-bottom: 4px; /* Abstand zur eigentlichen Antwort */
+    font-family: monospace; /* Monospace wie Debug-Ausgabe */
+    letter-spacing: 0.02em;
+}
+
 /* Blinkender Cursor wie in Konsole */
 .blinking-cursor {
     color: var(--clr-text); /* Farbe passend zum Text */
@@ -402,6 +413,7 @@ body {
     height: 20px; /* Icon-Höhe */
     display: block; /* Block für exakte Größe */
     pointer-events: none; /* Klicks gehen durch zum Button */
+    color: var(--clr-text); /* SVGs erben Themenfarbe */
 }
 
 /* Upload: kein Overshoot – kein Border-Clipping an der linken Containerkante */

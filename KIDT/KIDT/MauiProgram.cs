@@ -27,6 +27,7 @@ namespace KIDT
             builder.Services.AddTransient<ChatDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
             builder.Services.AddTransient<DocumentDbService>(); // Transient statt Scoped (MAUI hat keinen echten Scope!)
             builder.Services.AddTransient<CalendarService>(); // Service für Kalender-Termine
+            builder.Services.AddTransient<FolderDbService>(); // Service für Ordner-Verwaltung
             builder.Services.AddSingleton<ThumbnailGenerator>();
             builder.Services.AddSingleton<AppNotificationService>(); // Singleton für Termin-Benachrichtigungen
             builder.Services.AddSingleton<KIDT.Services.ThemeService>(); // Theme-System (visuell)
@@ -48,6 +49,9 @@ namespace KIDT
                 // Migriere Datenbank-Schema (füge neue Spalten hinzu falls nötig)
                 var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>();
                 Task.Run(async () => await calendarService.EnsureDatabaseSchemaAsync()).Wait(); // Synchron warten
+
+                var folderService = scope.ServiceProvider.GetRequiredService<FolderDbService>();
+                Task.Run(async () => await folderService.EnsureDatabaseSchemaAsync()).Wait(); // Folders-Tabelle + FolderId-Spalte sicherstellen
             }
 
             return app;
