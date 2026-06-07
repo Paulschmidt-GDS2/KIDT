@@ -28,6 +28,12 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 return JsonSerializer.Serialize(new { success = false, message = "Ordnername darf nicht leer sein." });
             }
 
+            bool exists = await this.folderDbService.FolderNameExistsAsync(name); // Duplikat-Pruefung
+            if (exists)
+            {
+                return JsonSerializer.Serialize(new { success = false, message = $"Ein Ordner mit dem Namen '{name}' existiert bereits." });
+            }
+
             Folder folder = await this.folderDbService.CreateFolderAsync(name);
             return JsonSerializer.Serialize(new { success = true, message = $"Ordner '{folder.Name}' wurde erstellt.", folderId = folder.Id });
         }
@@ -91,6 +97,13 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 targetFolderId = folder.Id;
             }
 
+            bool nameConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, targetFolderId); // Duplikat am Ziel pruefen
+            if (nameConflict)
+            {
+                string targetLabel = targetFolderId.HasValue ? $"Ordner '{folderName}'" : "Hauptbereich";
+                return JsonSerializer.Serialize(new { success = false, message = $"Im {targetLabel} existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
+            }
+
             await this.folderDbService.MoveDocumentToFolderAsync(doc.Id, targetFolderId);
             string target = targetFolderId.HasValue ? $"Ordner '{folderName}'" : "Hauptbereich";
             return JsonSerializer.Serialize(new { success = true, message = $"'{doc.FileName}' wurde in {target} verschoben.", documentId = doc.Id });
@@ -124,6 +137,11 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 {
                     return JsonSerializer.Serialize(new { success = false, message = $"'{doc.FileName}' ist bereits im Hauptbereich." });
                 }
+                bool rootConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, null); // Duplikat im Hauptbereich pruefen
+                if (rootConflict)
+                {
+                    return JsonSerializer.Serialize(new { success = false, message = $"Im Hauptbereich existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
+                }
                 await this.folderDbService.CopyDocumentToRootAsync(doc.Id);
                 return JsonSerializer.Serialize(new { success = true, message = $"'{doc.FileName}' ist jetzt auch im Hauptbereich sichtbar.", documentId = doc.Id });
             }
@@ -132,6 +150,12 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
             if (folder == null)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
+            }
+
+            bool folderConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, folder.Id); // Duplikat im Zielordner pruefen
+            if (folderConflict)
+            {
+                return JsonSerializer.Serialize(new { success = false, message = $"In Ordner '{folderName}' existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
             }
 
             bool copied = await this.folderDbService.CopyDocumentToFolderAsync(doc.Id, folder.Id);
@@ -281,6 +305,46 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[FOLDER_TOOLS] ListDocumentsInFolder Fehler: {ex.Message}");
+            return JsonSerializer.Serialize(new { success = false, message = $"Fehler: {ex.Message}" });
+        }
+    }
+
+    [McpServerTool]
+    [Description("Benennt einen bestehenden Ordner um. Aufrufen wenn User einen Ordner umbenennen möchte.")]
+    public async Task<string> RenameFolder(
+        [Description("Aktueller Name des Ordners")] string folderName,
+        [Description("Neuer Name des Ordners")] string newName)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                return JsonSerializer.Serialize(new { success = false, message = "Neuer Ordnername darf nicht leer sein." });
+            }
+
+            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Name -> ID auflösen
+            if (folder == null)
+            {
+                return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
+            }
+
+            bool nameExists = await this.folderDbService.FolderNameExistsAsync(newName); // Neuer Name bereits vergeben?
+            if (nameExists)
+            {
+                return JsonSerializer.Serialize(new { success = false, message = $"Ein Ordner mit dem Namen '{newName}' existiert bereits." });
+            }
+
+            bool success = await this.folderDbService.RenameFolderAsync(folder.Id, newName); // Umbenennen per ID
+            if (!success)
+            {
+                return JsonSerializer.Serialize(new { success = false, message = "Umbenennen fehlgeschlagen." });
+            }
+
+            return JsonSerializer.Serialize(new { success = true, message = $"Ordner '{folderName}' wurde in '{newName}' umbenannt." });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FOLDER_TOOLS] RenameFolder Fehler: {ex.Message}");
             return JsonSerializer.Serialize(new { success = false, message = $"Fehler: {ex.Message}" });
         }
     }

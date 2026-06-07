@@ -81,7 +81,9 @@ html[data-theme="schwarz"] .toggle-btn img,
 html[data-theme="schwarz"] .header-logo,
 html[data-theme="schwarz"] .file-icon,
 html[data-theme="schwarz"] .file-remove img,
-html[data-theme="schwarz"] .btn-icon {
+html[data-theme="schwarz"] .btn-icon,
+html[data-theme="schwarz"] .upload-new-btn img,
+html[data-theme="schwarz"] .delete-btn img {
     filter: invert(0.88) brightness(1.05);
 }
 
@@ -90,7 +92,9 @@ html[data-theme="blau"] .toggle-btn img,
 html[data-theme="blau"] .header-logo,
 html[data-theme="blau"] .file-icon,
 html[data-theme="blau"] .file-remove img,
-html[data-theme="blau"] .btn-icon {
+html[data-theme="blau"] .btn-icon,
+html[data-theme="blau"] .upload-new-btn img,
+html[data-theme="blau"] .delete-btn img {
     filter: invert(1) brightness(0.85) sepia(0.3) hue-rotate(200deg);
 }
 
@@ -99,7 +103,9 @@ html[data-theme="rot"] .toggle-btn img,
 html[data-theme="rot"] .header-logo,
 html[data-theme="rot"] .file-icon,
 html[data-theme="rot"] .file-remove img,
-html[data-theme="rot"] .btn-icon {
+html[data-theme="rot"] .btn-icon,
+html[data-theme="rot"] .upload-new-btn img,
+html[data-theme="rot"] .delete-btn img {
     filter: invert(0.82) sepia(0.4) hue-rotate(10deg) brightness(1.1);
 }
 

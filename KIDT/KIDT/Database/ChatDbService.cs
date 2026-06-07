@@ -91,7 +91,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
             }
         }
 
-        filtered.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp)); // Sortiere nach Zeitstempel
+        filtered.Sort(CompareMessagesByTimestampAsc); // Sortiere nach Zeitstempel aufsteigend
         return filtered;
     }
 
@@ -132,51 +132,35 @@ public class ChatDbService // Service für Datenbank-Zugriff
             .AsNoTracking()
             .ToListAsync(); // Lade alle Conversations aus Datenbank (OHNE Include!)
 
+        var allConversationDocs = await this.db.ConversationDocuments
+            .AsNoTracking()
+            .ToListAsync(); // Einmalig laden (verhindert N+1-Abfragen)
+
+        var allDocuments = await this.db.Documents
+            .AsNoTracking()
+            .ToListAsync(); // Einmalig laden (verhindert N+1-Abfragen)
+
         foreach (Conversation c in allConversations) // Gehe durch alle Conversations
         {
-            // Lade verknüpfte Dokumente via ConversationDocuments (getrennte Query!)
-            var allConversationDocs = await this.db.ConversationDocuments
-                .AsNoTracking()
-                .ToListAsync(); // Lade alle ConversationDocuments
+            c.LinkedDocuments = new List<Document>();
 
-            var conversationDocs = new List<ConversationDocument>();
-            foreach (var cd in allConversationDocs) // Gehe durch alle ConversationDocuments
+            foreach (ConversationDocument cd in allConversationDocs) // Gehe durch alle ConversationDocuments
             {
                 if (cd.ConversationId == c.Id) // Gehört zu dieser Conversation?
                 {
-                    conversationDocs.Add(cd); // Füge hinzu
-                }
-            }
-
-            c.LinkedDocuments = new List<Document>();
-
-            foreach (var cd in conversationDocs) // Gehe durch alle Verknüpfungen
-            {
-                var allDocuments = await this.db.Documents
-                    .AsNoTracking()
-                    .ToListAsync(); // Lade alle Dokumente
-
-                Document foundDoc = new Document();
-                bool docFound = false;
-
-                foreach (var d in allDocuments) // Gehe durch alle Dokumente
-                {
-                    if (d.Id == cd.DocumentId) // Ist dies das gesuchte Dokument?
+                    foreach (Document d in allDocuments) // Suche passendes Dokument im Memory
                     {
-                        foundDoc = d;
-                        docFound = true;
-                        break;
+                        if (d.Id == cd.DocumentId) // ID stimmt überein?
+                        {
+                            c.LinkedDocuments.Add(d); // Füge zur Liste hinzu
+                            break;
+                        }
                     }
-                }
-
-                if (docFound) // Dokument gefunden?
-                {
-                    c.LinkedDocuments.Add(foundDoc); // Füge zur Liste hinzu
                 }
             }
         }
 
-        allConversations.Sort((a, b) => b.CreatedAt.CompareTo(a.CreatedAt)); // Sortiere nach Datum (neueste zuerst)
+        allConversations.Sort(CompareConversationsByCreatedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return allConversations;
     }
 
@@ -193,7 +177,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
             }
         }
 
-        userMessages.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp)); // Sortiere nach Zeitstempel
+        userMessages.Sort(CompareMessagesByTimestampAsc); // Sortiere nach Zeitstempel aufsteigend
 
         Message firstUserMessage = new Message();
         bool hasFirstMessage = false;
@@ -283,5 +267,15 @@ public class ChatDbService // Service für Datenbank-Zugriff
         }
 
         await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
+    }
+
+    private static int CompareMessagesByTimestampAsc(Message a, Message b) // Vergleich: älteste Nachricht zuerst
+    {
+        return a.Timestamp.CompareTo(b.Timestamp);
+    }
+
+    private static int CompareConversationsByCreatedAtDesc(Conversation a, Conversation b) // Vergleich: neueste Conversation zuerst
+    {
+        return b.CreatedAt.CompareTo(a.CreatedAt);
     }
 }

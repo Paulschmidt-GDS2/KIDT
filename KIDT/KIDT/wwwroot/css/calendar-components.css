@@ -453,7 +453,7 @@
 
 /* Aktiver Reminder-Button beim Hover */
 .reminder-btn.active:hover {
-    background: #1a1b19; /* Etwas heller beim Hover */
+    background: rgba(var(--clr-text-rgb), 0.82); /* Etwas transparenter für alle Themes */
     transform: translateY(-2px); /* Leicht nach oben verschieben */
 }
 

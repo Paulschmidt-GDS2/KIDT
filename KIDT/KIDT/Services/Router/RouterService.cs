@@ -20,7 +20,7 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
     public async Task InitializeAsync() // Lädt API-Key aus Datei
     {
         if (this.apiKey.Length > 0) return;
-        string keyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "openai-api-key.txt");
+        string keyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "OpenRouter-api-key.txt");
         this.apiKey = await File.ReadAllTextAsync(keyPath);
     }
 
@@ -66,24 +66,48 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             if (conversationId > 0) // Letzte 10 Nachrichten aus DB laden
             {
                 var allMessages = await dbService.LoadMessagesAsync(conversationId);
-                var recent = allMessages.Count > 10
-                    ? allMessages.Skip(allMessages.Count - 10).ToList()
-                    : allMessages;
 
-                foreach (var msg in recent)
+                List<Message> recent;
+                if (allMessages.Count > 10) // Nur letzte 10 Nachrichten für Kontext
                 {
-                    if (msg.IsUser) chatHistory.AddUserMessage(msg.Text);
-                    else chatHistory.AddAssistantMessage(msg.Text);
+                    recent = new List<Message>();
+                    int startIndex = allMessages.Count - 10;
+                    for (int i = startIndex; i < allMessages.Count; i++)
+                    {
+                        recent.Add(allMessages[i]);
+                    }
+                }
+                else
+                {
+                    recent = allMessages;
                 }
 
-                foreach (var msg in recent.TakeLast(3)) // DocIDs aus letzten Nachrichten extrahieren
+                foreach (Message msg in recent) // Chat-History aufbauen
                 {
+                    if (msg.IsUser)
+                    {
+                        chatHistory.AddUserMessage(msg.Text);
+                    }
+                    else
+                    {
+                        chatHistory.AddAssistantMessage(msg.Text);
+                    }
+                }
+
+                int docSearchStart = Math.Max(0, recent.Count - 3);
+                for (int i = docSearchStart; i < recent.Count; i++) // DocIDs aus letzten 3 Nachrichten extrahieren
+                {
+                    Message msg = recent[i];
                     if (!msg.IsUser && msg.Text.Contains("[DocID:"))
+                    {
                         ExtractDocIds(msg.Text, lastDocIds);
+                    }
                 }
 
                 if (lastDocIds.Count > 0)
+                {
                     chatHistory.AddSystemMessage($"CONTEXT: Kürzlich gefundene DocIDs: {string.Join(", ", lastDocIds)}");
+                }
             }
 
             chatHistory.AddUserMessage(userMessage);
@@ -120,11 +144,32 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                 }
                 catch (ArgumentOutOfRangeException retryEx) when (retryEx.Message.Contains("ChatFinishReason") || retryEx.Message.Contains("Unknown"))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Retry fehlgeschlagen → Fallback ({retryEx.Message})");
-                    RouterResponse retryFallback = new RouterResponse(); // Freundliche Rückmeldung statt rohem Fehler
-                    retryFallback.DirectResponse = "Das Modell ist gerade überlastet. Bitte versuche es in einem Moment erneut.";
-                    retryFallback.Reason = "ChatFinishReason-Fehler (nach Retry)";
-                    return retryFallback;
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Retry fehlgeschlagen → Klaerungs-Fallback ({retryEx.Message})");
+                    try // Fallback: einfacher Call ohne Tools, Gemini kann nachfragen oder klaeren
+                    {
+                        var fallbackSettings = new OpenAIPromptExecutionSettings
+                        {
+                            FunctionChoiceBehavior = FunctionChoiceBehavior.None(), // Kein Tool-Aufruf erlaubt
+                            Temperature = 0.3,
+                            MaxTokens = 200
+                        };
+                        var fallbackResponse = await chatService.GetChatMessageContentAsync(chatHistory, fallbackSettings, kernel);
+                        if (!string.IsNullOrWhiteSpace(fallbackResponse.Content))
+                        {
+                            RouterResponse clarifyResponse = new RouterResponse();
+                            clarifyResponse.DirectResponse = fallbackResponse.Content.Trim();
+                            clarifyResponse.Reason = "Klaerungs-Fallback (kein Tool)";
+                            return clarifyResponse;
+                        }
+                    }
+                    catch (Exception fallbackEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Klaerungs-Fallback fehlgeschlagen: {fallbackEx.Message}");
+                    }
+                    RouterResponse lastResort = new RouterResponse(); // Letzter Ausweg wenn auch Fallback scheitert
+                    lastResort.DirectResponse = "Ich habe deine Anfrage nicht ganz verstanden. Kannst du sie anders formulieren?";
+                    lastResort.Reason = "ChatFinishReason-Fehler (alle Fallbacks fehlgeschlagen)";
+                    return lastResort;
                 }
             }
 
@@ -258,12 +303,15 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             "Aktionen wie Kopieren, Verschieben, Erstellen, Loeschen IMMER zuerst das Tool aufrufen — danach kommt automatisch die Bestaetigung. " +
             "Schreibe KEINE eigene Bestaetigung wie 'Ich habe X kopiert' oder 'Erledigt' — nur der Tool-Aufruf zaehlt.\n\n" +
             "Du hast Zugriff auf verschiedene Tools. Nutze sie anhand ihrer Beschreibung je nach Nutzeranfrage.\n\n" +
-            "Kalender: Wenn Titel, Datum und Zeit bekannt sind, erstelle den Termin sofort ohne Rückfrage. Fehlende Pflichtfelder (Titel, Datum, Zeit) kurz erfragen.\n\n" +
+            "Kalender: Bei JEDER Frage nach Terminen, auch wenn die Frage wiederholt wird, IMMER list_calendar_events aufrufen — niemals Termine aus dem Gespraechsverlauf wiederholen ohne das Tool erneut aufzurufen. Wenn Titel, Datum und Zeit bekannt sind, erstelle den Termin sofort ohne Rückfrage. Fehlende Pflichtfelder (Titel, Datum, Zeit) kurz erfragen.\n" +
+            "Kontext-Referenzen bei Kalender-Aktionen: Sagt der Nutzer 'dieser Termin', 'den Termin', 'ihn' o.ae., benutze den zuletzt im Gespraechsverlauf erwahnten Termin-Titel und das zugehoerige Datum. Nur wenn der Gespraechsverlauf wirklich keinen eindeutigen Hinweis liefert, darf kurz nachgefragt werden.\n\n" +
             "Dokument-Analyse: Ist eine DocID im CONTEXT sichtbar (z.B. 'CONTEXT: Kürzlich gefundene DocIDs: 7') → analyze_document(docId) aufrufen. Sonst → add_document_to_chat aufrufen.\n\n" +
             "Kopieren zu Root/Hauptbereich: copy_document_to_folder mit folderName='hauptbereich'.\n" +
             "Entfernen aus Root/Hauptbereich: remove_document_from_folder mit folderName='hauptbereich'.\n" +
             "Alle Ordner anzeigen: list_all_folders aufrufen.\n" +
             "Dokumente im Hauptbereich/Root anzeigen: list_documents_in_folder mit folderName='hauptbereich'.\n\n" +
+            "Dokument loeschen: remove_document_from_folder aufrufen — Standort (Ordnername oder 'hauptbereich') muss bekannt sein. Ist er unklar: zuerst find_documents aufrufen um zu sehen wo die Datei liegt, dann dem User die Standorte zeigen und fragen von wo er sie entfernen moechte.\n\n" +
+            "Fehlende Informationen: Wenn eine Anfrage unklar ist oder Pflichtangaben fehlen, stelle EINE gezielte Rueckfrage um die fehlende Information zu erhalten. Nicht raten, nicht ein Tool mit falschen Parametern aufrufen.\n\n" +
             "Konversation ohne Tool-Bezug: kurz und freundlich auf Deutsch antworten (max 2-3 Saetze).";
     }
 

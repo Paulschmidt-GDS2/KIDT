@@ -64,6 +64,7 @@ public partial class RouterService
         if (functionName == "list_documents_in_folder") return await HandleListDocumentsInFolderAsync(resultText, docDbService, foundDocuments);
         if (functionName == "find_documents") return HandleFindDocumentsResult(resultText);
         if (functionName == "list_all_folders") return HandleListAllFoldersResult(resultText);
+        if (functionName == "rename_folder") return HandleFolderOperationResult(resultText);
         return null;
     }
 
@@ -289,7 +290,15 @@ public partial class RouterService
             docIds.Add(d.Id);
         }
 
-        string baseMsg = listResult.message != null ? listResult.message : $"{listResult.found} Dokument(e) gefunden";
+        string baseMsg;
+        if (listResult.message != null) // Spezifische Nachricht vorhanden?
+        {
+            baseMsg = listResult.message;
+        }
+        else
+        {
+            baseMsg = $"{listResult.found} Dokument(e) gefunden";
+        }
         string message = $"{baseMsg} [DocID: {string.Join(",", docIds)}]"; // DocID-Marker für Follow-up-Analyse
 
         RouterResponse response = new RouterResponse();
@@ -321,7 +330,15 @@ public partial class RouterService
             var lines = new List<string>(); // Ordner als Liste aufbauen
             foreach (FolderItemJson f in result.folders)
             {
-                string docLabel = f.documentCount == 1 ? "1 Dokument" : $"{f.documentCount} Dokumente"; // Dokument/Dokumente
+                string docLabel;
+                if (f.documentCount == 1) // Singular oder Plural?
+                {
+                    docLabel = "1 Dokument";
+                }
+                else
+                {
+                    docLabel = $"{f.documentCount} Dokumente";
+                }
                 lines.Add($"• {f.name} ({docLabel})");
             }
 

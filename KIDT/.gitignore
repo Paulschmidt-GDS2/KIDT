@@ -1,5 +1,6 @@
-## Ignore OpenAI API Key
+## Ignore API Keys
 openai-api-key.txt
+OpenRouter-api-key.txt
 
 ## Visual Studio
 .vs/
@@ -28,7 +29,7 @@ bld/
 *.nuget.props
 *.nuget.targets
 
-# User-specific config (wichtig für Multi-User!)
+# User-specific config (wichtig fï¿½r Multi-User!)
 appsettings.json
 appsettings.*.json
 !appsettings.example.json

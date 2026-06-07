@@ -56,15 +56,29 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         // Wenn Titelsuche angegeben: Filtere Ergebnisse (Case-Insensitive)
         if (!string.IsNullOrEmpty(titleSearch)) // Titelsuche aktiv?
         {
-            events = events.Where(e => e.Title.Contains(titleSearch, StringComparison.OrdinalIgnoreCase)).ToList(); // LINQ-Filter: Partial Match im Titel
+            var filteredByTitle = new List<CalendarEvent>();
+            foreach (CalendarEvent e in events) // Durchlaufe alle Events
+            {
+                if (e.Title.Contains(titleSearch, StringComparison.OrdinalIgnoreCase)) // Titel-Match?
+                {
+                    filteredByTitle.Add(e); // Füge zur gefilterten Liste hinzu
+                }
+            }
+            events = filteredByTitle; // Überschreibe mit gefilterter Liste
         }
 
         if (events.Count == 0) // Keine Termine gefunden?
         {
             // Formuliere Fehlermeldung: mit/ohne Titelsuche
-            string message = !string.IsNullOrEmpty(titleSearch) // Titelsuche war aktiv?
-                ? $"Keine Termine mit '{titleSearch}' im Titel gefunden"
-                : "Keine Termine gefunden";
+            string message;
+            if (!string.IsNullOrEmpty(titleSearch)) // Titelsuche war aktiv?
+            {
+                message = $"Keine Termine mit '{titleSearch}' im Titel gefunden";
+            }
+            else
+            {
+                message = "Keine Termine gefunden";
+            }
 
             return JsonSerializer.Serialize(new
             {
@@ -109,9 +123,15 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
             });
         }
 
-        string resultMessage = !string.IsNullOrEmpty(titleSearch) // Titelsuche war aktiv?
-            ? $"{events.Count} Termin(e) mit '{titleSearch}' gefunden"
-            : $"{events.Count} Termin(e) gefunden";
+        string resultMessage;
+        if (!string.IsNullOrEmpty(titleSearch)) // Titelsuche war aktiv?
+        {
+            resultMessage = $"{events.Count} Termin(e) mit '{titleSearch}' gefunden";
+        }
+        else
+        {
+            resultMessage = $"{events.Count} Termin(e) gefunden";
+        }
 
         return JsonSerializer.Serialize(new
         {

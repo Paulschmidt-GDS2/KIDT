@@ -93,7 +93,7 @@
 
     /* Scrollbar-Griff beim Hover */
     .data-container::-webkit-scrollbar-thumb:hover {
-        background: #0E0F0D; /* Extrem subtil heller beim Hover */
+        background: var(--clr-text); /* Theme-Scrollbar-Hover */
     }
 
 /* Grid-Container */
@@ -462,7 +462,7 @@
 
     /* Scrollbar-Griff beim Hover */
     .data-container-documents::-webkit-scrollbar-thumb:hover {
-        background: #0E0F0D; /* Extrem subtil heller beim Hover */
+        background: var(--clr-text); /* Theme-Scrollbar-Hover */
     }
 
 /* Explorer-Container */
@@ -518,26 +518,35 @@
     100% { opacity: 0;   transform: translateX(90px) scaleY(0.4);  max-height: 0;     margin-bottom: 0; }
 }
 
-/* L×sch-Button für Dokumente */
+/* Löschen-Button für Dokumente */
 .document-delete-btn {
-    background: none; /* Kein Hintergrund */
-    border: none; /* Kein Rahmen */
-    cursor: pointer; /* Zeiger-Cursor */
-    padding: 8px; /* Innenabstand */
-    opacity: 0; /* Standardm××ig unsichtbar */
-    transition: opacity 0.2s ease; /* Smooth Opacity-übergang */
-    margin-left: 16px; /* Abstand zum Info-Bereich */
-    flex-shrink: 0; /* Nicht schrumpfen */
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    opacity: 0; /* Standardmäßig unsichtbar */
+    transition: opacity 0.15s ease,
+                transform 0.13s cubic-bezier(0.34, 1.56, 0.64, 1);
+    margin-left: 16px;
+    flex-shrink: 0;
 }
 
 /* Delete-Button sichtbar beim Hover auf Row */
 .document-row:hover .document-delete-btn {
-    opacity: 0.7; /* Sichtbar beim Hover */
+    opacity: 0.7;
 }
 
 /* Delete-Button beim Hover */
 .document-delete-btn:hover {
-    opacity: 1; /* Voll sichtbar beim direkten Hover */
+    opacity: 1;
+    transform: scale(1.18) translateY(-1px); /* Leichtes Anheben */
+}
+
+/* Delete-Button beim Klick */
+.document-delete-btn:active {
+    transform: scale(0.82); /* Klares Eindrücken */
+    transition-duration: 0.07s;
+    opacity: 1;
 }
 
 /* Icon im Delete-Button */
@@ -885,7 +894,8 @@
     cursor: pointer;
     padding: 8px;
     opacity: 0; /* Standard unsichtbar */
-    transition: opacity 0.2s ease;
+    transition: opacity 0.15s ease,
+                transform 0.13s cubic-bezier(0.34, 1.56, 0.64, 1);
     margin-left: 4px;
     flex-shrink: 0;
 }
@@ -896,6 +906,13 @@
 }
 
 .move-btn:hover {
+    opacity: 1 !important;
+    transform: scale(1.18) translateY(-1px); /* Leichtes Anheben */
+}
+
+.move-btn:active {
+    transform: scale(0.82); /* Klares Eindrücken */
+    transition-duration: 0.07s;
     opacity: 1 !important;
 }
 
@@ -918,11 +935,11 @@
     pointer-events: none;
 }
 
-.upload-svg {
+.upload-svg,
+.upload-img {
     width: 16px;
     height: 16px;
     display: block;
-    color: currentColor;
     pointer-events: none;
 }
 
@@ -1092,11 +1109,12 @@
     cursor: pointer;
     padding: 8px;
     opacity: 0; /* Standard unsichtbar */
-    transition: opacity 0.2s ease;
+    transition: opacity 0.15s ease,
+                transform 0.13s cubic-bezier(0.34, 1.56, 0.64, 1);
     margin-left: 4px;
     flex-shrink: 0;
-    position: relative; /* Für CSS-Icon mit Pseudo-Elementen */
-    width: 34px; /* Gleiche Breite wie move-btn (inkl. padding) */
+    position: relative;
+    width: 34px;
     height: 34px;
 }
 
@@ -1106,6 +1124,13 @@
 }
 
 .copy-btn:hover {
+    opacity: 1 !important;
+    transform: scale(1.18) translateY(-1px); /* Leichtes Anheben */
+}
+
+.copy-btn:active {
+    transform: scale(0.82); /* Klares Eindrücken */
+    transition-duration: 0.07s;
     opacity: 1 !important;
 }
 
@@ -1134,11 +1159,14 @@
 
 /* === SELEKTION === */
 
-/* Ausgewählte Dokument-Zeile: dickerer Rand in App-Farbe (kein Blau) */
+/* Ausgewählte Dokument-Zeile: linker Akzentstreifen + Hintergrund + Schatten */
 .document-row.selected {
-    border-width: 3px; /* Dicker als normaler 2px-Rand */
-    border-color: var(--clr-text); /* App-Farbe statt Blau */
-    background: rgba(var(--clr-surface-rgb), 0.2);
+    border-width: 2px;
+    border-color: var(--clr-text);
+    background: rgba(var(--clr-text-rgb), 0.07); /* Deutlicherer Hintergrund */
+    box-shadow: inset 4px 0 0 var(--clr-text), /* Linker Akzentstreifen */
+                2px 3px 10px rgba(0, 0, 0, 0.13); /* Leichter Aufstiegsschatten */
+    transform: translateX(4px); /* Stärkere Verschiebung als Hover */
 }
 
 /* === EINFÜGEN-LEISTE (In Ordner) === */
@@ -1208,11 +1236,11 @@
 
 /* Icon im Upload-Button (jetzt als SVG — erbt Themenfarbe) */
 .upload-btn-icon,
-.upload-svg {
+.upload-svg,
+.upload-img {
     width: 16px;
     height: 16px;
     display: block;
-    color: currentColor;
     pointer-events: none;
 }
 
@@ -1223,7 +1251,8 @@
     }
 
     .upload-btn-icon,
-    .upload-svg {
+    .upload-svg,
+    .upload-img {
         width: 20px;
         height: 20px;
     }
@@ -1235,6 +1264,14 @@
     padding: 60px 20px; /* Innenabstand */
     color: var(--clr-text); /* Textfarbe */
     opacity: 0.5; /* Leicht transparent */
+}
+
+/* Inline-Fehlermeldung (Duplikat-Name) */
+.inline-error-msg {
+    font-size: 13px;
+    color: #c0392b;
+    padding: 6px 4px;
+    animation: row-in 0.2s ease both; /* Gleiche Animation wie folder-create-row */
 }
 
     .empty-state p {

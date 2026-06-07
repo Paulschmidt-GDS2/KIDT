@@ -147,7 +147,7 @@
 .no-events {
     text-align: center;
     padding: 16px 0;
-    color: #666;
+    color: rgba(var(--clr-text-rgb), 0.5); /* Theme-Farbe gedimmt */
     font-style: italic;
     font-size: 13px;
 }
@@ -185,7 +185,7 @@
 }
 
 .notification-reminder:hover {
-    background-color: #909385;
+    background-color: var(--clr-surface); /* Theme-Hover-Hintergrund */
     transform: translateX(0) scale(1) translateY(-3px);
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32), 0 4px 10px rgba(0, 0, 0, 0.15);
 }

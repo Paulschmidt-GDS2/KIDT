@@ -5,14 +5,7 @@ using System.Collections.Generic;
 
 namespace KIDT.Services;
 
-/// <summary>
-/// Zentraler Orchestrator: Koordiniert RouterService, DataAnalysisService und File-Upload.
-/// Architektur:
-///   User-Nachricht → RouterService (Gemini + Function Calling)
-///     ├─ Tool aufgerufen → Direkte Antwort (Termin/Dokument-Operation)
-///     └─ Intent dataAnalysis → DataAnalysisService (qwen3.5:9b via Ollama)
-/// </summary>
-public class ChatCoordinator : IAsyncDisposable
+public class ChatCoordinator : IAsyncDisposable // Orchestrator: RouterService (Gemini) → optional DataAnalysisService (Ollama)
 {
     private DataAnalysisService dataAnalysis;
     private FileService fileService;

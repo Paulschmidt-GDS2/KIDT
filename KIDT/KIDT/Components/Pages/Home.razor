@@ -34,11 +34,11 @@
                 <div class="@bubbleClass">
                     @if (msg.IsLoading) @* Check: Ist dies eine Loading-Nachricht? *@
                     {
-                        @if (!string.IsNullOrEmpty(msg.LoadingText)) @* Label einblenden wenn gesetzt *@
+                        @if (!string.IsNullOrEmpty(msg.LoadingText)) @* Shimmer-Text erscheint nach 2.5s *@
                         {
-                            <span class="loading-label">@msg.LoadingText</span>
+                            <span class="loading-shimmer-text">@msg.LoadingText</span>
                         }
-                        <span class="blinking-cursor">_</span>
+                        <span class="blinking-cursor">_</span> @* Cursor blinkt immer weiter *@
                     }
                     else if (msg.IsUser)
                     @* Wenn User-Nachricht *@
@@ -149,10 +149,7 @@
             <textarea @ref="textareaRef" id="chatTextarea" class="chat-textbox" placeholder="Nachricht eingeben..." aria-label="Chat Nachricht" @bind="InputText" @bind:event="oninput" rows="@rows" cols="@Cols" spellcheck="false"></textarea> @* oninput: live binding (nicht bei blur) *@
             <div class="chat-actions @GetActionsClass()"> @* GetActionsClass: active/no-abort je nach Zustand *@
                 <button class="chat-upload" title="Datei hochladen" aria-label="Datei hochladen" @onclick="OnUploadClick"> @* Upload-Button: öffnet Datei-Dialog *@
-                    <svg class="btn-icon" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="stroke: currentColor;">
-                        <path d="M9 12V4M9 4L5.5 7.5M9 4L12.5 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M3 14h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                    </svg>
+                    <img src="images/file-upload.png" alt="Datei hochladen" class="btn-icon" /> @* Upload-Icon *@
                 </button>
                 <button class="@GetSendClass()" @onclick="OnSendOrAbort" title="@GetSendTitle()"> @* GetSendClass/Title: wechselt zwischen Senden und Abbrechen *@
                     @if (isSaving) @* Sendet gerade: Abbruch-Icon *@

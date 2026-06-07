@@ -143,9 +143,42 @@ body {
 
 /* === LOADING-ANIMATION === */
 
-/* Label vor Ladeanimation */
-.loading-label {
-    color: var(--clr-text); /* Gleiche Farbe wie restlicher Chat-Text */
+/* "KI denkt nach": Wandernder Licht-Schleier von rechts nach links */
+.loading-shimmer-text {
+    display: inline; /* Inline — Cursor folgt direkt dahinter */
+    font-size: 18px; /* Passend zu blinking-cursor Schriftgröße */
+    margin-right: 2px; /* Puffer vor dem blinkenden Cursor */
+    background: linear-gradient(
+        90deg,
+        var(--clr-text)                    20%, /* Volle Textfarbe links */
+        rgba(var(--clr-text-rgb), 0.28)    50%, /* Abgedunkelte Mitte – der "Schleier" */
+        var(--clr-text)                    80%  /* Volle Textfarbe rechts */
+    ); /* Gradient wandert über Text – erzeugt den Schleier-Effekt */
+    background-size: 260% 100%; /* Breiter als Element: Sweep startet/endet außerhalb */
+    background-clip: text;
+    -webkit-background-clip: text; /* WebKit-Prefix für MAUI WebView */
+    -webkit-text-fill-color: transparent; /* Text "transparent" → zeigt Gradient darunter */
+    color: transparent;
+    animation:
+        loading-shimmer 2.4s linear infinite,                    /* Endloser Schleier-Sweep */
+        shimmer-appear  0.45s cubic-bezier(0.22, 1, 0.36, 1) both; /* Einblend-Effekt beim Erscheinen */
+}
+
+@keyframes loading-shimmer {
+    0%   { background-position:  120% center; } /* Schleier startet rechts außen */
+    100% { background-position: -120% center; } /* Schleier endet links außen */
+}
+
+@keyframes shimmer-appear {
+    from { opacity: 0; transform: translateY(-3px); } /* Einblenden von leicht oben */
+    to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* Fullscreen-Modus: Schriftgröße proportional skalieren */
+@media (min-width: 1400px) {
+    .loading-shimmer-text {
+        font-size: 23px; /* 18px * 1.3 – passend zu blinking-cursor im Fullscreen */
+    }
 }
 
 /* Debug-Label: Modell-Name über Assistent-Antwort */
@@ -557,20 +590,20 @@ body {
 .new-chat-btn {
     padding: 8px 16px; /* Innenabstand */
     border-radius: 6px; /* Abgerundete Ecken */
-    border: 2px solid rgba(255,255,255,0.12); /* Halbdurchsichtiger Rahmen */
-    background: #191916; /* Dunkler Hintergrund */
-    color: #948f61; /* Textfarbe */
+    border: 2px solid rgba(var(--clr-text-rgb), 0.2); /* Theme-Rahmen */
+    background: var(--clr-surface); /* Theme-Hintergrund */
+    color: var(--clr-text); /* Theme-Textfarbe */
     cursor: pointer; /* Zeiger-Cursor */
-    font-size: 16px; /* Schriftgr??e */
+    font-size: 16px; /* Schriftgröße */
     margin-bottom: 16px; /* Abstand zu Nachrichten */
     align-self: flex-start; /* Links ausrichten */
-    transition: background 0.2s ease, transform 0.05s ease; /* Smooth ?berg?nge */
+    transition: background 0.2s ease, transform 0.05s ease; /* Smooth Übergänge */
     outline: none; /* Kein Outline */
 }
 
     /* Neuer Chat Button beim Hover */
     .new-chat-btn:hover {
-        background: #10100f; /* Noch dunkler beim Hover */
+        background: var(--clr-surface-dark); /* Dunkler beim Hover */
     }
 
     /* Neuer Chat Button beim Klick */
@@ -613,7 +646,7 @@ body {
     border: 2px solid var(--clr-text); /* Dunkler Rahmen */
     border-radius: 6px; /* Abgerundete Ecken */
     padding: 12px; /* Innenabstand */
-    background: rgba(13, 14, 12, 0.02); /* Sehr subtiler Hintergrund */
+    background: rgba(var(--clr-text-rgb), 0.02); /* Sehr subtiler Theme-Hintergrund */
     transition: background 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); /* Smooth Übergänge */
     display: flex; /* Flexbox */
     flex-direction: column; /* Vertikal stapeln */
@@ -630,36 +663,36 @@ body {
 }
 
 .document-card-chat:hover {
-    background: rgba(132, 136, 119, 0.2); /* Heller beim Hover */
+    background: rgba(var(--clr-surface-rgb), 0.35); /* Theme-Hover-Hintergrund */
     transform: translateY(-2px); /* Leichtes Anheben beim Hover */
 }
 
-/* Button zum Hinzuf×gen - Minimalistisch */
+/* Button zum Hinzufügen - Minimalistisch */
 .add-doc-btn {
     width: auto; /* Nur so breit wie der Text */
     padding: 3px 2px; /* Vertikal 3px, horizontal sehr schmal (2px) */
     background: transparent; /* Transparenter Hintergrund */
-    color: var(--clr-text); /* Gleiche Schriftfarbe wie alles andere */
-    border: 1px solid rgba(13, 14, 12, 0.3); /* Sehr Dünner, subtiler Rahmen */
+    color: var(--clr-text); /* Theme-Textfarbe */
+    border: 1px solid rgba(var(--clr-text-rgb), 0.3); /* Theme-Rahmen */
     border-radius: 3px; /* Passend zum App-Stil */
     cursor: pointer;
     font-size: 11px; /* Kompakte Schrift, passt gut in Button */
     font-weight: 500; /* Medium weight passend zum App-Stil */
     transition: all 0.15s ease; /* Kurze smooth Transition */
-    line-height: 1; /* Minimale ZeilenHöhe */
-    text-transform: uppercase; /* Gro×buchstaben */
+    line-height: 1; /* Minimale Zeilenhöhe */
+    text-transform: uppercase; /* Großbuchstaben */
     letter-spacing: 0.4px; /* Leichter Buchstabenabstand für Lesbarkeit */
     white-space: nowrap; /* Kein Zeilenumbruch */
 }
 
 .add-doc-btn:hover {
-    background: rgba(13, 14, 12, 0.05); /* Minimaler Hover-Effekt */
-    border-color: rgba(13, 14, 12, 0.5); /* Etwas sichtbarerer Rahmen */
+    background: rgba(var(--clr-text-rgb), 0.05); /* Theme-Hover */
+    border-color: rgba(var(--clr-text-rgb), 0.5); /* Etwas sichtbarerer Rahmen */
 }
 
 .add-doc-btn:active {
     transform: scale(0.97); /* Minimaler Scale-Effekt */
-    background: rgba(13, 14, 12, 0.1); /* Etwas dunkler beim Klick */
+    background: rgba(var(--clr-text-rgb), 0.1); /* Etwas dunkler beim Klick */
 }
 
 /* Fullscreen-Modus: Proportional 1.3x größer */
@@ -688,7 +721,7 @@ body {
     display: flex; /* Flexbox */
     align-items: center; /* Vertikal zentrieren */
     justify-content: center; /* Horizontal zentrieren */
-    background: rgba(13, 14, 12, 0.05); /* Leicht dunkler Hintergrund */
+    background: rgba(var(--clr-text-rgb), 0.05); /* Theme-Hintergrund */
     border-radius: 4px; /* Abgerundete Ecken */
 }
 
@@ -758,4 +791,5 @@ body {
         font-size: 14px; /* 11px * 1.3 = 14.3px ? 14px */
     }
 }
+
 

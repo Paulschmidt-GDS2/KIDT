@@ -48,10 +48,10 @@ namespace KIDT
 
                 // Migriere Datenbank-Schema (füge neue Spalten hinzu falls nötig)
                 var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>();
-                Task.Run(async () => await calendarService.EnsureDatabaseSchemaAsync()).Wait(); // Synchron warten
+                Task.Run(calendarService.EnsureDatabaseSchemaAsync).Wait(); // Task.Run auf Thread-Pool: verhindert UI-Thread-Deadlock in MAUI
 
                 var folderService = scope.ServiceProvider.GetRequiredService<FolderDbService>();
-                Task.Run(async () => await folderService.EnsureDatabaseSchemaAsync()).Wait(); // Folders-Tabelle + FolderId-Spalte sicherstellen
+                Task.Run(folderService.EnsureDatabaseSchemaAsync).Wait(); // Folders-Tabelle + FolderId-Spalte sicherstellen
             }
 
             return app;

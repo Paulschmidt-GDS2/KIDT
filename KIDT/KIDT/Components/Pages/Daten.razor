@@ -79,8 +79,8 @@
                         </div>
                     }
 
-                    @* Einfügen-Bar: in Root UND in Ordnern sichtbar wenn Zwischenablage belegt *@
-                    @if (clipboardDocId != null)
+                    @* Einfügen-Bar: nur sichtbar wenn Einfügen sinnvoll ist (anderer Standort, kein Namenskonflikt) *@
+                    @if (CanPaste)
                     {
                         <div class="paste-bar">
                             <button class="paste-btn" @onclick="PasteDocumentHere">
@@ -97,10 +97,7 @@
                             <span class="section-label">Ordner</span>
                             <div class="section-line"></div>
                             <button class="upload-new-btn" @onclick="OnUploadClick" disabled="@isUploading" title="Datei hochladen">
-                                <svg class="upload-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M9 12V4M9 4L5.5 7.5M9 4L12.5 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M3 14h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
+                                <img src="images/file-upload.png" alt="Datei hochladen" class="upload-img" /> @* Upload-Icon *@
                             </button>
                             <button class="folder-new-btn" @onclick="StartCreateFolder">+ Neu</button>
                         </div>
@@ -118,6 +115,10 @@
                                 <button class="folder-confirm-btn" @onclick="ConfirmCreateFolder" title="Erstellen">&#10003;</button>
                                 <button class="folder-cancel-btn" @onclick="CancelCreateFolder" title="Abbrechen">&#10005;</button>
                             </div>
+                            @if (!string.IsNullOrEmpty(folderCreateError)) @* Duplikat-Fehlermeldung unter dem Eingabefeld *@
+                            {
+                                <div class="inline-error-msg">@folderCreateError</div>
+                            }
                         }
 
                         @* Ordner-Zeilen *@
@@ -134,6 +135,11 @@
                                     <img src="images/remove.png" alt="Löschen" />
                                 </button>
                             </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(uploadError)) @* Upload-Duplikat-Fehlermeldung *@
+                        {
+                            <div class="inline-error-msg">@uploadError</div>
                         }
 
                         @* Sektion-Header "Dokumente" *@
@@ -219,12 +225,14 @@
                             <span class="section-label">Dokumente</span>
                             <div class="section-line"></div>
                             <button class="upload-new-btn" @onclick="OnUploadClick" disabled="@isUploading" title="Datei hochladen">
-                                <svg class="upload-svg" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M9 12V4M9 4L5.5 7.5M9 4L12.5 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M3 14h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
+                                <img src="images/file-upload.png" alt="Datei hochladen" class="upload-img" /> @* Upload-Icon *@
                             </button>
                         </div>
+
+                        @if (!string.IsNullOrEmpty(uploadError)) @* Upload-Duplikat-Fehlermeldung im Ordner *@
+                        {
+                            <div class="inline-error-msg">@uploadError</div>
+                        }
 
                         @if (Documents.Count == 0)
                         {
@@ -300,407 +308,3 @@
         </div>
     }
 </div>
-
-@code {
-    private string currentTab = "Chats";
-    private List<Conversation> Chats = new List<Conversation>();
-    private List<Document> Documents = new List<Document>(); // Dokumente der aktuellen Ansicht
-    private List<Folder> Folders = new List<Folder>();
-    private int? currentFolderId = null;
-    private string currentFolderName = string.Empty;
-    private int? moveDropdownDocId = null;
-    private int? selectedDocId = null; // Ausgewähltes Dokument (Einfachklick)
-    private int? clipboardDocId = null; // Zwischenablage (Strg+C)
-    private string clipboardDocName = string.Empty;
-    private bool isDeleting = false;
-    private bool isDeletingDocument = false;
-    private bool isDeletingFolder = false;
-    private bool isLoadingChats = true;
-    private bool isLoadingDocuments = true;
-    private bool isCreatingFolder = false;
-    private bool isUploading = false;
-    private string newFolderName = string.Empty;
-    private List<int> removingChatIds = new List<int>();
-    private List<int> removingDocumentIds = new List<int>();
-    private List<int> removingFolderIds = new List<int>();
-    private DotNetObjectReference<Daten>? dotnetRef;
-
-    protected override async Task OnInitializedAsync() // Seite laden
-    {
-        await Task.Yield();
-
-        Chats = await ChatDb.LoadAllConversationsAsync();
-        isLoadingChats = false;
-        StateHasChanged();
-
-        Documents = await FolderDb.GetRootDocumentsAsync(); // Root: Dateien mit IsInRoot = true
-        Folders = await FolderDb.GetAllFoldersAsync();
-        isLoadingDocuments = false;
-        StateHasChanged();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender) // JS-Clipboard registrieren
-    {
-        if (firstRender)
-        {
-            dotnetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("clipboardHelper.register", dotnetRef);
-        }
-    }
-
-    public void Dispose()
-    {
-        JS.InvokeVoidAsync("clipboardHelper.dispose");
-        dotnetRef?.Dispose();
-    }
-
-    // --- Upload ---
-
-    private async Task OnUploadClick() // Datei-Dialog öffnen und Datei hochladen
-    {
-        try
-        {
-            isUploading = true;
-            StateHasChanged();
-
-            var result = await FilePicker.PickAsync(new PickOptions
-            {
-                PickerTitle = "Datei auswählen",
-                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
-                {
-                    { DevicePlatform.WinUI, new[] { ".pdf", ".txt", ".md", ".json" } }
-                })
-            });
-
-            if (result == null) return; // Abgebrochen
-
-            string thumbnail = await ThumbGen.GenerateThumbnailAsync(result.FullPath); // Thumbnail generieren
-
-            string ext = Path.GetExtension(result.FileName).ToLower();
-            string fileType = "unknown";
-            if (ext == ".pdf") fileType = "pdf";
-            else if (ext == ".txt") fileType = "txt";
-            else if (ext == ".md") fileType = "md";
-            else if (ext == ".json") fileType = "json";
-
-            string fileContent;
-            if (fileType == "pdf") // PDF → Base64
-            {
-                byte[] pdfBytes = await File.ReadAllBytesAsync(result.FullPath);
-                fileContent = Convert.ToBase64String(pdfBytes);
-            }
-            else // Textdatei → direkt lesen
-            {
-                fileContent = await File.ReadAllTextAsync(result.FullPath);
-            }
-
-            int docId = await DocDb.SaveDocumentAsync(result.FileName, fileContent, fileType, string.Empty, thumbnail);
-
-            if (currentFolderId != null && docId > 0) // Upload in Ordner: IsInRoot = false, nur im Ordner
-            {
-                await FolderDb.SetDocumentInRootAsync(docId, false);
-                await FolderDb.CopyDocumentToFolderAsync(docId, currentFolderId.Value);
-            }
-            // Upload in Root: IsInRoot = true (bereits gesetzt durch SaveDocumentAsync), kein Junction-Eintrag
-
-            await RefreshDocuments();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[UPLOAD] Fehler: {ex.Message}");
-        }
-        finally
-        {
-            isUploading = false;
-            StateHasChanged();
-        }
-    }
-
-    // --- Clipboard ---
-
-    private void SelectDocument(int docId) // Einfachklick: Dokument auswählen (Highlight)
-    {
-        if (selectedDocId == docId)
-            selectedDocId = null; // Nochmaliger Klick hebt Auswahl auf
-        else
-            selectedDocId = docId;
-        moveDropdownDocId = null; // Offenes Dropdown schließen
-        StateHasChanged();
-    }
-
-    private void CopyToClipboard(int docId, string docName) // Dokument in Zwischenablage legen
-    {
-        clipboardDocId = docId;
-        clipboardDocName = docName;
-        selectedDocId = docId;
-        StateHasChanged();
-    }
-
-    private void ClearClipboard()
-    {
-        clipboardDocId = null;
-        clipboardDocName = string.Empty;
-        StateHasChanged();
-    }
-
-    [JSInvokable]
-    public void OnCtrlC() // Strg+C: Ausgewähltes Dokument kopieren
-    {
-        if (selectedDocId == null) return;
-
-        foreach (Document d in Documents)
-        {
-            if (d.Id == selectedDocId)
-            {
-                clipboardDocId = d.Id;
-                clipboardDocName = d.FileName;
-                break;
-            }
-        }
-        StateHasChanged();
-    }
-
-    [JSInvokable]
-    public async Task OnCtrlV() // Strg+V: In aktuellen Bereich einfügen (Root oder Ordner)
-    {
-        if (clipboardDocId == null) return;
-        await PasteDocumentHere();
-    }
-
-    private async Task PasteDocumentHere() // Kopiert Zwischenablage-Dokument in aktuellen Bereich
-    {
-        if (clipboardDocId == null) return;
-
-        if (currentFolderId == null) // Einfügen in Root: IsInRoot = true setzen
-        {
-            await FolderDb.CopyDocumentToRootAsync(clipboardDocId.Value);
-        }
-        else // Einfügen in Ordner: Junction-Eintrag anlegen
-        {
-            await FolderDb.CopyDocumentToFolderAsync(clipboardDocId.Value, currentFolderId.Value);
-        }
-
-        ClearClipboard(); // Paste-Bar ausblenden nach erfolgreichem Einfügen
-        await RefreshDocuments();
-        StateHasChanged();
-    }
-
-    // --- Navigation ---
-
-    private async Task OpenFolder(int folderId, string folderName) // In Ordner navigieren
-    {
-        currentFolderId = folderId;
-        currentFolderName = folderName;
-        isCreatingFolder = false;
-        moveDropdownDocId = null;
-        selectedDocId = null;
-        Documents = await FolderDb.GetDocumentsInFolderAsync(folderId);
-        StateHasChanged();
-    }
-
-    private async Task NavigateToRoot() // Zurück zu Root (Hauptbereich)
-    {
-        currentFolderId = null;
-        currentFolderName = string.Empty;
-        isCreatingFolder = false;
-        moveDropdownDocId = null;
-        selectedDocId = null;
-        await RefreshDocuments();
-        Folders = await FolderDb.GetAllFoldersAsync();
-        StateHasChanged();
-    }
-
-    private async Task RefreshDocuments() // Lädt Dokumente der aktuellen Ansicht neu
-    {
-        if (currentFolderId == null)
-            Documents = await FolderDb.GetRootDocumentsAsync(); // Root: nur Dateien mit IsInRoot = true
-        else
-            Documents = await FolderDb.GetDocumentsInFolderAsync(currentFolderId.Value);
-    }
-
-    // --- Verschieben ---
-
-    private void ToggleMoveDropdown(int docId)
-    {
-        if (moveDropdownDocId == docId)
-            moveDropdownDocId = null;
-        else
-            moveDropdownDocId = docId;
-    }
-
-    private async Task MoveDocumentTo(int docId, int? targetFolderId) // Verschiebt Dokument (alle Junction-Einträge ersetzen)
-    {
-        moveDropdownDocId = null;
-        await FolderDb.MoveDocumentToFolderAsync(docId, targetFolderId);
-        await RefreshDocuments();
-        StateHasChanged();
-    }
-
-    // --- Ordner-Verwaltung ---
-
-    private void StartCreateFolder()
-    {
-        isCreatingFolder = true;
-        newFolderName = string.Empty;
-        moveDropdownDocId = null;
-    }
-
-    private void CancelCreateFolder()
-    {
-        isCreatingFolder = false;
-        newFolderName = string.Empty;
-    }
-
-    private void OnFolderNameInput(ChangeEventArgs e)
-    {
-        if (e.Value != null)
-            newFolderName = e.Value.ToString() ?? string.Empty;
-        else
-            newFolderName = string.Empty;
-    }
-
-    private async Task OnNewFolderKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await ConfirmCreateFolder();
-        else if (e.Key == "Escape") CancelCreateFolder();
-    }
-
-    private async Task ConfirmCreateFolder()
-    {
-        if (string.IsNullOrWhiteSpace(newFolderName)) return;
-
-        isCreatingFolder = false;
-        string nameToCreate = newFolderName.Trim();
-        newFolderName = string.Empty;
-
-        await FolderDb.CreateFolderAsync(nameToCreate);
-        Folders = await FolderDb.GetAllFoldersAsync();
-        StateHasChanged();
-    }
-
-    private async Task DeleteFolder(int folderId) // Ordner löschen mit Animation
-    {
-        if (isDeletingFolder) return;
-        isDeletingFolder = true;
-
-        removingFolderIds.Add(folderId);
-        StateHasChanged();
-        await Task.Delay(300);
-
-        List<Folder> updated = new List<Folder>();
-        foreach (Folder f in Folders)
-        {
-            if (f.Id != folderId) updated.Add(f);
-        }
-        Folders = updated;
-        removingFolderIds.Remove(folderId);
-        StateHasChanged();
-
-        try
-        {
-            await Task.Run(async () => await FolderDb.DeleteFolderAsync(folderId));
-            await RefreshDocuments();
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Ordners: {ex.Message}");
-        }
-        finally
-        {
-            isDeletingFolder = false;
-        }
-    }
-
-    // --- Chat-Operationen ---
-
-    private void OpenChat(int chatId) { Navigation.NavigateTo("/chat/" + chatId); }
-
-    private async Task DeleteChat(int chatId)
-    {
-        if (isDeleting) return;
-        isDeleting = true;
-
-        removingChatIds.Add(chatId);
-        StateHasChanged();
-        await Task.Delay(340);
-
-        Chats = Chats.Where(c => c.Id != chatId).ToList();
-        removingChatIds.Remove(chatId);
-        StateHasChanged();
-
-        try { await Task.Run(async () => await ChatDb.DeleteConversationAsync(chatId)); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}"); }
-        finally { isDeleting = false; }
-    }
-
-    // --- Dokument-Operationen ---
-
-    private async Task DeleteDocument(int documentId) // Datei von aktuellem Standort entfernen (löscht aus DB nur wenn letzte Kopie)
-    {
-        if (isDeletingDocument) return;
-        isDeletingDocument = true;
-
-        if (moveDropdownDocId == documentId) moveDropdownDocId = null;
-        if (selectedDocId == documentId) selectedDocId = null;
-        if (clipboardDocId == documentId) ClearClipboard();
-
-        removingDocumentIds.Add(documentId);
-        StateHasChanged();
-        await Task.Delay(300);
-
-        List<Document> updatedDocs = new List<Document>();
-        foreach (Document d in Documents)
-        {
-            if (d.Id != documentId) updatedDocs.Add(d);
-        }
-        Documents = updatedDocs;
-        removingDocumentIds.Remove(documentId);
-        StateHasChanged();
-
-        try
-        {
-            int? locationFolderId = currentFolderId; // Standort merken bevor async
-            await Task.Run(async () =>
-                await FolderDb.DeleteDocumentFromLocationAsync(documentId, locationFolderId) // Nur von diesem Standort entfernen
-            );
-        }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen: {ex.Message}"); }
-        finally { isDeletingDocument = false; }
-    }
-
-    private string GetFormattedDate(DateTime createdAt) // Datum UTC → Lokal
-    {
-        if (createdAt.Year < 2000) return "Unbekanntes Datum";
-
-        DateTime localTime = createdAt.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(createdAt, DateTimeKind.Utc).ToLocalTime()
-            : createdAt.ToLocalTime();
-
-        return localTime.ToString("dd.MM.yyyy HH:mm");
-    }
-
-    private async Task OpenDocument(int documentId) // Doppelklick: Dokument in Standard-App öffnen
-    {
-        try
-        {
-            var doc = await DocDb.GetDocumentByIdAsync(documentId);
-            if (doc == null || doc.Id < 0) return;
-
-            string tempPath = Path.Combine(Path.GetTempPath(), doc.FileName);
-
-            if (doc.FileType == "pdf")
-            {
-                try { await File.WriteAllBytesAsync(tempPath, Convert.FromBase64String(doc.FileContent)); }
-                catch (FormatException) { await File.WriteAllTextAsync(tempPath, doc.FileContent); }
-            }
-            else
-            {
-                await File.WriteAllTextAsync(tempPath, doc.FileContent);
-            }
-
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true });
-        }
-        catch { }
-    }
-}

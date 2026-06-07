@@ -58,7 +58,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         var query = this.db.Documents.AsNoTracking(); // Starte Query ohne Änderungs-Verfolgung
         var allDocuments = await query.ToListAsync(); // Lade alle Dokumente aus Datenbank
 
-        allDocuments.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        allDocuments.Sort(CompareDocumentsByUploadedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return allDocuments;
     }
 
@@ -99,7 +99,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             }
         }
 
-        filtered.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        filtered.Sort(CompareDocumentsByUploadedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return filtered;
     }
 
@@ -230,7 +230,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             }
         }
 
-        result.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt)); // Sortiere nach Datum (neueste zuerst)
+        result.Sort(CompareDocumentsByUploadedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return result;
     }
 
@@ -268,6 +268,11 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         }
 
         await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
+    }
+
+    private static int CompareDocumentsByUploadedAtDesc(Document a, Document b) // Vergleich: neuestes Dokument zuerst
+    {
+        return b.UploadedAt.CompareTo(a.UploadedAt);
     }
 
     private string ComputeFileHash(string fileContent) // Hilfsmethode: Berechnet SHA256-Hash von File-Content (für Duplikat-Erkennung)

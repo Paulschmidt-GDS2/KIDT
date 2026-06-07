@@ -136,10 +136,10 @@
 
 /* === KALENDER-CONTAINER === */
 
-/* Hauptcontainer für Kalender - kein Scroll mehr */
+/* Hauptcontainer für Kalender - kein Scroll (Monatsansicht darf nie scrollen) */
 .calendar-container {
     flex: 1; /* Nimmt verfügbaren Platz ein */
-    overflow: hidden; /* Kein Scroll mehr */
+    overflow: hidden; /* Kein Scroll - Scrollen nur innerhalb day-view */
     padding: 8px; /* Noch stärker reduzierter Innenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
     display: flex; /* Flexbox für Zentrierung */
@@ -339,11 +339,39 @@
     animation: view-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
     width: 100%; /* Volle Breite */
     max-width: 600px; /* Maximale Breite */
+    max-height: calc(100vh - 120px); /* Begrenzt auf sichtbaren Bereich unterhalb Toolbar */
+    overflow-y: auto; /* Scroll nur wenn Tagesinhalt zu lang */
+    overflow-x: hidden;
     padding: 24px; /* Innenabstand */
     background: transparent; /* Kein Hintergrund */
     border: 2px solid var(--clr-text); /* Dunkler Rahmen */
     border-radius: 3px; /* Kleinere abgerundete Ecken */
     box-sizing: border-box; /* Padding in Breite einrechnen */
+    scrollbar-color: var(--clr-text) transparent; /* Firefox: Griff in Textfarbe, Hintergrund transparent */
+    scrollbar-width: thin; /* Dünne Scrollbar Firefox */
+}
+
+/* Scrollbar-Breite */
+.day-view::-webkit-scrollbar {
+    width: 8px;
+}
+
+/* Scrollbar-Hintergrund */
+.day-view::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 8px;
+}
+
+/* Scrollbar-Griff */
+.day-view::-webkit-scrollbar-thumb {
+    background: var(--clr-text); /* Griff in App-Textfarbe */
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+/* Scrollbar-Griff beim Hover */
+.day-view::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
 }
 
 /* Titel der Tagesansicht */

@@ -31,7 +31,7 @@
 
   <ItemGroup>
     <!-- App Icon -->
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+    <MauiIcon Include="wwwroot\images\kidt_logo.png" Color="#848877" />
 
     <!-- Splash Screen -->
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
@@ -53,19 +53,19 @@
     <Compile Remove="Docs\**" />
     <Compile Remove="Migrations\**" />
     <Compile Remove="Tests\**" />
-    <Compile Remove="wwwroot\js\**" />
+
     <Content Remove="Database\Migrations\**" />
     <Content Remove="Data\**" />
     <Content Remove="Docs\**" />
     <Content Remove="Migrations\**" />
     <Content Remove="Tests\**" />
-    <Content Remove="wwwroot\js\**" />
+
     <EmbeddedResource Remove="Database\Migrations\**" />
     <EmbeddedResource Remove="Data\**" />
     <EmbeddedResource Remove="Docs\**" />
     <EmbeddedResource Remove="Migrations\**" />
     <EmbeddedResource Remove="Tests\**" />
-    <EmbeddedResource Remove="wwwroot\js\**" />
+
     <MauiXaml Remove="Database\Migrations\**" />
     <MauiXaml Remove="Data\**" />
     <MauiXaml Remove="Docs\**" />
@@ -76,10 +76,10 @@
     <None Remove="Docs\**" />
     <None Remove="Migrations\**" />
     <None Remove="Tests\**" />
-    <None Remove="wwwroot\js\**" />
+
     
-    <!-- OpenAI API Key -->
-    <None Include="openai-api-key.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- OpenRouter API Key -->
+    <None Include="OpenRouter-api-key.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -104,7 +104,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PRIResource Remove="wwwroot\js\**" />
+    <Folder Include="AppPackages\" />
   </ItemGroup>
 
   <ItemGroup>

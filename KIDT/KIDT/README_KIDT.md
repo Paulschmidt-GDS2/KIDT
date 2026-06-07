@@ -1,1334 +1,723 @@
-﻿# KIDT - KI-gestützter Dokumenten- und Terminmanager
+# KIDT - Technische Projektdokumentation
 
-Ein intelligentes Desktop-Chat-System mit Multi-Model-Architektur, MCP-Integration und Dokument-Verwaltung.
+.NET MAUI 10 / Blazor Hybrid Desktop-App (Windows)
+Router-LLM: google/gemini-2.5-flash-lite via OpenRouter
+Analyse-LLM: qwen3.5:9b via Ollama (lokal)
+Datenbank: MySQL via Entity Framework Core
 
 ---
 
 ## Inhaltsverzeichnis
 
-- [Überblick] → Z. 20-62
-- [Architektur] → Z. 64-98
-- [File-Struktur] → Z. 100-230
-- [Datenfluss & Ablauf] → Z. 232-470
-- [MCP-Integration] → Z. 472-650
-- [Modelle & Router] → Z. 652-720
-- [Features] → Z. 722-800
-- [Datenbank] → Z. 802-865
-- [Wichtige Konzepte] → Z. 867-950
-- [Verwendungsbeispiele] → Z. 952-1020
-- [Entwickler-Notizen] → Z. 1022-Ende
+1. Architektur und Modelle
+2. Dependency Injection (wer kennt wen)
+3. Services - technische Details
+4. Pages und Code-Behind
+5. MCP-Tools (15 gesamt)
+6. Kernaablaeufe
+7. Datenbankschema
+8. Dateistruktur
+9. Setup
 
 ---
 
-## Überblick
+## 1. Architektur und Modelle
 
-KIDT ist ein .NET MAUI Desktop-Chat mit intelligenter Multi-Model-Architektur:
-- **3 spezialisierte KI-Modelle** (Router, Conversation, Data Analysis)
-- **MCP (Model Context Protocol)** für Tool-Funktionen (Dokumente + Kalender)
-- **MySQL-Datenbank** für Chat-History, Dokumente & Kalender-Termine (Multi-User-fähig!)
-- **PDF/Text-Upload** mit automatischer Extraktion
-- **Dokument-Suche** via Function Calling
-- **Kalender-Verwaltung** mit Monat/Woche/Tag-Ansichten
-- **Erinnerungen** mit automatischen Notifications
+### Zwei-Modell-Architektur
 
 ```
-+----------------------------------------------------------------+
-|                      KIDT Desktop App                          |
-+----------------------------------------------------------------+
-|  Chat  |  Kalender  |  Dokumente  |  Chat-History  |  Upload   |
-+--------+------------------------------------------------+-------+
-         |                                                |
-         v                                                v
-+----------------------+              +---------------------+
-|   ChatCoordinator    |<------------>|  FileService        |
-+----------+-----------+              +---------------------+
-           |
-           v
-    +-------------+
-    |RouterService| (GPT-4) ---> Intent Detection + MCP Tools
-    +------+------+
-           |
-      +----+----------------+-----------------+
-      v                     v                 v
-+------------+  +--------------+  +-------------------+
-|Conversation|  |DataAnalysis  |  | CalendarService + |
-|(phi3:mini) |  |(qwen2.5:7b)  |  | NotificationSvc   |
-+------------+  +--------------+  +-------------------+
+Nutzer-Eingabe
+      |
+      v
+ChatCoordinator          (Services/ChatCoordinator.cs)
+      |
+      +---> RouterService (Gemini 2.5 Flash Lite via OpenRouter)
+      |         |
+      |         +--> Tool-Call erkannt?
+      |         |        |
+      |         |        +--> MCP-Tool ausfuehren (Dokument / Ordner / Kalender)
+      |         |        +--> Direkte Antwort an UI
+      |         |
+      |         +--> analyze_document Tool erkannt?
+      |                  |
+      |                  v
+      +---> DataAnalysisService (qwen3.5:9b via Ollama)
+                         |
+                         v
+                  Antwort an UI
 ```
+
+Gemini uebernimmt: Intent-Erkennung, alle Tool-Calls, direkte Konversation.
+qwen3.5:9b uebernimmt: ausschliesslich Dokument-Analyse (wenn analyze_document aufgerufen).
+
+### Modelle
+
+| Modell                 | Engine         | Aufgabe                                        | Konfiguration                    |
+|------------------------|----------------|------------------------------------------------|----------------------------------|
+| gemini-2.5-flash-lite  | OpenRouter API | Routing, Tool-Calls, Konversation              | Temperature 0.1, MaxTokens 2000  |
+| qwen3.5:9b             | Ollama lokal   | Dokument-Analyse (PDF/Text-Inhalt)             | Temperature 0.3, MaxTokens 2000  |
 
 ---
 
-## Architektur
+## 2. Dependency Injection (wer kennt wen)
 
-### Service-Hierarchie
+Registrierung in `MauiProgram.cs`:
 
 ```
-User Input
-    |
-    v
-ChatCoordinator (Orchestrator)
-    |
-    +---> FileService (Upload & Extract)
-    |
-    v
-RouterService (GPT-4)
-    |
-    +---> MCP Tools (search_documents, add_document_to_chat, list_calendar_events, create_calendar_event, delete_calendar_event)
-    +---> ConversationService (phi3:mini)
-    +---> DataAnalysisService (qwen2.5:7b)
-    |
-    v
-Database (ChatDb / DocDb / CalendarEvents)
-    |
-    v
-NotificationService (Background Timer für Erinnerungen)
+Singleton:  ChatCoordinator      --> kennt IServiceProvider (erstellt Scopes intern)
+Singleton:  AppNotificationService
+Singleton:  ThumbnailGenerator
+Singleton:  ThemeService
+Singleton:  ITitleBarService / TitleBarService (Windows)
+
+Transient:  ChatDbService
+Transient:  DocumentDbService
+Transient:  CalendarService
+Transient:  FolderDbService
+
+Transient:  ChatDbContext (EF Core, MAUI braucht Transient statt Scoped)
 ```
 
-### Modell-Spezialisierung
+Transient-Services werden nicht direkt injiziert sondern per `IServiceProvider.CreateScope()` erzeugt.
+Grund: Singleton-Services duerfen keinen Transient-Service direkt halten (Lifetime-Konflikt).
 
-| Modell            | Engine              | Aufgabe                                        |
-|-------------------|---------------------|------------------------------------------------|
-| **Router**        | GPT-4 (Azure)       | Intent-Erkennung, Tool-Calls, Dokumenten-Suche |
-| **Conversation**  | phi3:mini (Ollama)  | Schnelle, freundliche Gespräche                |
-| **Data Analysis** | qwen2.5:7b (Ollama) | Präzise Daten-Analyse                          |
-
----
-
-## File-Struktur
-
-### UI (Components/Pages)
-
-| File             | Verantwortung                                                                                      |
-|------------------|-----------------------------------------------------------------------------------------------------|
-| `Home.razor`     | Chat-Interface, Textarea, Upload-Badge, Typewriter-Effekt, Message-Rendering                       |
-| `Daten.razor`    | Chat-History & Dokument-Explorer, Tab-Navigation, Lösch-Funktionen                                  |
-| `Kalender.razor` | Kalender-Ansichten (Monat/Woche/Tag), Termin-Verwaltung, Add/Edit/Delete-Dialogs, Color-Picker     |
-
-#### Home.razor - Wichtige Methoden:
-- `OnInitializedAsync()` → Lade bestehenden Chat aus DB (parallel Messages + Documents)
-- `SendMessage()` → User-Nachricht → Router → AI-Antwort → DB-Speicherung (parallel)
-- `OnUploadClick()` → Datei-Upload → Extraktion → DB-Speicherung (Documents + ConversationDocuments)
-- `TypewriterEffect()` → Zeichen-für-Zeichen Anzeige der AI-Antwort
-
-#### Kalender.razor - Wichtige Methoden:
-- `OnInitializedAsync()` → Lade alle Termine aus DB + Starte Notification-Service
-- `LoadEventsAsync()` → Lade Termine aus CalendarService
-- `GetEventsForDate(date)` → Filtert Termine für spezifisches Datum (für Monat/Woche/Tag-Ansicht)
-- `OnDayClick(date)` → Öffnet Add-Dialog für gewähltes Datum
-- `OnEventClick(event)` → Öffnet Edit-Dialog für bestehenden Termin
-- `SaveEventAsync()` → Speichert neuen/bearbeiteten Termin (Create oder Update)
-- `DeleteEventAsync(eventId)` → Löscht Termin aus DB + UI
-
-#### Kalender.razor - Ansichten:
-- **Monatsansicht**: 7x6 Grid (42 Zellen), max 3 Termine pro Tag sichtbar, "+X weitere" Indikator
-- **Wochenansicht**: 7 Tagesspalten (Mo-So), alle Termine sichtbar, Timeline-Layout
-- **Tagesansicht**: Fokus auf einzelnen Tag, Inline-Add-Input, alle Termine sichtbar
-
-### UI (Components/UI)
-
-| File                        | Verantwortung                                                             |
-|-----------------------------|---------------------------------------------------------------------------|
-| `NotificationComponent.razor` | Toast-Notifications, Startup-Overview (nächste 3 Termine), Event-Reminder |
-
-#### NotificationComponent.razor - Features:
-- **Startup-Notification**: Zeigt beim App-Start nächste 3 Termine
-- **Event-Reminder**: Automatische Erinnerungen X Minuten vor Termin
-- **Auto-Dismiss**: Toast verschwindet nach 10 Sekunden (oder manuell mit X)
-- **Click-to-Calendar**: Klick auf Notification → Navigation zu Kalender-Seite
-
----
-
-### Services
-
-| Service                    | Zweck                                                                                                 | Modell     |
-|----------------------------|-------------------------------------------------------------------------------------------------------|------------|
-| `ChatCoordinator`          | **Hauptorchestrator**: Koordiniert Upload, Router, Services, DB-Speicherung                           | -          |
-| `RouterService`            | **Intent-Detection**: Analysiert User-Nachricht → `conversation` / `dataAnalysis` / MCP Tools         | GPT-4      |
-| `ConversationService`      | Schnelle Gespräche, Small Talk                                                                        | phi3:mini  |
-| `DataAnalysisService`      | Daten-Analyse mit erhöhtem Token-Limit                                                                | qwen2.5:7b |
-| `FileService`              | Text-Extraktion aus PDF/TXT/MD/JSON                                                                   | -          |
-| `ThumbnailGenerator`       | PDF-Thumbnail-Generierung (erste Seite)                                                               | -          |
-| `CalendarService`          | **Kalender-DB-Operationen**: CRUD für CalendarEvents, Datumsbereich-Queries                          | -          |
-| `AppNotificationService`   | **Background-Timer**: Prüft alle 30s auf fällige Erinnerungen, Startup-Notification                  | -          |
-| `ChatEventService`         | **Event-Broker**: Singleton für Chat-Reload-Events (zwischen Home.razor und Daten.razor)             | -          |
-
-#### ChatCoordinator - Workflow:
-
-**SendAsync(userMessage, conversationId)**:  
-1. Lade verknüpfte Dokumente (`LoadDocumentsForConversation`)  
-2. Lade letzte 10 Nachrichten (`GetChatContext`)  
-3. Router-Verarbeitung (`RouterService.ProcessAsync`)  
-   - MCP Tools: Dokumente, Kalender  
-   - Intent-Classification: conversation/dataAnalysis  
-4. Weiterleitung an `ConversationService` oder `DataAnalysisService`  
-5. Return `ChatResponse { Message, FoundDocuments }`  
-
-→ Siehe: `Platforms/Windows/ChatCoordinator.cs`
-
-#### CalendarService - Wichtige Methoden:
-- `GetAllEventsAsync()` → Lade alle Termine aus DB, sortiert nach Start
-- `GetEventsByDateRangeAsync(start, end)` → Lade Termine für Zeitraum
-- `AddEventAsync(event)` → Erstelle neuen Termin, setze CreatedAt
-- `UpdateEventAsync(event)` → Aktualisiere bestehenden Termin, setze UpdatedAt
-- `DeleteEventAsync(eventId)` → Lösche Termin aus DB
-- `EnsureDatabaseSchemaAsync()` → Migriert DB-Schema (fügt ReminderMinutesBefore, ReminderShown hinzu)
-
-#### AppNotificationService - Workflow:
-
-**Start()**:  
-- Timer läuft alle 30 Sekunden  
-- `CheckForDueRemindersAsync()`: Prüft fällige Erinnerungen  
-- Berechnet ReminderTime = EventDateTime - ReminderMinutesBefore  
-- Feuert `OnNotificationRequested` Event bei Fälligkeit  
-- Setzt `ReminderShown = true` (verhindert Duplikate)  
-
-**ShowStartupNotificationAsync()**:  
-- Lädt nächste 3 bevorstehende Termine  
-- Feuert Event mit `NotificationType.StartupOverview`  
-
-→ Siehe: `Services/NotificationService.cs`
-
-#### RouterService - Ablauf:
+Ablauf in RouterService und ChatCoordinator:
+```csharp
+using var scope = this.serviceProvider.CreateScope();
+var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>();
 ```
-1. Kernel mit MCP-Tools erstellen (search_documents, add_document_to_chat, list_calendar_events, create_calendar_event, delete_calendar_event)
-2. System-Prompt mit Tool-Instruktionen
-3. GetChatMessageContentAsync() ---> GPT-4 entscheidet
-4. Prüfe Response:
-   +---> FunctionCallContent? ---> Führe Tool manuell aus
-   +---> JSON {needsRouting:true}? ---> Route zu Service
-   +---> Fallback ---> ClassifyIntentAsync()
-5. Return RouterResponse { ShouldRoute, TargetService, FoundDocuments }
+
+Razor-Pages injizieren Services direkt per `@inject`:
+```
+Home.razor:    @inject ChatCoordinator Chat
+               @inject ChatDbService Db
+               @inject ThumbnailGenerator ThumbGen
+               @inject IServiceProvider ServiceProvider
+
+Daten.razor:   @inject ChatDbService ChatDb
+               @inject DocumentDbService DocDb
+               @inject FolderDbService FolderDb
+               @inject ThumbnailGenerator ThumbGen
+
+Kalender.razor: @inject CalendarService CalendarService
 ```
 
 ---
 
-### Database
+## 3. Services - technische Details
 
-| Service             | Zweck                                                                                      |
-|---------------------|--------------------------------------------------------------------------------------------|
-| `ChatDbContext`     | EF Core Context (Conversations, Messages, Documents, ConversationDocuments, CalendarEvents)|
-| `ChatDbService`     | CRUD für Conversations, Messages                                                            |
-| `DocumentDbService` | CRUD für Documents (global), Verknüpfungen (ConversationDocuments), Suche                  |
-| `CalendarService`   | CRUD für CalendarEvents, Datumsbereich-Queries, Schema-Migration                           |
+### ChatCoordinator  (Services/ChatCoordinator.cs)
 
-#### Wichtige Methoden:
+Singleton. Zentraler Orchestrator. Einzige Klasse die Home.razor direkt kennt (via IAsyncEnumerable Streaming).
 
-**ChatDbService**:
-- `CreateConversationAsync()` → Neue Conversation
-- `SaveMessageAsync(conversationId, isUser, text, documentIds?)` → Speichere Nachricht + optional Dokument-IDs als JSON
-- `LoadMessagesAsync()` → Lade alle Messages für Chat (inkl. DocumentIdsJson)
-- `LoadAllConversationsAsync()` → Lade alle Conversations mit verknüpften Documents (via ConversationDocuments)
-- `DeleteConversationAsync()` → Lösche Conversation + Messages + ConversationDocuments-Verknüpfungen
+Felder:
+- `RouterService router` - wird in InitializeAsync erstellt
+- `DataAnalysisService dataAnalysis` - fuer Ollama-Analyse
+- `FileService fileService` - fuer Datei-Text-Extraktion
+- `string currentFileName / currentFileContent` - aktuell angehaengte Datei
 
-**DocumentDbService**:
-- `SaveDocumentAsync()` → Speichere Dokument (mit Hash für Duplikat-Erkennung)
-- `SearchDocumentsAsync(searchTerm)` → Volltextsuche in FileName + ExtractedText
-- `LinkDocumentToConversationAsync()` → Erstelle Verknüpfung in ConversationDocuments
-- `GetDocumentsForConversationAsync()` → Lade alle verknüpften Dokumente für Chat
+Methoden:
+- `InitializeAsync()` - laedt API-Key, erstellt Services, wird lazy beim ersten Aufruf ausgefuehrt
+- `SendStreamAsync(userMessage, conversationId, deepThink, cancellationToken)` - Hauptmethode
+  1. IsValidUserInput() pruefen (blockiert Gibberish/Wiederholungen)
+  2. RouterService.ProcessAsync() aufrufen
+  3. Wenn ShouldRoute=false: direkte Antwort als ChatStreamChunk zurueck
+  4. Wenn ShouldRoute=true (dataAnalysis): DataAnalysisService.SendAsync() aufrufen
+  5. yield return ChatStreamChunk mit Text, FoundDocuments, FoundEvents, ModelLabel
+- `UploadFileAsync(filePath)` - FileService.ExtractTextAsync(), setzt currentFileContent
+- `ClearFile()` - leert currentFileName und currentFileContent
+- `GetCurrentFileContent()` - liefert extrahierten Datei-Text fuer DB-Speicherung
 
-**CalendarService**:
-- `GetAllEventsAsync()` → Lade alle Termine, sortiert nach Start
-- `GetEventByIdAsync(eventId)` → Lade einzelnen Termin
-- `GetEventsByDateRangeAsync(start, end)` → Lade Termine für Zeitraum
-- `AddEventAsync(event)` → Erstelle neuen Termin, setze CreatedAt
-- `UpdateEventAsync(event)` → Aktualisiere Termin, setze UpdatedAt
-- `DeleteEventAsync(eventId)` → Lösche Termin
-- `EnsureDatabaseSchemaAsync()` → Migriert DB-Schema (ALTER TABLE für neue Spalten)
+### RouterService  (Services/RouterService.cs + Handlers.cs + Models.cs)
 
----
+Partial class, drei Dateien. Erstellt und gehalten von ChatCoordinator.
 
-## Datenfluss & Ablauf
+RouterService.cs - Kernlogik:
+- `InitializeAsync()` - liest OpenRouter-api-key.txt aus AppDomain.BaseDirectory
+- `ProcessAsync(userMessage, hasFile, conversationId, cancellationToken)` - Hauptmethode:
+  1. Kernel mit AddOpenAIChatCompletion (OpenRouter-Endpoint) aufbauen
+  2. McpToolsRegistry.RegisterTools() - alle 15 Tools registrieren
+  3. System-Prompt mit aktuellem Datum/Zeit erstellen (BuildSystemPrompt)
+  4. Letzte 10 Nachrichten aus ChatDbService laden, als ChatHistory aufbauen
+  5. DocIDs aus letzten 3 Nachrichten extrahieren, als CONTEXT-System-Message anhaengen
+  6. FunctionChoiceBehavior.Auto (autoInvoke=false, AllowParallelCalls=false) - manueller Dispatch
+  7. GetChatMessageContentAsync() aufrufen
+  8. Bei ArgumentOutOfRangeException(ChatFinishReason): einmal Retry nach 300ms
+  9. Response.Items nach FunctionCallContent durchsuchen
+  10. Tool-Name normalisieren (NormalizeFunctionName: entfernt Gemini-Prefixe wie "Document_")
+  11. Tool in Kernel suchen (FindFunctionInKernel: plugin-unabhaengig per Name)
+  12. Tool ausfuehren: fn.InvokeAsync(kernel, arguments)
+  13. DispatchToolResultAsync() fuer passenden Handler
+  14. Kein Tool: JSON-Route pruefen oder direkte Konversationsantwort
 
-### Chat-Nachricht senden
+RouterService.Handlers.cs - 14 Handler:
+- HandleSearchDocumentsAsync - laedt volle Dokumente per ID, gibt Cards zurueck
+- HandleListCalendarEventsAsync - laedt volle Events per ID, gibt Cards zurueck
+- HandleCreateCalendarEvent / HandleDeleteCalendarEvent / HandleUpdateCalendarEvent
+- HandleAddDocumentToChatAsync - bei Erfolg: ShouldRoute=true -> DataAnalysis
+- HandleListDocumentsInFolderAsync - wie SearchDocuments, mit DocID-Marker
+- HandleFolderOperationResult - universell fuer alle 6 Ordner-Operationen
+- HandleListAllFoldersResult / HandleFindDocumentsResult
+- HandleAnalyzeDocumentAsync - ShouldRoute=true, TargetService="dataAnalysis"
 
-```
-User gibt Text ein ---> Enter
-  |
-  v
-Home.razor: SendMessage()
-  +---> InputText leeren (sofort)
-  +---> User-Nachricht zu UI hinzuf×gen
-  +---> Loading-Nachricht anzeigen
-  |
-  +---> Parallel:
-  |    +---> DB: SaveMessageAsync(user) + UpdateTitle
-  |    +---> Chat.SendAsync() ---> Router
-  |
-  v
-RouterService.ProcessAsync()
-  +---> System-Prompt + User-Message
-  +---> GPT-4 ---> Tool-Call oder Intent?
-  |
-  +---> TOOL: search_documents?
-  |    +---> DocumentDbService.SearchDocumentsAsync()
-  |         +---> Return RouterResponse { DirectResponse, FoundDocuments }
-  |
-  +---> INTENT: conversation/dataAnalysis?
-       +---> Return RouterResponse { ShouldRoute: true, TargetService }
-  |
-  v
-ChatCoordinator:
-  +---> RouterResponse.ToolWasUsed? ---> Return sofort
-  +---> RouterResponse.ShouldRoute?
-       +---> ConversationService.SendAsync() oder
-       +---> DataAnalysisService.SendAsync()
-            +---> Return ChatResponse { Message }
-  |
-  v
-Home.razor:
-  +---> Loading-Nachricht entfernen
-  +---> Assistent-Nachricht hinzuf×gen
-  +---> TypewriterEffect() starten
-  +---> Parallel: SaveMessageAsync(assistant, documentIds)
-```
+RouterService.Models.cs - interne JSON-Klassen:
+- SearchResultJson, CalendarListResultJson, CalendarCreateResultJson
+- CalendarDeleteResultJson, CalendarUpdateResultJson
+- FolderResultJson, FolderListResultJson, AllFoldersResultJson
+- FindDocumentsResultJson, AddDocumentResultJson, SimpleRoutingJson
 
-### Datei hochladen
+### DataAnalysisService  (Services/DataAnalysisService.cs)
 
-```
-User klickt Upload-Button
-  |
-  v
-Home.razor: OnUploadClick()
-  +---> FilePicker.PickAsync() ---> Windows Explorer
-  +---> Badge anzeigen (sofort)
-  +---> Loading-Nachricht
-  |
-  v
-Chat.UploadFileAsync()
-  +---> FileService.ExtractTextAsync()
-       +---> PDF? ---> PdfPig.ExtractText()
-       +---> TXT/MD/JSON? ---> File.ReadAllText()
-  |
-  v
-Home.razor:
-+---> TypewriterEffect() für Ergebnis
-+---> Parallel: Task.Run()
-     +---> ThumbnailGenerator.GenerateThumbnailAsync()
-     +---> DocDb.SaveDocumentAsync() // Global + Hash-Check
-     +---> DocDb.LinkDocumentToConversationAsync() // Verkn×pfung erstellen
-     +---> Db.SaveMessageAsync(assistant, text)
-```
+Gehalten von ChatCoordinator. Ollama HTTP-Client.
+- Endpoint: `http://localhost:11434` (hardcodiert)
+- Modell: qwen3.5:9b
+- `SendAsync(userMessage, fileContent, fileName, maxTokens, chatHistory, deepThink, ct)`:
+  System-Prompt + Chat-History + Datei-Inhalt + Frage -> Ollama -> Antwort als string
 
-### Dokument suchen
+### CalendarService  (Database/CalendarService.cs)
 
-```
-User: "Hast du Dokumente ×ber Python?"
-  |
-  v
-RouterService: search_documents Tool erkannt
-  +---> System-Prompt instruiert: "Du MUSST Tools nutzen!"
-  +---> GPT-4 Response: FunctionCallContent { FunctionName: "search_documents", Arguments: {query: "Python"} }
-  |
-  v
-RouterService: Tool manuell ausFühren
-  +---> kernel.Plugins.GetFunction("Document", "search_documents")
-  +---> function.InvokeAsync(kernel, arguments)
-  |
-  v
-DocumentTools.SearchDocuments(query: "Python")
-  +---> DocumentDbService.SearchDocumentsAsync("Python")
-  +---> Return JSON: { found: 2, documentIds: [1, 5] }
-  |
-  v
-RouterService:
-  +---> Parse JSON
-  +---> Lade volle Dokumente: GetDocumentByIdAsync(1), GetDocumentByIdAsync(5)
-  +---> Return RouterResponse { DirectResponse: "2 Dokument(e) gefunden", FoundDocuments: [doc1, doc5] }
-  |
-  v
-Home.razor: Zeige Dokumente als Cards mit Thumbnail
-```
+Transient. In `Database/` angesiedelt da eng mit EF-Core-Context verzahnt. Direkt von RouterService-Scopes und Razor-Pages genutzt.
+- `GetAllEventsAsync()` - alle Termine sortiert nach Start
+- `GetEventByIdAsync(id)` - Einzel-Termin fuer Card-Anzeige
+- `AddEventAsync(event)` / `UpdateEventAsync(event)` / `DeleteEventAsync(id)`
+- `DeleteEventDirectAsync(event)` - fuer Kalender.razor (hat das Objekt bereits)
+- `EnsureDatabaseSchemaAsync()` - Raw SQL ALTER TABLE fuer neue Spalten (ignoriert Fehler 1060)
 
-### Termin erstellen (Kalender-UI)
+### ChatDbService  (Database/ChatDbService.cs)
 
-```
-User klickt auf Tag in Kalender
-  |
-  v
-Kalender.razor: OnDayClick(date)
-  +---> Öffne Add-Dialog
-  +---> Zeige Datum, Input-Felder (Titel, Ganztägig-Checkbox, Zeit, Farbe, Erinnerung)
-  |
-  v
-User füllt Formular aus + klickt "Hinzufügen"
-  |
-  v
-SaveEventAsync()
-  +---> Validierung: Titel nicht leer?
-  +---> Erstelle CalendarEvent-Objekt
-       +---> Start = gewähltes Datum
-       +---> Title = User-Input
-       +---> IsAllDay = Checkbox-State
-       +---> Time = TimeSpan (falls nicht ganztägig)
-       +---> ColorIndex = gewählte Farbe (0-7)
-       +---> ReminderMinutesBefore = Dropdown-Auswahl (null, 15, 30, 60, 1440)
-  |
-  v
-CalendarService.AddEventAsync()
-  +---> Setze CreatedAt = DateTime.Now
-  +---> _dbContext.CalendarEvents.Add(event)
-  +---> SaveChangesAsync()
-  |
-  v
-Kalender.razor:
-  +---> Schließe Dialog
-  +---> LoadEventsAsync() ---> UI refresh
-```
+Transient. Chat-History und Konversationen.
+- `CreateConversationAsync(title)` - neue Conversation
+- `SaveMessageAsync(convId, isUser, text, docIds?, eventIds?)` - Nachricht + JSON-Arrays
+- `LoadMessagesAsync(convId)` - letzte Nachrichten fuer Context und UI-Reload
+- `LoadAllConversationsAsync()` - alle Chats mit LinkedDocuments (manuell via ConversationDocuments geladen)
+- `DeleteConversationAsync(id)` - Conversation + Messages + ConversationDocuments
+- `UpdateConversationTitleAsync(id)` - setzt Titel aus erster User-Nachricht (max 50 Zeichen)
+- `GetFullChatHistoryAsync(convId)` - formatierter Text fuer DataAnalysis-Context
 
-### Termin erstellen (via Chat + MCP Tool)
+### DocumentDbService  (Database/DocumentDbService.cs)
 
-```
-User im Chat: "Erstelle einen Termin für morgen 14:00 - Meeting mit Team"
-  |
-  v
-RouterService.ProcessAsync()
-  +---> GPT-4 erkennt create_calendar_event Tool
-  +---> FunctionCallContent { 
-          FunctionName: "create_calendar_event", 
-          Arguments: { 
-            date: "2025-01-16", 
-            title: "Meeting mit Team",
-            isAllDay: false,
-            time: "14:00",
-            colorIndex: 0,
-            reminderMinutes: 15
-          }
-        }
-  |
-  v
-RouterService: Tool manuell ausführen
-  +---> kernel.Plugins.GetFunction("Calendar", "create_calendar_event")
-  +---> function.InvokeAsync(kernel, arguments)
-  |
-  v
-CalendarTools.CreateCalendarEvent()
-  +---> Validierung: Datum parsen, Titel nicht leer, ColorIndex 0-7
-  +---> Zeit parsen (falls !isAllDay)
-  +---> Erstelle CalendarEvent
-  +---> CalendarService.AddEventAsync()
-  +---> Return JSON: { success: true, message: "Termin erstellt: Meeting mit Team am 16.01.2025 14:00", eventId: 42 }
-  |
-  v
-RouterService:
-  +---> Parse JSON
-  +---> Return RouterResponse { DirectResponse: "Termin erstellt: ..." }
-  |
-  v
-Home.razor: Zeige Bestätigung als AI-Nachricht
-```
+Transient. Globale Dokument-Bibliothek.
+- `SaveDocumentAsync(name, content, type, extractedText, thumbnail)` - prueft SHA256-Hash auf Duplikate
+- `GetDocumentByIdAsync(id)` - Einzel-Dokument
+- `SearchDocumentsAsync(query)` - LIKE-Suche in FileName + ExtractedText
+- `GetDocumentsForConversationAsync(convId)` - alle verknuepften Dokumente
+- `LinkDocumentToConversationAsync(docId, convId)` - Junction-Eintrag
+- `UnlinkDocumentFromConversationAsync(docId, convId)` - Junction-Eintrag loeschen
 
-### Erinnerung auslösen (Background-Service)
+### FolderDbService  (Database/FolderDbService.cs)
 
-```
-AppNotificationService Timer (alle 30s)
-  |
-  v
-CheckForDueRemindersAsync()
-  +---> Lade alle Events mit ReminderMinutesBefore != null && !ReminderShown
-  +---> Für jeden Event:
-       +---> Berechne ReminderTime = EventDateTime - ReminderMinutesBefore
-       +---> Now >= ReminderTime && Now < ReminderTime+5min?
-            +---> Setze ReminderShown = true
-            +---> SaveChangesAsync()
-            +---> Feuere OnNotificationRequested Event
-  |
-  v
-MainLayout.razor: OnNotificationRequested Event empfangen
-  +---> NotificationComponent: ShowNotification(data)
-       +---> Zeige Toast mit Termin-Details
-       +---> Auto-Dismiss nach 10 Sekunden
-       +---> Click ---> Navigation zu /kalender
-```
+Transient. Ordner-Verwaltung mit n:m-Beziehung.
+- `GetAllFoldersAsync()` / `CreateFolderAsync(name)` / `DeleteFolderAsync(id)`
+- `GetRootDocumentsAsync()` - Dokumente mit IsInRoot=true
+- `GetDocumentsInFolderAsync(folderId)` - Dokumente via DocumentFolders-Junction
+- `CopyDocumentToFolderAsync(docId, folderId)` - neuer Junction-Eintrag
+- `CopyDocumentToRootAsync(docId)` - setzt IsInRoot=true
+- `MoveDocumentToFolderAsync(docId, folderId?)` - entfernt alle Junctions, setzt neuen Standort
+- `SetDocumentInRootAsync(docId, inRoot)` - IsInRoot setzen
+- `DeleteDocumentFromLocationAsync(docId, folderId?)` - entfernt nur von diesem Standort
+- `EnsureDatabaseSchemaAsync()` - erstellt Folders + DocumentFolders, migriert altes FolderId-Feld
+
+### AppNotificationService  (Services/NotificationService.cs)
+
+Singleton. Background-Timer.
+- Timer laeuft alle 30 Sekunden
+- `CheckForDueRemindersAsync()`:
+  Events mit ReminderMinutesBefore != null und ReminderShown=false laden
+  ReminderTime = EventStart - ReminderMinutesBefore Minuten
+  Wenn Now >= ReminderTime und Now < ReminderTime+5min:
+  ReminderShown=true setzen, Event `OnNotificationRequested` ausloesen
+- `ShowStartupNotificationAsync()` - naechste 3 Termine bei App-Start anzeigen
+- `OnNotificationRequested` - event Action<NotificationData>, von MainLayout abonniert
+
+### ThumbnailGenerator  (Services/ThumbnailGenerator.cs)
+
+Singleton. Windows-only (Windows.Data.Pdf).
+- `GenerateThumbnailAsync(filePath)` - nur bei .pdf, sonst string.Empty
+- PDF-Rendering: erste Seite, 200px Breite, als PNG -> Base64-String
+- Ergebnis wird in Document.ThumbnailBase64 gespeichert
+
+### ThemeService  (Services/ThemeService.cs)
+
+Singleton. Hell/Dunkel-Theme.
+- Liest und schreibt Theme-Einstellung via MAUI Preferences API
+- TitleBarService (Windows-spezifisch) passt Titelleisten-Farbe ans Theme an
+
+### ChatEventService  (Services/ChatEventService.cs)
+
+Static. Event-Broker fuer Neuer-Chat-Aktion.
+- `OnNewChatRequested` - static event, von MainLayout ausgeloest, von Home.razor abonniert
+
+### FileService  (Platforms/Windows/FileService.cs)
+
+Erstellt von ChatCoordinator (nicht per DI).
+- `ExtractTextAsync(filePath)`:
+  .pdf -> PdfPig Textextraktion seitenweise
+  .txt/.md/.json -> File.ReadAllText
 
 ---
 
-## MCP-Integration
+## 4. Pages und Code-Behind
 
-### Was ist MCP?
+### Home (Chat-Seite)
 
-**Model Context Protocol** = Tool-Funktionen für KI-Modelle (×hnlich OpenAI Function Calling)
+Vier Dateien bilden eine partial class:
 
-### Implementierung
+`Home.razor` - Template
+- Rendert Nachrichten-Liste mit ChatMessage-Objekten
+- Assistent-Nachrichten: Typewriter-Text + optionale Dokument-Cards + Event-Cards
+- Dokument-Card: Thumbnail oder File-Icon, Klick oeffnet Datei, Button "Zum Chat hinzufuegen"
+- Event-Card: Datum, Zeit, Titel, Loeschen-Button, Klick oeffnet Edit-Dialog
+- Chat-Input: Textarea (dynamische Hoehe), Upload-Button, Send/Abort-Button
+- Edit-Dialog: Termin-Bearbeitung mit Titel, Ganztaegig, Von/Bis, Farbe, Erinnerung
 
-```
-McpToolsRegistry (static Helper)
-  +---> RegisterTools(kernel, docDbService, calendarService, conversationId)
-       +---> Assembly.GetTypes() ---> Suche [McpServerToolType]
-       +---> DocumentTools + CalendarTools gefunden
-       +---> GetMethods() ---> Suche [McpServerTool]
-       +---> DocumentTools: SearchDocuments, AddDocumentToChat
-       +---> CalendarTools: ListCalendarEvents, CreateCalendarEvent, DeleteCalendarEvent
-       +---> KernelFunctionFactory.CreateFromMethod()
-            +---> kernel.ImportPluginFromFunctions("Document", [...])
-            +---> kernel.ImportPluginFromFunctions("Calendar", [...])
-```
+`Home.razor.cs` - Kern
+- `ChatMessage` (private inner class): Text, IsUser, IsLoading, DisplayText, LoadingText, FoundDocuments, FoundEvents, ModelLabel
+- `SendMessage(text)`:
+  User-Nachricht sofort in UI, Loading-Spinner, DB-Speicherung parallel
+  Chat.SendStreamAsync() -> IAsyncEnumerable<ChatStreamChunk>
+  Typewriter-Drain-Task (~45fps, adaptiver Schritt: 2-3 Zeichen/Frame)
+  Nach Stream: Assistent-Antwort mit DocIDs und EventIDs in DB speichern
+- `TypewriterEffect(message, fullText)` - zeichenweise Anzeige, gleiche Logik wie Drain
+- `OnInitializedAsync()` - bestehenden Chat laden: Messages + Documents parallel, DocIDs und EventIDs aus JSON wiederherstellen
+- `ResetChat()` - Navigation.NavigateTo("/", forceLoad:true)
 
-### verfügbare Tools
+`Home.Upload.cs` - Datei-Operationen
+- `OnUploadClick()`: FilePicker -> Chat.UploadFileAsync() -> ThumbnailGenerator + DocumentDbService parallel
+- `RemoveFile()`: Badge leeren, DocumentDbService.UnlinkDocumentFromConversationAsync()
+- `OpenDocument(id)`: Dokument aus DB laden, in %TEMP% schreiben, Process.Start()
+- `AddDocumentToChat(id)`: DocumentDbService.LinkDocumentToConversationAsync()
 
-#### Dokument-Tools
+`Home.EventDialog.cs` - Termin-Edit-Dialog
+- `OpenEventEditDialog(eventId)`: Event laden, alle Dialog-Felder befuellen
+- `SaveEventEdit()`: CalendarService.UpdateEventAsync(), FoundEvents in allen Messages aktualisieren
+- `DeleteEventFromChat(eventId)`: CalendarService.DeleteEventAsync(), Event aus allen Messages entfernen
+- Zeit-Handler: ClampHour/ClampMinute/FormatTimeStr fuer Stunden+Minuten-Eingabefelder
 
-| Tool                   | Parameter         | Rückgabe                              | Zweck                       |
-|------------------------|-------------------|---------------------------------------|-----------------------------|
-| `search_documents`     | `query: string`   | `{ found: int, documentIds: int[] }`  | Sucht Dokumente in DB       |
-| `add_document_to_chat` | `documentId: int` | `{ success: bool, fileName: string }` | Verknüpft Dokument mit Chat |
+### Daten (Chats und Dokumente)
 
-#### Kalender-Tools
+`Daten.razor` - Template: zwei Tabs (Chats / Dokumente), Ordner-Explorer mit Breadcrumb, Clipboard-Leiste, Dokument-Zeilen mit Copy/Move/Delete-Aktionen
 
-| Tool                    | Parameter                                                                 | Rückgabe                                          | Zweck                          |
-|-------------------------|---------------------------------------------------------------------------|---------------------------------------------------|--------------------------------|
-| `list_calendar_events`  | `titleSearch: string`, `startDate: string`, `endDate: string` (optional) | `{ found: int, events: [{id, date, title, ...}]}` | Listet Termine aus DB          |
-| `create_calendar_event` | `date: string`, `title: string`, `isAllDay: bool`, `time: string`, `colorIndex: int`, `reminderMinutes: int` | `{ success: bool, message: string, eventId: int }` | Erstellt neuen Termin          |
-| `delete_calendar_event` | `eventId: int`, `date: string`, `title: string` (optional, flexibel)      | `{ success: bool, message: string }` oder `{ needsClarification: true, events: [...] }` | Löscht Termin (flexibel per ID oder Datum+Titel) |
-| `update_calendar_event` | `eventId: int`, diverse neue Werte (newTitle, newDate, newTime, newColor, etc.) | `{ success: bool, message: string }` | Aktualisiert bestehenden Termin |
+`Daten.razor.cs` - Logik:
+- Tab "Chats": LoadAllConversationsAsync(), OpenChat(id) -> Navigation, DeleteChat(id) mit Animation
+- Tab "Dokumente": Root-Ansicht (Ordner + Dateien) und Ordner-Ansicht (nur Dateien)
+- Ordner-Operationen: CreateFolderAsync, DeleteFolderAsync, OpenFolder, NavigateToRoot
+- Dokument-Operationen: SelectDocument (Einfachklick), CopyToClipboard, PasteDocumentHere, MoveDocumentTo, DeleteDocument
+- Strg+C/V via JS-Interop: clipboardHelper.register(dotnetRef), OnCtrlC/OnCtrlV [JSInvokable]
+- Upload direkt auf Daten-Seite: ThumbGen.GenerateThumbnailAsync + DocDb.SaveDocumentAsync
 
-#### Tool-Implementierung:
+### Kalender
 
-**DocumentTools.SearchDocuments**:  
-→ Sucht Dokumente via `DocumentDbService.SearchDocumentsAsync()`  
-→ Gibt JSON mit `found`, `documentIds`, `message` zurück  
-→ Siehe: `Services/McpTools/DocumentTools.cs`
+`Kalender.razor` - Template: Toolbar (Prev/Today/Next, Monat/Woche/Tag), Kalender-Grid, Add-Dialog, Edit-Dialog
 
-**CalendarTools.CreateCalendarEvent**:  
-→ Validiert Datum, Titel, Zeit, ColorIndex  
-→ Erstellt `CalendarEvent`-Objekt mit allen Parametern  
-→ Speichert via `CalendarService.AddEventAsync()`  
-→ Gibt JSON mit `success`, `message`, `eventId` zurück  
-→ Siehe: `Services/McpTools/CalendarTools.cs`
+`Kalender.razor.cs` - Logik:
+- Drei Ansichten: Monatsansicht (42 Zellen = 7x6), Wochenansicht (7 Spalten Mo-So), Tagesansicht (Inline-Form)
+- `events` Dictionary<DateTime, List<CalendarEvent>> - Cache fuer schnelle Datum-Abfragen
+- `BuildMonthCells()` / `BuildWeekDays()` - Zellen aufbauen, Montag-Offset berechnen
+- `GetEventsForDate(date)` - aus Dictionary, leere Liste wenn kein Eintrag
+- `OnParametersSetAsync()` - URL-Parameter ?eventId=x -> direkt Edit-Dialog oeffnen (fuer Notification-Klick)
+- Zeit-Picker: getrennte Stunden/Minuten-Inputs, ClampHour/ClampMinute, FormatTimeStr
 
-#### Tool-Verwendung Beispiele:
+### MainLayout  (Components/Layout/MainLayout.razor)
 
-**list_calendar_events**:
-```
-User: "Welche Termine habe ich diese Woche?"
-GPT-4: list_calendar_events(startDate="2025-01-13", endDate="2025-01-19")
-Response: { 
-  found: 3, 
-  events: [
-    {id: 1, date: "15.01.2025", title: "Team Meeting", time: "14:30", color: 0, reminderMinutes: 15},
-    {id: 2, date: "17.01.2025", title: "Arzttermin", time: "10:00", color: 2, reminderMinutes: 60},
-    {id: 3, date: "19.01.2025", title: "Geburtstag", time: "Ganztägig", color: 3, reminderMinutes: null}
-  ],
-  message: "3 Termin(e) gefunden"
-}
+- Navigation: Home, Kalender, Daten-Seite, Neuer-Chat-Button
+- `OnInitializedAsync()`: AppNotificationService.Start() + ShowStartupNotificationAsync()
+- Abonniert AppNotificationService.OnNotificationRequested -> NotificationComponent.ShowNotification()
 
-User: "Zeig mir alle Meetings"
-GPT-4: list_calendar_events(titleSearch="Meeting")
-Response: { found: 5, events: [...], message: "5 Termin(e) mit 'Meeting' gefunden" }
-```
+### NotificationComponent  (Components/UI/NotificationComponent.razor)
 
-**create_calendar_event**:
-```
-User: "Erstelle Termin morgen 14:00 - Team Meeting mit Erinnerung 30 Minuten vorher"
-GPT-4: create_calendar_event(date="2025-01-16", title="Team Meeting", isAllDay=false, time="14:00", reminderMinutes=30)
-Response: { success: true, message: "Termin 'Team Meeting' für 16.01.2025 erstellt", eventId: 42 }
-
-User: "Termin am 20.01. - Geburtstag, ganztägig, gelb"
-GPT-4: create_calendar_event(date="2025-01-20", title="Geburtstag", isAllDay=true, colorIndex=3)
-Response: { success: true, message: "Termin 'Geburtstag' für 20.01.2025 erstellt", eventId: 43 }
-```
-
-**delete_calendar_event**:
-```
-User: "Lösche Termin mit ID 42"
-GPT-4: delete_calendar_event(eventId=42)
-Response: { success: true, message: "Termin 'Team Meeting' wurde gelöscht", eventId: 42 }
-
-User: "Lösche den Meeting-Termin am 16.01"
-GPT-4: delete_calendar_event(date="2025-01-16", title="Meeting")
-→ Falls genau 1 Termin: { success: true, message: "Termin gelöscht" }
-→ Falls mehrere: { success: false, needsClarification: true, message: "2 Termine gefunden...", events: [...] }
-```
-
-#### RouterService - Tool-Execution:
-
-**Ablauf**:  
-1. Erkenne `FunctionCallContent` in GPT-4 Response  
-2. Lade Plugin-Funktion via `kernel.Plugins.GetFunction()`  
-3. Führe manuell aus: `function.InvokeAsync(kernel, arguments)`  
-4. Parse JSON-Result und verarbeite je nach Tool:  
-   - `search_documents` → Lade volle Dokumente aus DB  
-   - `create_calendar_event` → Return Bestätigung  
-   - `list_calendar_events` → Return Termin-Liste  
-
-→ Siehe: `Platforms/Windows/RouterService.cs`
+- Toast-Anzeige: Titel, Datum, Zeit (oder "naechste 3 Termine" bei Startup)
+- Auto-Dismiss nach 10 Sekunden (Timer in ShowNotification)
+- Click -> Navigation.NavigateTo("/kalender?eventId=x")
 
 ---
 
-## Modelle & Router
+## 5. MCP-Tools (15 gesamt)
 
-### Router-Modell (GPT-4)
+Registriert von `McpToolsRegistry.cs` per Reflection: alle Klassen mit `[McpServerToolType]`, alle Methoden mit `[McpServerTool]`.
 
-**Aufgabe**: "Traffic Controller" für alle User-Anfragen
+RouterService erstellt den Kernel, `McpToolsRegistry.RegisterTools()` wird mit `docDbService`, `calendarService`, `folderDbService` und `conversationId` aufgerufen. Services werden in den Tool-Instanzen gebunden.
 
-#### Funktionen:
-1. **Intent-Detection**: Klassifiziert User-Anfrage
-   - `conversation` ---> phi3:mini (Small Talk)
-   - `dataAnalysis` ---> qwen2.5:7b (Analyse)
-   
-2. **Tool-Calling**: Entscheidet wann Tools genutzt werden
-   - User fragt nach Dokumenten? ---> `search_documents()`
-   - User will Dokument hinzuf×gen? ---> `add_document_to_chat()`
+### DocumentTools  (Services/McpTools/DocumentTools.cs)
 
-3. **Direct Response**: Beantwortet selbst bei Tool-Nutzung
-   - "2 Dokument(e) gefunden: python.pdf, tutorial.md"
+| Tool                 | Parameter               | JSON-Rueckgabe                              |
+|----------------------|-------------------------|---------------------------------------------|
+| search_documents     | query: string           | found, documentIds[], message               |
+| add_document_to_chat | documentId: int         | success, documentId, fileName, message      |
 
-#### System-Prompt:
-```
-Du bist ein Router-Agent mit Dokumenten- und Kalender-Tools.
-KRITISCH WICHTIG: Du hast KEINE Informationen über Dokumente oder Kalender-Termine!
-Du MUSST die Tools nutzen wenn User nach Dokumenten/Terminen fragt oder welche erstellen will!
+add_document_to_chat erstellt ConversationDocuments-Eintrag und setzt `[DocID: x]`-Marker.
 
-verfügbare Tools:
-Dokumente:
-- search_documents(query): Sucht Dokumente in Datenbank
-- add_document_to_chat(documentId): Fügt Dokument zum Chat hinzu
+### FolderTools  (Services/McpTools/FolderTools.cs)
 
-Kalender:
-- list_calendar_events(titleSearch?, startDate?, endDate?): Listet Termine
-- create_calendar_event(date, title, isAllDay?, time?, colorIndex?, reminderMinutes?): Erstellt Termin
-- delete_calendar_event(eventId): Löscht Termin
+| Tool                       | Parameter                     | JSON-Rueckgabe           |
+|----------------------------|-------------------------------|--------------------------|
+| create_folder              | name: string                  | success, message         |
+| delete_folder              | folderName: string            | success, message         |
+| move_document_to_folder    | documentName, folderName      | success, message         |
+| copy_document_to_folder    | documentName, folderName      | success, message         |
+| remove_document_from_folder| documentName, folderName      | success, message         |
+| list_documents_in_folder   | folderName: string            | success, found, docs[]   |
+| list_all_folders           | (keine)                       | success, found, folders[]|
+| find_documents             | fileName: string              | success, found, docs[]   |
 
-REGELN:
-1. User fragt nach Dokumenten? ---> search_documents() aufrufen!
-2. User will Dokument hinzufügen? ---> add_document_to_chat(id) aufrufen!
-3. User fragt nach Terminen? ---> list_calendar_events() aufrufen!
-4. User will Termin erstellen? ---> create_calendar_event() aufrufen!
-5. User will Termin löschen? ---> delete_calendar_event() aufrufen!
-6. Normale Frage? ---> Antworte mit JSON: {"needsRouting": true, "intent": "..."}
-```
+folderName='hauptbereich' = Root (IsInRoot=true, kein Ordner-Eintrag).
 
-#### Fallback-Mechanismus:
-```
-1. Versuch: Function Calling (ToolCallBehavior.EnableKernelFunctions)
-2. Versuch: JSON-Parsing aus Response-Text
-3. Versuch: ClassifyIntentAsync() mit separatem GPT-4 Call
-```
+### CalendarTools  (Services/McpTools/CalendarTools.cs)
 
-### Conversation-Modell (phi3:mini)
+| Tool                  | Parameter                                             | JSON-Rueckgabe                              |
+|-----------------------|-------------------------------------------------------|---------------------------------------------|
+| list_calendar_events  | titleSearch?, startDate?, endDate?                    | found, events[], message                    |
+| create_calendar_event | date, title, isAllDay, time?, endTime?, colorIndex?, reminderMinutes? | success, message, eventId   |
+| delete_calendar_event | eventId?, date?, title?                               | success/needsClarification, message         |
+| update_calendar_event | eventId?, date+title?, newTitle?, newDate?, usw.      | success/needsClarification, message         |
 
-**Aufgabe**: Schnelle, freundliche Gespräche
+Bei delete/update mit mehrdeutigem Ergebnis: needsClarification=true + events-Liste.
 
-- **Temperature**: 0.5 (ausgewogen)
-- **MaxTokens**: 300 (kurze Antworten)
-- **Context**: Letzte 10 Nachrichten
-- **Ideal für**: Small Talk, einfache Fragen
+### AnalysisTools  (Services/AnalysisTools.cs)
 
-### Data Analysis-Modell (qwen2.5:7b)
+| Tool             | Parameter    | Besonderheit                                       |
+|------------------|--------------|----------------------------------------------------|
+| analyze_document | docId: int   | Dummy-Return (docId als String), echter Dispatch   |
 
-**Aufgabe**: Präzise Daten-Analyse
-
-- **Temperature**: 0.3 (Präzise)
-- **MaxTokens**: 2000 (ausf×hrliche Analysen)
-- **Context**: Letzte 10 Nachrichten + verknüpfte Dokumente
-- **Ideal für**: Dokument-Analyse, Daten-Verarbeitung
+RouterService prueft in Tool-Dispatch-Schleife: wenn normalizedFunctionName == "analyze_document", direkt HandleAnalyzeDocumentAsync aufrufen, ohne das Tool wirklich auszufuehren. Weiterleitung zu DataAnalysisService.
 
 ---
 
-## Features
+## 6. Kernaablaeufe
 
-### Chat-System
-- Multi-Conversation-Support (jeder Chat hat eigene ID)
-- Typewriter-Effekt für AI-Antworten
-- Loading-Animation während AI antwortet
-- Auto-Scroll zu neuester Nachricht
-- Chat-History persistent in DB
-- Auto-Titel-Generierung (erste User-Nachricht, max 50 Zeichen)
-- Event-Broker für Chat-Reload (ChatEventService)
-
-### Datei-Upload
-- Unterstützte Formate: PDF, TXT, MD, JSON
-- Max. 4 MB pro Datei
-- Automatische Text-Extraktion (PdfPig für PDF)
-- Thumbnail-Generierung für PDFs (erste Seite als PNG)
-- Datei-Badge im Chat-Input
-- Duplikat-Erkennung via SHA256-Hash
-
-### Dokument-Suche
-- Volltextsuche in Dateiname + Inhalt
-- MCP Function Calling via GPT-4
-- Dokument-Cards mit Thumbnail
-- Click-to-Open in Standard-App
-- "Zum Chat hinzufügen" Button
-
-### Dokument-Verwaltung
-- Globale Dokument-Bibliothek (wiederverwendbar über Chats hinweg)
-- Pro-Chat Verknüpfungen (ConversationDocuments)
-- Explorer-Ansicht (Daten.razor, Tab "Dokumente")
-- Sortierung nach Upload-Datum (neueste zuerst)
-- Lösch-Funktion (mit UI-Sofort + DB-Parallel)
-
-### Kalender-System
-- **3 Ansichten**: Monat (7x6 Grid), Woche (7 Spalten), Tag (fokussierte Ansicht)
-- **Termin-Verwaltung**: Erstellen, Bearbeiten, Löschen (UI + via Chat)
-- **Farbcodierung**: 8 vordefinierte Farben (0-7) für visuelle Kategorisierung
-- **Ganztägig oder Uhrzeit**: Flexible Termin-Typen
-- **Erinnerungen**: Konfigurierbar (15, 30, 60, 1440 Minuten vorher)
-- **Navigation**: Prev/Next/Heute-Buttons für schnelle Zeitraum-Wechsel
-- **Inline-Add**: Schnell-Erstellung in Tagesansicht
-
-### Notifications & Erinnerungen
-- **Startup-Notification**: Zeigt beim App-Start nächste 3 Termine
-- **Event-Reminder**: Automatische Toast-Notification X Minuten vor Termin
-- **Background-Timer**: Prüft alle 30 Sekunden auf fällige Erinnerungen
-- **Auto-Dismiss**: Toast verschwindet nach 10 Sekunden (oder manuell mit X)
-- **Click-to-Navigate**: Klick auf Notification → Navigation zu Kalender
-- **ReminderShown-Flag**: Verhindert Doppel-Notifications
-
-### Routing & Intent
-- Automatische Intent-Erkennung (conversation/dataAnalysis)
-- Tool-Call-Detection (Dokumente + Kalender)
-- Fallback-Mechanismen (3-stufig)
-- Debug-Logging für Entwicklung
-
----
-
-## Datenbank
-
-### Schema
+### Chat-Nachricht mit Tool-Call
 
 ```
-Conversations (Chats)
-+--- Id (Primary Key)
-+--- Title
-+--- CreatedAt
-
-Messages (Nachrichten)
-+--- Id (Primary Key)
-+--- ConversationId (Foreign Key)
-+--- IsUser (bool)
-+--- Text
-+--- Timestamp
-+--- DocumentIdsJson (string, List<int> als JSON)
-
-Documents (Global)
-+--- Id (Primary Key)
-+--- FileName
-+--- FileHash (SHA256, für Duplikat-Check)
-+--- FileContent (Base64 für PDF, Text für TXT/MD/JSON)
-+--- FileType (pdf/txt/md/json)
-+--- ExtractedText
-+--- ThumbnailBase64
-+--- UploadedAt
-
-ConversationDocuments (Verkn×pfung, Many-to-Many)
-+--- ConversationId (Primary Key, Foreign Key)
-+--- DocumentId (Primary Key, Foreign Key)
-+--- AddedAt
+Home.razor: SendMessage(text)
+  --> Messages.Add(userMessage)           sofort in UI
+  --> Messages.Add(loadingMessage)        Spinner
+  --> Db.SaveMessageAsync(user)           parallel im Hintergrund
+  --> Chat.SendStreamAsync()
+        --> RouterService.ProcessAsync()
+              --> Gemini: FunctionCallContent erkannt
+              --> NormalizeFunctionName()
+              --> FindFunctionInKernel()
+              --> fn.InvokeAsync() -> JSON-String
+              --> DispatchToolResultAsync() -> passender Handler
+              --> RouterResponse { DirectResponse, FoundDocuments/Events }
+        --> yield ChatStreamChunk { Text, FoundDocuments, FoundEvents, ModelLabel }
+  --> Drain-Task: Typewriter-Ausgabe
+  --> Db.SaveMessageAsync(assistant, docIds, eventIds)
 ```
 
-### Beziehungen
+### Dokument-Upload
 
 ```
-Conversation 1:N Messages
-Conversation N:M Documents (via ConversationDocuments)
-Document N:M Conversations (via ConversationDocuments)
+Home.Upload.cs: OnUploadClick()
+  --> FilePicker.PickAsync()
+  --> Chat.UploadFileAsync(path)
+        --> FileService.ExtractTextAsync()   PdfPig oder File.ReadAllText
+        --> currentFileContent setzen
+  --> Parallel: Task.Run()
+        --> ThumbGen.GenerateThumbnailAsync()   PDF Seite 1 als PNG Base64
+        --> DocDb.SaveDocumentAsync()           SHA256 Duplikat-Check
+        --> DocDb.LinkDocumentToConversationAsync()
+        --> Db.SaveMessageAsync("[DocID: x]")   Marker fuer RouterService-Context
+  --> TypewriterEffect("Datei geladen...")
+```
+
+### Termin-Karte aus Chat loeschen
+
+```
+Home.razor: Klick auf "Loeschen" in Event-Card
+  --> DeleteEventFromChat(eventId)
+        --> CalendarService.DeleteEventAsync(eventId)
+        --> foreach msg in Messages:
+              foreach ev in msg.FoundEvents:
+                  if ev.Id == eventId -> eventToRemove merken
+              if eventToRemove != null -> FoundEvents.Remove()
+        --> TypewriterEffect("Termin geloescht")
+```
+
+### Erinnerungs-Ablauf
+
+```
+AppNotificationService: Timer alle 30s
+  --> CheckForDueRemindersAsync()
+        --> CalendarService: Events mit Reminder und ReminderShown=false
+        --> ReminderTime = Start.Date + Time - ReminderMinutesBefore Minuten
+        --> Now in [ReminderTime, ReminderTime+5min]?
+              --> event.ReminderShown = true
+              --> CalendarService.UpdateEventAsync()
+              --> OnNotificationRequested?.Invoke(NotificationData)
+MainLayout: empfaengt Event
+  --> NotificationComponent.ShowNotification(data)
+        --> Toast anzeigen, Timer 10s, Click -> /kalender?eventId=x
 ```
 
 ---
 
-## Wichtige Konzepte
+## 7. Datenbankschema
 
-### Parallele DB-Operationen
-- Separate DbContext-Scopes für parallele Queries (verhindert Concurrency-Konflikt)
-- UI-Update sofort, DB-Speicherung parallel (Fire-and-Forget)
-- Beispiel: `Task.Run(() => SaveMessageAsync())` während Typewriter-Effekt läuft
+Tabellen werden per `EnsureCreated()` in MauiProgram.cs angelegt.
+Neue Spalten werden per Raw SQL in `EnsureDatabaseSchemaAsync()` nachgezogen (CalendarService + FolderDbService).
 
-### Typewriter-Effekt
-- 20ms Delay pro Zeichen
-- StateHasChanged() nach jedem Zeichen
-- Parallel: DB-Speicherung der Nachricht
-- Abbruch bei Component-Dispose
-
-### File-Badge
-- Zeigt angehängte Datei im Chat-Input
-- Persistent bis Chat-Wechsel oder Entfernen
-- `currentDocumentId` für späteres Löschen der Verknüpfung
-- X-Button zum Entfernen
-
-### Dokument-Verknüpfung
-- **Documents**: Global (für alle Chats wiederverwendbar)
-- **ConversationDocuments**: Many-to-Many Junction-Tabelle (Composite Key: ConversationId + DocumentId)
-- **Conversation.LinkedDocuments**: `[NotMapped]` Property - wird zur Laufzeit manuell gefüllt
-
-### Kalender-Farben
-- **8 vordefinierte Farben** (0-7): Rot, Blau, Grün, Gelb, Lila, Orange, Pink, Türkis
-- Gespeichert als `ColorIndex` (int) in DB
-- CSS-Klasse: `.event-color-{index}` für visuelle Darstellung
-- Color-Picker im Add/Edit-Dialog
-
-### Erinnerungs-System
-- **Reminder-Zeitpunkt**: `EventDateTime - ReminderMinutesBefore`
-- **Background-Timer**: Prüft alle 30 Sekunden auf fällige Erinnerungen
-- **5-Minuten-Fenster**: Reminder nur einmal innerhalb 5min nach Fälligkeit
-- **ReminderShown-Flag**: Verhindert Doppel-Notifications (persistent in DB)
-- **Notification-Types**: StartupOverview (beim Start), EventReminder (fällige Erinnerung)
-
-### Notification-Flow
 ```
-MainLayout.razor: OnInitializedAsync()
-  +---> AppNotificationService.Start() // Starte Timer
-  +---> AppNotificationService.ShowStartupNotificationAsync() // Zeige Startup-Notification
-  +---> Subscribe: OnNotificationRequested Event
-       +---> NotificationComponent.ShowNotification(data)
-            +---> Zeige Toast (Type: StartupOverview oder EventReminder)
-            +---> Auto-Dismiss nach 10s
-```
+Conversations
+  Id           int PK auto_increment
+  Title        varchar
+  CreatedAt    datetime
 
-### Router-Logic
-- 3-stufiger Fallback: Function Calling → JSON → ClassifyIntent
-- Debug-Logging für jeden Schritt
-- Manual Tool-Execution (kein automatisches Callback)
-- Tool-Priorität: Dokumente & Kalender vor Intent-Routing
+Messages
+  Id               int PK auto_increment
+  ConversationId   int FK -> Conversations.Id
+  IsUser           bool
+  Text             longtext
+  Timestamp        datetime
+  DocumentIdsJson  text       (List<int> als JSON, fuer Card-Reload beim Chat-Laden)
+  EventIdsJson     text       (List<int> als JSON, fuer Card-Reload beim Chat-Laden)
 
-### Kalender-Ansichten
-- **Monatsansicht**: 
-  - 7x6 Grid (42 Zellen, inkl. Vor-/Nachmonat)
-  - Max 3 Termine pro Zelle sichtbar
-  - "+X weitere" Indikator für mehr Termine
-  - Grau für Vor-/Nachmonat, Weiß für aktuellen Monat
+Documents
+  Id               int PK auto_increment
+  FileName         varchar
+  FileHash         varchar    (SHA256, Duplikat-Sperre)
+  FileContent      longtext   (Base64 bei PDF, Klartext bei TXT/MD/JSON)
+  FileType         varchar    (pdf/txt/md/json)
+  ExtractedText    longtext   (fuer Volltextsuche und Dokument-Analyse)
+  ThumbnailBase64  longtext   (PNG der ersten PDF-Seite, 200px)
+  UploadedAt       datetime
+  IsInRoot         bool       (true = im Hauptbereich sichtbar)
 
-- **Wochenansicht**:
-  - 7 Tagesspalten (Mo-So)
-  - Alle Termine sichtbar (kein Limit)
-  - Horizontal-Scroll für viele Termine
+ConversationDocuments           Many-to-Many: Conversation <-> Document
+  ConversationId   int PK FK
+  DocumentId       int PK FK
+  AddedAt          datetime
 
-- **Tagesansicht**:
-  - Fokus auf einzelnen Tag
-  - Alle Termine als große Cards
-  - Inline-Add-Input für schnelle Erstellung
+Folders
+  Id           int PK auto_increment
+  Name         varchar
+  CreatedAt    datetime
 
-### Datenbank-Migration (UploadedFiles → Documents)
-**✓ Durchgeführt:** Die ursprüngliche `uploadedfiles`-Tabelle wurde entfernt und durch das `Documents`-System ersetzt:
+DocumentFolders                 Many-to-Many: Document <-> Folder
+  DocumentId   int PK FK
+  FolderId     int PK FK
 
-**Vorher:**
-- `UploadedFiles` (Pro Chat) - Redundante Speicherung
-- `Documents` (Global) - Eigentliche Dokumente
-- Doppelte Datenhaltung
-
-**Jetzt:**
-- `Documents` (Global, wiederverwendbar) - Einzige Dokumenten-Quelle
-- `ConversationDocuments` (Junction-Tabelle) - Many-to-Many Verknüpfung
-- `Conversation.LinkedDocuments` (`[NotMapped]`) - Zur Laufzeit gefüllt
-
-**Wichtig:**
-- `LoadAllConversationsAsync()` lädt `LinkedDocuments` manuell via `ConversationDocuments`
-- `[NotMapped]` verhindert, dass EF Core eine direkte Beziehung erstellt
-- Badge-Funktion verwendet jetzt `currentDocumentId` (aus `Documents`)
-
+CalendarEvents
+  Id                    int PK auto_increment
+  Title                 varchar
+  Start                 datetime   (nur Datum, Zeit separat)
+  IsAllDay              bool
+  Time                  time       (Startzeit als TimeSpan)
+  HasTime               bool
+  EndTime               time
+  HasEndTime            bool
+  ColorIndex            int        (0-7, CSS-Klasse event-color-{index})
+  ReminderMinutesBefore int?       (null = keine Erinnerung)
+  ReminderShown         bool       (verhindert Doppel-Notification)
+  CreatedAt             datetime
+  UpdatedAt             datetime
 ```
 
 ---
 
-## Verwendungsbeispiele
-
-### Chat mit Dokument-Kontext
+## 8. Dateistruktur
 
 ```
-1. Datei hochladen:
-   - Klicke auf Upload-Button (📎)
-   - Wähle PDF/TXT/MD/JSON (max 4 MB)
-   - Badge wird im Input angezeigt
-
-2. Frage stellen:
-   User: "Was steht in diesem Dokument über Machine Learning?"
-   → AI analysiert hochgeladenes Dokument
-   → Antwort basiert auf ExtractedText
-
-3. Weitere Dokumente suchen:
-   User: "Hast du noch mehr Dokumente über ML?"
-   → GPT-4 ruft search_documents("ML") auf
-   → Zeigt gefundene Dokumente als Cards
-   → "Zum Chat hinzufügen" Button verfügbar
-```
-
-### Kalender-Verwaltung via Chat
-
-```
-Termine erstellen:
-User: "Erstelle einen Termin morgen 14:00 - Team Meeting"
-→ GPT-4: create_calendar_event(date="2025-01-16", title="Team Meeting", isAllDay=false, time="14:00")
-→ AI: "Termin 'Team Meeting' für 16.01.2025 14:00 erstellt"
-
-Termine abfragen:
-User: "Welche Termine habe ich diese Woche?"
-→ GPT-4: list_calendar_events(startDate="2025-01-13", endDate="2025-01-19")
-→ AI: "Du hast 3 Termine: 1. Team Meeting (15.01. 14:30), 2. Arzttermin (17.01. 10:00), 3. Geburtstag (19.01. ganztägig)"
-
-Termine löschen:
-User: "Lösche das Meeting am 16.01"
-→ GPT-4: delete_calendar_event(date="2025-01-16", title="Meeting")
-→ Falls mehrere: AI zeigt Liste zum Nachfragen
-→ Falls eindeutig: "Termin 'Team Meeting' wurde gelöscht"
-```
-
-### Kalender-UI Interaktion
-
-```
-Monatsansicht:
-- Klick auf Tag → Öffnet Add-Dialog
-- Klick auf Event → Öffnet Edit-Dialog
-- Prev/Next → Navigiere Monate
-- "Heute" → Springe zu aktuellem Monat
-
-Wochenansicht:
-- 7 Tagesspalten (Mo-So)
-- Alle Events sichtbar
-- Klick auf Tag → Add-Dialog
-
-Tagesansicht:
-- Fokus auf einzelnen Tag
-- Inline-Input: "Neuer Termin" + Enter
-- Volle Event-Cards mit Details
-```
-
-### Erinnerungen nutzen
-
-```
-1. Termin mit Erinnerung erstellen:
-   - Im Add-Dialog: Dropdown "Erinnerung" auswählen
-   - Optionen: Keine, 15 Min., 30 Min., 1 Std., 1 Tag
-
-2. Background-Service prüft automatisch:
-   - Alle 30 Sekunden Scan nach fälligen Reminders
-   - ReminderTime = EventDateTime - ReminderMinutesBefore
-
-3. Toast-Notification erscheint:
-   - X Minuten vor Termin
-   - Zeigt Titel + Datum + Zeit
-   - Klick → Navigation zu Kalender
-   - Auto-Dismiss nach 10s
-
-4. Startup-Notification:
-   - Beim App-Start automatisch
-   - Zeigt nächste 3 bevorstehende Termine
+KIDT/
+  +-- Components/
+  |     +-- Pages/          (Seiten als partial class: .razor + .razor.cs [+ weitere .cs])
+  |     +-- Layout/         (App-Rahmen und Navigation)
+  |     +-- UI/             (wiederverwendbare UI-Komponenten)
+  |
+  +-- Database/
+  |     +-- Entities/       (EF-Core-Modelle, Namespace KIDT.Models)
+  |     CalendarService.cs  (CRUD Kalender-Termine)
+  |     ChatDbContext.cs
+  |     ChatDbService.cs
+  |     DocumentDbService.cs
+  |     FolderDbService.cs
+  |
+  +-- Services/
+  |     +-- AI/             (LLM-Services und Analyse)
+  |     +-- McpTools/       (die 15 MCP-Tool-Implementierungen)
+  |     +-- Notifications/  (Erinnerungs-Service und DTOs)
+  |     +-- Router/         (Routing-Logik, Handlers, Models)
+  |     +-- UI/             (Theme, TitleBar, ChatEvent, Thumbnail)
+  |
+  +-- Platforms/Windows/    (Windows-spezifischer Code)
+  +-- wwwroot/              (CSS, JS, Icons)
+  +-- MauiProgram.cs        (DI-Setup + App-Start)
+  +-- OpenRouter-api-key.txt
 ```
 
 ---
 
-## Entwickler-Notizen
+### Components/Pages/  -  Praesentationsschicht
 
-### Wichtige Dateien zum Verstehen:
-1. `ChatCoordinator.cs` ---> Zentrale Orchestrierung
-2. `RouterService.cs` ---> Intent-Detection + MCP
-3. `Home.razor` ---> Chat-UI + Workflow
-4. `Kalender.razor` ---> Kalender-UI + 3 Ansichten
-5. `DocumentTools.cs` ---> MCP-Tool-Implementierung (Dokumente)
-6. `CalendarTools.cs` ---> MCP-Tool-Implementierung (Kalender)
-7. `ChatDbService.cs` ---> DB-Operationen (Chats + Messages)
-8. `DocumentDbService.cs` ---> DB-Operationen (Dokumente + Verknüpfungen)
-9. `CalendarService.cs` ---> DB-Operationen (Kalender-Termine)
-10. `NotificationService.cs` ---> Background-Timer + Erinnerungen
+Home ist eine partial class aufgeteilt auf vier Dateien:
 
-### Setup-Voraussetzungen:
-- **.NET 10 SDK** installiert
-- **MySQL Server** läuft (localhost oder remote)
-- **Ollama** installiert mit Modellen: `phi3:mini`, `qwen2.5:7b`
-- **Azure OpenAI** API-Key in `openai-api-key.txt`
-- **Connection-String** in `ChatDbContext.cs` anpassen (Server, User, Password, Database)
-- **(Optional) Tailscale** für Multi-User-Setup (gemeinsamer MySQL-Server)
+| Datei                  | Inhalt und Aufgabe                                                          |
+|------------------------|-----------------------------------------------------------------------------|
+| Home.razor             | Template: Nachrichtenliste, Dokument-Cards, Event-Cards, Chat-Input, Edit-Dialog |
+| Home.razor.cs          | Kern: ChatMessage-Klasse, Felder, OnInitializedAsync, SendMessage, TypewriterEffect, ResetChat |
+| Home.Upload.cs         | OnUploadClick, RemoveFile, OpenDocument, AddDocumentToChat                  |
+| Home.EventDialog.cs    | Dialog-Felder, OpenEventEditDialog, SaveEventEdit, DeleteEventFromChat      |
 
-### Erste Schritte:
+Daten und Kalender je zwei Dateien:
 
-#### 1. MySQL-Datenbank einrichten
+| Datei                  | Inhalt und Aufgabe                                                          |
+|------------------------|-----------------------------------------------------------------------------|
+| Daten.razor            | Template: Chat-Karten (Tab), Ordner-Explorer mit Breadcrumb (Tab)           |
+| Daten.razor.cs         | Tabs, Ordner-Operationen, Clipboard (Strg+C/V via JS), Upload, Chat-Loeschen |
+| Kalender.razor         | Template: Monat/Woche/Tag-Ansicht, Add-Dialog, Edit-Dialog                  |
+| Kalender.razor.cs      | events-Dictionary, BuildMonthCells, BuildWeekDays, GetEventsForDate, Dialoge |
+
+Layout und UI:
+
+| Datei                        | Inhalt und Aufgabe                                                    |
+|------------------------------|-----------------------------------------------------------------------|
+| MainLayout.razor             | Navigation, Notification-Init (AppNotificationService.Start), Theme  |
+| NotificationComponent.razor  | Toast: Erinnerung oder Startup-Uebersicht, Auto-Dismiss 10s, Click-Nav |
+
+---
+
+### Services/AI/  -  LLM-Orchestrierung und Analyse
+
+| Datei                  | Inhalt und Aufgabe                                                           |
+|------------------------|------------------------------------------------------------------------------|
+| ChatCoordinator.cs     | Singleton-Orchestrator: SendStreamAsync, UploadFileAsync, haelt Router + DataAnalysis |
+| DataAnalysisService.cs | Ollama HTTP-Client fuer qwen3.5:9b, bekommt Dokument-Text + Frage           |
+| AnalysisTools.cs       | Dummy-SK-Plugin: analyze_document gibt nur docId zurueck, Dispatch in RouterService |
+| ChatStreamChunk.cs     | Streaming-Einheit: TextChunk, IsComplete, FoundDocuments, FoundEvents, ModelLabel |
+
+### Services/Router/  -  Routing-Logik
+
+| Datei                     | Inhalt und Aufgabe                                                           |
+|---------------------------|------------------------------------------------------------------------------|
+| RouterService.cs          | Gemini-Aufruf (OpenRouter), System-Prompt, Tool-Dispatch, Chat-History-Aufbau |
+| RouterService.Handlers.cs | 14 Handler-Methoden fuer alle Tool-Ergebnis-Typen                            |
+| RouterService.Models.cs   | Interne JSON-Deserialisierungsklassen fuer Tool-Rueckgaben                   |
+| RouterResponse.cs         | Rueckgabe von RouterService: ShouldRoute, DirectResponse, FoundDocuments, FoundEvents |
+
+### Services/Notifications/  -  Erinnerungs-System
+
+| Datei                  | Inhalt und Aufgabe                                                           |
+|------------------------|------------------------------------------------------------------------------|
+| NotificationService.cs | Singleton, 30s-Timer, CheckForDueRemindersAsync, ShowStartupNotificationAsync |
+| NotificationData.cs    | Enum NotificationType (StartupOverview, EventReminder) + Termin-Felder       |
+
+### Services/UI/  -  UI-Hilfsdienste
+
+| Datei               | Inhalt und Aufgabe                                                             |
+|---------------------|--------------------------------------------------------------------------------|
+| ThemeService.cs     | Singleton, Hell/Dunkel via MAUI Preferences API                                |
+| ThumbnailGenerator.cs | Singleton, Windows.Data.Pdf: erste PDF-Seite als PNG Base64 (200px)          |
+| ChatEventService.cs | Static event OnNewChatRequested (MainLayout -> Home.razor)                     |
+| ITitleBarService.cs | Interface fuer TitleBarService (Windows-Impl. in Platforms/Windows/)           |
+
+### Services/McpTools/  -  MCP-Tool-Implementierungen
+
+| Datei              | Enthaelt                                                              |
+|--------------------|-----------------------------------------------------------------------|
+| DocumentTools.cs   | search_documents, add_document_to_chat                                |
+| FolderTools.cs     | create_folder, delete_folder, move/copy/remove, list, list_all, find |
+| CalendarTools.cs   | list_calendar_events, create/delete/update_calendar_event             |
+
+---
+
+### Database/  -  Datenzugriff und EF-Core-Modelle
+
+DB-Services:
+
+| Datei                | Inhalt und Aufgabe                                                          |
+|----------------------|-----------------------------------------------------------------------------|
+| ChatDbContext.cs     | EF Core DbContext, Connection-String, alle DbSets, OnModelCreating           |
+| ChatDbService.cs     | CRUD Conversations + Messages, LoadAllConversationsAsync laedt LinkedDocuments manuell |
+| DocumentDbService.cs | CRUD Documents (global), SHA256-Duplikat-Check, ConversationDocuments-Verknuepfungen |
+| FolderDbService.cs   | CRUD Folders + DocumentFolders (n:m), IsInRoot, EnsureDatabaseSchemaAsync   |
+| CalendarService.cs   | CRUD CalendarEvents, EnsureDatabaseSchemaAsync (ALTER TABLE Raw SQL)        |
+
+EF-Core-Entities (Database/Entities/, Namespace KIDT.Models):
+
+| Datei                    | Model und Besonderheit                                                  |
+|--------------------------|-------------------------------------------------------------------------|
+| Conversation.cs          | Chat-Kopf, [NotMapped] LinkedDocuments wird zur Laufzeit befuellt       |
+| Message.cs               | Nachricht, DocumentIdsJson + EventIdsJson als JSON-String in DB         |
+| Document.cs              | Globales Dokument, ThumbnailBase64, FileHash, IsInRoot                  |
+| ConversationDocument.cs  | Junction: Conversation <-> Document (Composite PK)                     |
+| Folder.cs                | Ordner-Entity                                                           |
+| DocumentFolder.cs        | Junction: Document <-> Folder (Composite PK, n:m)                      |
+| CalendarEvent.cs         | Termin: Start, Time, EndTime, HasTime, HasEndTime, ColorIndex, Reminder |
+
+---
+
+### Platforms/Windows/  -  Windows-spezifische Implementierungen
+
+| Datei               | Inhalt und Aufgabe                                                             |
+|---------------------|--------------------------------------------------------------------------------|
+| McpToolsRegistry.cs | RegisterTools(): Reflection ueber [McpServerToolType]-Klassen -> SK-Plugins    |
+| FileService.cs      | ExtractTextAsync(): PdfPig fuer PDF, File.ReadAllText fuer TXT/MD/JSON         |
+| TitleBarService.cs  | Implementiert ITitleBarService, passt Windows-Titelleiste ans Theme an         |
+| App.xaml.cs         | MAUI Windows-App-Einstiegspunkt                                                |
+
+---
+
+### Root
+
+| Datei                  | Inhalt und Aufgabe                                                      |
+|------------------------|-------------------------------------------------------------------------|
+| MauiProgram.cs         | DI-Registrierungen, EnsureCreated, EnsureDatabaseSchemaAsync beim Start |
+| OpenRouter-api-key.txt | API-Key, wird per .csproj ins Output kopiert, in .gitignore eingetragen |
+
+---
+
+## 9. Setup
+
+### Voraussetzungen
+
+- .NET 10 SDK
+- MySQL Server (lokal)
+- Ollama mit qwen3.5:9b: `ollama pull qwen3.5:9b`
+- OpenRouter-Account (openrouter.ai)
+
+### Schritte
+
+1. MySQL-Datenbank anlegen:
 ```sql
 CREATE DATABASE kidt_chat;
-CREATE USER 'kidt_user'@'%' IDENTIFIED BY 'kidt123';
-GRANT ALL PRIVILEGES ON kidt_chat.* TO 'kidt_user'@'%';
-FLUSH PRIVILEGES;
+GRANT ALL PRIVILEGES ON kidt_chat.* TO 'root'@'localhost';
 ```
 
-#### 2. Connection-String anpassen
-In `Database/ChatDbContext.cs`:
+2. Connection-String in `Database/ChatDbContext.cs` anpassen:
+```
+Server=localhost;Port=3306;Database=kidt_chat;User=root;Password=...;
+```
+
+3. Datei `KIDT/OpenRouter-api-key.txt` anlegen (sk-or-v1-...):
+   Wird beim Build nach Output kopiert. Nicht committen (.gitignore).
+
+4. App starten (F5 in Visual Studio):
+   - EF Core erstellt alle Tabellen automatisch
+   - CalendarService und FolderDbService fuehren Schema-Migration aus
+   - Startup-Notification zeigt naechste 3 Termine
+
+### Router-Modell wechseln
+
+In `RouterService.cs`:
 ```csharp
-// Lokal:
-Server=localhost;Port=3306;Database=kidt_chat;User=root;Password=kidt123;
-
-// Multi-User (Tailscale):
-Server=100.75.19.37;Port=3306;Database=kidt_chat;User=kidt_user;Password=kidt123;
+modelId: "google/gemini-2.5-flash-lite",
+endpoint: new Uri("https://openrouter.ai/api/v1")
 ```
+Jedes OpenRouter-kompatible Modell kann eingesetzt werden.
 
-#### 3. Azure OpenAI API-Key
-Erstelle `KIDT/openai-api-key.txt` mit deinem Key:
-```
-sk-proj-...
-```
+### Analyse-Modell wechseln
 
-#### 4. Ollama-Modelle installieren
-```bash
-ollama pull phi3:mini
-ollama pull qwen2.5:7b
-```
-
-#### 5. App starten
-- Visual Studio: F5 (Debug) oder Ctrl+F5 (Release)
-- EF Core erstellt automatisch alle Tabellen
-- Kalender-Schema-Migration läuft automatisch bei erstem Start (falls nötig)
-- Startup-Notification zeigt nächste 3 Termine
-
-### Multi-User Setup (Tailscale)
-
-#### Server-Seite (Host):
-1. Installiere Tailscale: https://tailscale.com/download/windows
-2. Login & Connect
-3. Notiere deine Tailscale-IP (z.B. `100.75.19.37`)
-4. MySQL Server auf `0.0.0.0` binden (alle Interfaces):
-   - In `my.ini` / `my.cnf`: `bind-address = 0.0.0.0`
-   - Service neustarten
-5. Firewall: Port 3306 öffnen
-6. User erstellen: `CREATE USER 'kidt_user'@'%' ...`
-
-#### Client-Seite (Teamkollege):
-1. Installiere Tailscale
-2. Login & Connect (selbes Netzwerk wie Host)
-### Event-System:
-- **ChatEventService**: Static Event-Broker für "Neuer Chat"
-  - MainLayout → TriggerNewChat()
-  - Home.razor → Subscribe OnNewChatRequested
-- **AppNotificationService**: Instance Event-Broker für Notifications
-  - AppNotificationService → OnNotificationRequested?.Invoke(data)
-  - MainLayout → Subscribe + Forward zu NotificationComponent
-
-### Performance-Optimierungen:
-- **AsNoTracking()**: Für Read-Only Queries (verhindert Change-Tracking Overhead)
-- **Parallel DB-Operations**: Separate Scopes für gleichzeitige Queries
-- **Typewriter-Effect**: 20ms Delay (smooth, nicht zu langsam)
-- **Lazy-Loading**: Dokumente nur laden wenn Chat geöffnet
-- **Batch-Delete**: RemoveRange() statt einzelner Remove()-Calls
+In `DataAnalysisService.cs`: Modellname und Ollama-Endpoint anpassen.
 
 ---
 
-## Troubleshooting
+## Bekannte Grenzen
 
-### MySQL-Verbindung fehlgeschlagen
-```
-Problem: "Unable to connect to any of the specified MySQL hosts"
-Lösung:
-1. Prüfe ob MySQL-Server läuft: Services → MySQL → Running?
-2. Prüfe Connection-String in ChatDbContext.cs
-3. Prüfe User-Credentials: mysql -u root -p
-4. Multi-User? Prüfe Firewall (Port 3306) und bind-address
-```
-
-### Ollama-Modelle nicht verfügbar
-```
-Problem: "Model phi3:mini not found"
-Lösung:
-1. Prüfe ob Ollama läuft: ollama list
-2. Installiere Modelle: ollama pull phi3:mini && ollama pull qwen2.5:7b
-3. Prüfe Ollama-URL in ConversationService.cs / DataAnalysisService.cs
-```
-
-### Azure OpenAI 401 Unauthorized
-```
-Problem: "Unauthorized - Invalid API Key"
-Lösung:
-1. Prüfe ob openai-api-key.txt existiert
-2. Prüfe Key-Format: sk-proj-... (ohne Leerzeichen/Zeilenumbrüche)
-3. Prüfe Endpoint-URL in RouterService.cs
-```
-
-### Erinnerungen werden nicht angezeigt
-```
-Problem: "Notification erscheint nicht trotz fälligem Termin"
-Lösung:
-1. Prüfe Debug-Log: [NOTIFICATION_SERVICE] Timer gestartet
-2. Prüfe ReminderMinutesBefore != null in DB
-3. Prüfe ReminderShown = false (wird nach Anzeige auf true gesetzt)
-4. Prüfe 5-Minuten-Fenster: Reminder erscheint nur innerhalb 5min nach Fälligkeit
-5. Restart App → Startup-Notification sollte erscheinen
-```
-
-### Dokumente werden nicht gefunden
-```
-Problem: "search_documents findet keine Dokumente"
-Lösung:
-1. Prüfe ob Dokumente in DB: SELECT * FROM Documents;
-2. Prüfe ExtractedText: Ist Text vorhanden?
-3. Suche ist Case-Insensitive: "Python" findet auch "python"
-4. Suche durchsucht FileName + ExtractedText
-```
-
-### Typewriter-Effekt stockt
-```
-Problem: "AI-Antwort erscheint ruckartig"
-Lösung:
-1. Reduziere Delay in TypewriterEffect() (Standard: 20ms)
-2. Prüfe CPU-Last (Ollama-Modelle können System belasten)
-3. Deaktiviere während Debugging: Setze delay auf 0
-```
+- PDF-Extraktion nur bei Text-PDFs (keine OCR fuer gescannte Dokumente)
+- Kalender-Erinnerungen laufen nur waehrend die App offen ist (kein System-Service)
+- Chat-Kontext: maximal 10 letzte Nachrichten ans LLM
+- "Zeige mir diesen Termin" via Chat kann den Router ueberfordern (kein Detail-Tool vorhanden)
+- Ollama muss lokal auf Port 11434 laufen, kein Cloud-Fallback
 
 ---
 
-## Bekannte Limitierungen
-
-- **Dokument-Größe**: Max 4 MB (größere Dateien werden abgelehnt)
-- **PDF-Extraktion**: Nur Text-basierte PDFs (keine OCR für Scans)
-- **Kalender-Erinnerungen**: Nur während App läuft (kein System-Service)
-- **Notification-Window**: 5 Minuten (danach keine erneute Anzeige)
-- **Context-Limit**: Max 10 letzte Nachrichten im Chat-Context
-- **Concurrency**: DbContext als Transient (keine parallelen Updates auf selber Entity)
-- **Thumbnail**: Nur für PDFs (andere Formate zeigen File-Icon)
-
----
-
-## Projekt-Statistik
-
-### Zeilen Code (geschätzt):
-- **Razor Components**: ~2.500 Zeilen (Home, Kalender, Daten, NotificationComponent)
-- **Services**: ~1.800 Zeilen (ChatCoordinator, Router, Conversation, DataAnalysis, Calendar, Notification)
-- **Database**: ~800 Zeilen (DbContext, ChatDbService, DocumentDbService, CalendarService)
-- **MCP Tools**: ~600 Zeilen (DocumentTools, CalendarTools)
-- **Models**: ~300 Zeilen (ChatResponse, Document, Conversation, Message, CalendarEvent, NotificationData)
-- **CSS**: ~1.200 Zeilen (app.css, component-styles, calendar-styles)
-- **Gesamt**: **~7.200 Zeilen**
-
-### Technologien:
-- **.NET MAUI 10** (Desktop-Framework)
-- **Blazor Hybrid** (UI-Framework)
-- **Entity Framework Core** (ORM)
-- **MySQL** (Datenbank)
-- **Microsoft Semantic Kernel** (AI-Orchestrierung)
-- **Azure OpenAI SDK** (GPT-4)
-- **Ollama** (lokale Modelle)
-- **PdfPig** (PDF-Text-Extraktion)
-- **SkiaSharp** (PDF-Thumbnail-Generierung)
-- **Radzen Blazor** (UI-Komponenten: Dialog, Notification)
-- **Model Context Protocol** (Tool-Calling Framework)
-
-### Projektstruktur:
-```
-KIDT/
-  +--- Components/
-  |     +--- Pages/
-  |     |     +--- Home.razor              (Chat-Interface)
-  |     |     +--- Daten.razor             (Chat-History & Dokument-Explorer)
-  |     |     +--- Kalender.razor          (Kalender mit 3 Ansichten)
-  |     +--- Layout/
-  |     |     +--- MainLayout.razor        (App-Layout mit Navigation)
-  |     +--- UI/
-  |           +--- NotificationComponent.razor (Toast-Notifications)
-  |
-  +--- Database/
-  |     +--- ChatDbContext.cs            (EF Core Context)
-  |     +--- ChatDbService.cs            (Chat-DB-Operationen)
-  |     +--- DocumentDbService.cs        (Dokument-DB-Operationen)
-  |     +--- Conversation.cs             (Model: Chat)
-  |     +--- Message.cs                  (Model: Nachricht)
-  |     +--- Document.cs                 (Model: Dokument)
-  |     +--- ConversationDocument.cs     (Model: Verknüpfung)
-  |     +--- CalendarEvent.cs            (Model: Kalender-Termin)
-  |
-  +--- Services/
-  |     +--- CalendarService.cs          (Kalender-DB-Operationen)
-  |     +--- NotificationService.cs      (Background-Timer für Erinnerungen)
-  |     +--- ChatEventService.cs         (Event-Broker für Chat-Reload)
-  |     +--- ThumbnailGenerator.cs       (PDF-Thumbnail-Generierung)
-  |     +--- McpTools/
-  |           +--- DocumentTools.cs      (MCP: Dokument-Tools)
-  |           +--- CalendarTools.cs      (MCP: Kalender-Tools)
-  |
-  +--- Platforms/Windows/
-  |     +--- ChatCoordinator.cs          (Zentrale Orchestrierung)
-  |     +--- RouterService.cs            (Intent-Detection + MCP)
-  |     +--- ConversationService.cs      (phi3:mini Ollama)
-  |     +--- DataAnalysisService.cs      (qwen2.5:7b Ollama)
-  |     +--- FileService.cs              (Text-Extraktion)
-  |     +--- McpToolsRegistry.cs         (MCP-Tool-Registrierung)
-  |
-  +--- Models/
-  |     +--- ChatResponse.cs             (Response-Model für AI)
-  |     +--- NotificationData.cs         (Model: Notification-Payload)
-  |
-  +--- Prompts/
-  |     +--- conversation-instructions.md (System-Prompt für phi3:mini)
-  |     +--- data-analysis-instructions.md (System-Prompt für qwen2.5:7b)
-  |
-  +--- wwwroot/
-  |     +--- css/
-  |     |     +--- app.css                 (Basis-Styles)
-  |     |     +--- calendar-components.css (Kalender-Styles)
-  |     +--- images/                       (Icons & Assets)
-  |
-  +--- openai-api-key.txt                  (Azure OpenAI API-Key)
-```
-
----
-
-**Version**: 2.0  
-**Framework**: .NET MAUI 10 / C# 14.0  
-**Datenbank**: MySQL mit EF Core  
-**KI-Modelle**: Azure OpenAI (GPT-4), Ollama (phi3:mini, qwen2.5:7b)  
-**GitHub**: https://github.com/Paulschmidt-GDS2/KIDT
-
-### Performance-Optimierungen:
-- **AsNoTracking()**: Für Read-Only Queries (verhindert Change-Tracking Overhead)
-- **Parallel DB-Operations**: Separate Scopes für gleichzeitige Queries
-- **Typewriter-Effect**: 20ms Delay (smooth, nicht zu langsam)
-- **Lazy-Loading**: Dokumente nur laden wenn Chat geöffnet
-- **Batch-Delete**: RemoveRange() statt einzelner Remove()-Calls
-
----
-
-## Troubleshooting
-
-### MySQL-Verbindung fehlgeschlagen
-```
-Problem: "Unable to connect to any of the specified MySQL hosts"
-Lösung:
-1. Prüfe ob MySQL-Server läuft: Services → MySQL → Running?
-2. Prüfe Connection-String in ChatDbContext.cs
-3. Prüfe User-Credentials: mysql -u root -p
-4. Multi-User? Prüfe Firewall (Port 3306) und bind-address
-```
-
-### Ollama-Modelle nicht verfügbar
-```
-Problem: "Model phi3:mini not found"
-Lösung:
-1. Prüfe ob Ollama läuft: ollama list
-2. Installiere Modelle: ollama pull phi3:mini && ollama pull qwen2.5:7b
-3. Prüfe Ollama-URL in ConversationService.cs / DataAnalysisService.cs
-```
-
-### Azure OpenAI 401 Unauthorized
-```
-Problem: "Unauthorized - Invalid API Key"
-Lösung:
-1. Prüfe ob openai-api-key.txt existiert
-2. Prüfe Key-Format: sk-proj-... (ohne Leerzeichen/Zeilenumbrüche)
-3. Prüfe Endpoint-URL in RouterService.cs
-```
-
-### Erinnerungen werden nicht angezeigt
-```
-Problem: "Notification erscheint nicht trotz fälligem Termin"
-Lösung:
-1. Prüfe Debug-Log: [NOTIFICATION_SERVICE] Timer gestartet
-2. Prüfe ReminderMinutesBefore != null in DB
-3. Prüfe ReminderShown = false (wird nach Anzeige auf true gesetzt)
-4. Prüfe 5-Minuten-Fenster: Reminder erscheint nur innerhalb 5min nach Fälligkeit
-5. Restart App → Startup-Notification sollte erscheinen
-```
-
-### Dokumente werden nicht gefunden
-```
-Problem: "search_documents findet keine Dokumente"
-Lösung:
-1. Prüfe ob Dokumente in DB: SELECT * FROM Documents;
-2. Prüfe ExtractedText: Ist Text vorhanden?
-3. Suche ist Case-Insensitive: "Python" findet auch "python"
-4. Suche durchsucht FileName + ExtractedText
-```
-
-### Typewriter-Effekt stockt
-```
-Problem: "AI-Antwort erscheint ruckartig"
-Lösung:
-1. Reduziere Delay in TypewriterEffect() (Standard: 20ms)
-2. Prüfe CPU-Last (Ollama-Modelle können System belasten)
-3. Deaktiviere während Debugging: Setze delay auf 0
-```
-
----
-
-## Bekannte Limitierungen
-
-- **Dokument-Größe**: Max 4 MB (größere Dateien werden abgelehnt)
-- **PDF-Extraktion**: Nur Text-basierte PDFs (keine OCR für Scans)
-- **Kalender-Erinnerungen**: Nur während App läuft (kein System-Service)
-- **Notification-Window**: 5 Minuten (danach keine erneute Anzeige)
-- **Context-Limit**: Max 10 letzte Nachrichten im Chat-Context
-- **Concurrency**: DbContext als Transient (keine parallelen Updates auf selber Entity)
-- **Thumbnail**: Nur für PDFs (andere Formate zeigen File-Icon)
-
----
-
-## Projekt-Statistik
-
-### Zeilen Code (geschätzt):
-- **Razor Components**: ~2.500 Zeilen (Home, Kalender, Daten, NotificationComponent)
-- **Services**: ~1.800 Zeilen (ChatCoordinator, Router, Conversation, DataAnalysis, Calendar, Notification)
-- **Database**: ~800 Zeilen (DbContext, ChatDbService, DocumentDbService, CalendarService)
-- **MCP Tools**: ~600 Zeilen (DocumentTools, CalendarTools)
-- **Models**: ~300 Zeilen (ChatResponse, Document, Conversation, Message, CalendarEvent, NotificationData)
-- **CSS**: ~1.200 Zeilen (app.css, component-styles, calendar-styles)
-- **Gesamt**: **~7.200 Zeilen**
-
-### Technologien:
-- **.NET MAUI 10** (Desktop-Framework)
-- **Blazor Hybrid** (UI-Framework)
-- **Entity Framework Core** (ORM)
-- **MySQL** (Datenbank)
-- **Microsoft Semantic Kernel** (AI-Orchestrierung)
-- **Azure OpenAI SDK** (GPT-4)
-- **Ollama** (lokale Modelle)
-- **PdfPig** (PDF-Text-Extraktion)
-- **SkiaSharp** (PDF-Thumbnail-Generierung)
-- **Radzen Blazor** (UI-Komponenten: Dialog, Notification)
-- **Model Context Protocol** (Tool-Calling Framework)
-
-### Projektstruktur:
-```
-KIDT/
-  +--- Components/
-  |     +--- Pages/
-  |     |     +--- Home.razor              (Chat-Interface)
-  |     |     +--- Daten.razor             (Chat-History & Dokument-Explorer)
-  |     |     +--- Kalender.razor          (Kalender mit 3 Ansichten)
-  |     +--- Layout/
-  |     |     +--- MainLayout.razor        (App-Layout mit Navigation)
-  |     +--- UI/
-  |           +--- NotificationComponent.razor (Toast-Notifications)
-  |
-  +--- Database/
-  |     +--- ChatDbContext.cs            (EF Core Context)
-  |     +--- ChatDbService.cs            (Chat-DB-Operationen)
-  |     +--- DocumentDbService.cs        (Dokument-DB-Operationen)
-  |     +--- Conversation.cs             (Model: Chat)
-  |     +--- Message.cs                  (Model: Nachricht)
-  |     +--- Document.cs                 (Model: Dokument)
-  |     +--- ConversationDocument.cs     (Model: Verknüpfung)
-  |     +--- CalendarEvent.cs            (Model: Kalender-Termin)
-  |
-  +--- Services/
-  |     +--- CalendarService.cs          (Kalender-DB-Operationen)
-  |     +--- NotificationService.cs      (Background-Timer für Erinnerungen)
-  |     +--- ChatEventService.cs         (Event-Broker für Chat-Reload)
-  |     +--- ThumbnailGenerator.cs       (PDF-Thumbnail-Generierung)
-  |     +--- McpTools/
-  |           +--- DocumentTools.cs      (MCP: Dokument-Tools)
-  |           +--- CalendarTools.cs      (MCP: Kalender-Tools)
-  |
-  +--- Platforms/Windows/
-  |     +--- ChatCoordinator.cs          (Zentrale Orchestrierung)
-  |     +--- RouterService.cs            (Intent-Detection + MCP)
-  |     +--- ConversationService.cs      (phi3:mini Ollama)
-  |     +--- DataAnalysisService.cs      (qwen2.5:7b Ollama)
-  |     +--- FileService.cs              (Text-Extraktion)
-  |     +--- McpToolsRegistry.cs         (MCP-Tool-Registrierung)
-  |
-  +--- Models/
-  |     +--- ChatResponse.cs             (Response-Model für AI)
-  |     +--- NotificationData.cs         (Model: Notification-Payload)
-  |
-  +--- Prompts/
-  |     +--- conversation-instructions.md (System-Prompt für phi3:mini)
-  |     +--- data-analysis-instructions.md (System-Prompt für qwen2.5:7b)
-  |
-  +--- wwwroot/
-  |     +--- css/
-  |     |     +--- app.css                 (Basis-Styles)
-  |     |     +--- calendar-components.css (Kalender-Styles)
-  |     +--- images/                       (Icons & Assets)
-  |
-  +--- openai-api-key.txt                  (Azure OpenAI API-Key)
-```
-
----
-
-## Technologien
-**Framework**: .NET MAUI 10 / C# 14.0  
-**Datenbank**: MySQL mit EF Core (Multi-User-fähig!)  
-**KI-Modelle**: Azure OpenAI (GPT-4), Ollama (phi3:mini, qwen2.5:7b)  
-
----
+Version 3.1 | .NET MAUI 10 | Gemini 2.5 Flash Lite + qwen3.5:9b | 2026-06-06

@@ -67,7 +67,7 @@ public class FolderDbService // Service für Ordner-Operationen und Dokument-Sta
     public async Task<List<Folder>> GetAllFoldersAsync() // Alle Ordner alphabetisch
     {
         var allFolders = await this.db.Folders.AsNoTracking().ToListAsync();
-        allFolders.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        allFolders.Sort(CompareFoldersByNameAsc); // Sortiere alphabetisch aufsteigend
         return allFolders;
     }
 
@@ -143,7 +143,7 @@ public class FolderDbService // Service für Ordner-Operationen und Dokument-Sta
             .AsNoTracking()
             .Where(d => d.IsInRoot)
             .ToListAsync();
-        result.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt));
+        result.Sort(CompareDocumentsByUploadedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return result;
     }
 
@@ -164,7 +164,7 @@ public class FolderDbService // Service für Ordner-Operationen und Dokument-Sta
                 if (d.Id == id) { result.Add(d); break; }
             }
         }
-        result.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt));
+        result.Sort(CompareDocumentsByUploadedAtDesc); // Sortiere nach Datum (neueste zuerst)
         return result;
     }
 
@@ -285,6 +285,80 @@ public class FolderDbService // Service für Ordner-Operationen und Dokument-Sta
         return true;
     }
 
+    // --- Duplikat-Pruefung ---
+
+    public async Task<bool> FolderNameExistsAsync(string name) // Prueft ob ein Ordnername bereits vergeben ist (global, case-insensitive)
+    {
+        string lower = name.ToLower().Trim();
+        var allFolders = await this.db.Folders.AsNoTracking().ToListAsync();
+        foreach (Folder f in allFolders)
+        {
+            if (f.Name.ToLower() == lower) return true; // Name bereits vergeben
+        }
+        return false;
+    }
+
+    public async Task<bool> DocumentNameExistsInLocationAsync(string fileName, int? folderId) // Prueft ob exakter Dateiname an diesem Standort existiert
+    {
+        string lower = fileName.ToLower();
+
+        if (folderId == null) // Root-Bereich: alle Dokumente mit IsInRoot=true pruefen
+        {
+            var rootDocs = await this.db.Documents.AsNoTracking().Where(d => d.IsInRoot).ToListAsync();
+            foreach (Document d in rootDocs)
+            {
+                if (d.FileName.ToLower() == lower) return true;
+            }
+            return false;
+        }
+
+        // Ordner: Dokument-IDs im Ordner laden, dann Name pruefen
+        var docIdsInFolder = await this.db.DocumentFolders
+            .AsNoTracking()
+            .Where(df => df.FolderId == folderId.Value)
+            .Select(df => df.DocumentId)
+            .ToListAsync();
+
+        var allDocs = await this.db.Documents.AsNoTracking().ToListAsync();
+        foreach (Document d in allDocs)
+        {
+            if (d.FileName.ToLower() != lower) continue;
+            foreach (int id in docIdsInFolder)
+            {
+                if (id == d.Id) return true; // Gleicher Name im selben Ordner gefunden
+            }
+        }
+        return false;
+    }
+
+    // --- Ordner umbenennen ---
+
+    public async Task<bool> RenameFolderAsync(int folderId, string newName) // Ordner umbenennen per ID
+    {
+        Folder? folder = await this.db.Folders.FindAsync(folderId);
+        if (folder == null) return false;
+        folder.Name = newName.Trim();
+        await this.db.SaveChangesAsync();
+        return true;
+    }
+
+    // --- Dokument komplett loeschen ---
+
+    public async Task<bool> DeleteDocumentCompletelyAsync(int documentId) // Entfernt Dokument aus allen Standorten und aus der DB
+    {
+        var links = await this.db.DocumentFolders
+            .Where(df => df.DocumentId == documentId)
+            .ToListAsync();
+        this.db.DocumentFolders.RemoveRange(links); // Alle Junction-Eintraege entfernen
+
+        Document? doc = await this.db.Documents.FindAsync(documentId);
+        if (doc == null) return false;
+
+        this.db.Documents.Remove(doc);
+        await this.db.SaveChangesAsync();
+        return true;
+    }
+
     // --- Suche ---
 
     public async Task<List<Document>> FindDocumentsByNameAsync(string searchName)
@@ -304,5 +378,15 @@ public class FolderDbService // Service für Ordner-Operationen und Dokument-Sta
         var found = await this.FindDocumentsByNameAsync(searchName);
         if (found.Count == 0) return null;
         return found[0];
+    }
+
+    private static int CompareFoldersByNameAsc(Folder a, Folder b) // Vergleich: alphabetisch aufsteigend
+    {
+        return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int CompareDocumentsByUploadedAtDesc(Document a, Document b) // Vergleich: neuestes Dokument zuerst
+    {
+        return b.UploadedAt.CompareTo(a.UploadedAt);
     }
 }
