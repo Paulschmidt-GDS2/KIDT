@@ -5,8 +5,8 @@
 
 /* Grid für gefundene Termine */
 .found-events-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    display: grid; /* CSS Grid aktivieren */
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Automatische Spaltenanzahl: min 240px, max gleich groß */
     gap: 12px;
     margin-top: 12px;
     width: 100%;
@@ -21,16 +21,16 @@
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    display: flex;
-    flex-direction: column;
+    display: flex; /* Flexbox für vertikale Anordnung */
+    flex-direction: column; /* Kinder vertikal stapeln */
     gap: 8px;
     min-height: 70px;
-    position: relative;
+    position: relative; /* Ankerpunkt für absolute Kind-Elemente */
 }
 
 .event-card-chat:hover {
     box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-    transform: translateY(-1px);
+    transform: translateY(-1px); /* Leichtes Anheben beim Hover */
 }
 
 /* Farben für Event-Cards (entsprechend Kalender ColorIndex) */
@@ -45,9 +45,9 @@
 
 /* Top-Bereich mit Datum/Zeit und Löschen-Button */
 .event-card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    display: flex; /* Flexbox für horizontale Anordnung */
+    justify-content: space-between; /* Datum links, Button rechts */
+    align-items: flex-start; /* Oben ausrichten, nicht zentrieren */
     gap: 10px;
 }
 

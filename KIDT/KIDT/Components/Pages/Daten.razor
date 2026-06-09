@@ -83,8 +83,8 @@
                     @if (CanPaste)
                     {
                         <div class="paste-bar">
-                            <button class="paste-btn" @onclick="PasteDocumentHere">
-                                &#128203; "@clipboardDocName" hier einfügen
+                            <button class="paste-btn" @onclick="PasteDocumentHere"> @* Einfügen-Button ohne Emoji *@
+                                "@clipboardDocName" hier einfügen
                             </button>
                         </div>
                     }
@@ -99,7 +99,9 @@
                             <button class="upload-new-btn" @onclick="OnUploadClick" disabled="@isUploading" title="Datei hochladen">
                                 <img src="images/file-upload.png" alt="Datei hochladen" class="upload-img" /> @* Upload-Icon *@
                             </button>
-                            <button class="folder-new-btn" @onclick="StartCreateFolder">+ Neu</button>
+                            <button class="upload-new-btn" @onclick="StartCreateFolder" title="Neuen Ordner erstellen">
+                                <img src="images/add_folder.png" alt="Ordner hinzufügen" class="upload-img" /> @* Ordner-Hinzufügen-Icon *@
+                            </button>
                         </div>
 
                         @* Inline-Eingabe: Neuen Ordner erstellen *@

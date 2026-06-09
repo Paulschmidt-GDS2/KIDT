@@ -1,31 +1,40 @@
 @* Toast-Benachrichtigungs-Komponente für Termin-Erinnerungen *@
 @using KIDT.Models
+@* NavigationManager für Seiten-Navigation *@
 @inject NavigationManager Navigation
+@* IDisposable implementieren für sauberes Cleanup *@
 @implements IDisposable
 
-@if (isVisible)
+@if (isVisible) @* Komponente nur rendern wenn sichtbar *@
 {
-    if (notification?.Type == NotificationType.StartupOverview)
+    if (notification?.Type == NotificationType.StartupOverview) @* Startup-Übersicht: mehrere Termine *@
     {
-        <div class="notification-startup @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")">
+        <div class="notification-startup @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")"> @* CSS-Klassen für Ein-/Ausblend-Animation *@
             <button class="notification-close" @onclick="Dismiss">×</button>
             <div class="notification-header">Anstehende Termine</div>
             <div class="notification-body">
-                @if (notification.Events.Count == 0)
+                @if (notification.Events.Count == 0) @* Keine Termine vorhanden? *@
                 {
                     <div class="no-events">Keine anstehenden Termine</div>
                 }
                 else
                 {
-                    @foreach (var ev in notification.Events)
+                    @foreach (var ev in notification.Events) @* Jeden Termin als klickbare Zeile rendern *@
                     {
-                        <div class="event-row" @onclick="() => NavigateToEvent(ev.Id)">
+                        <div class="event-row" @onclick="() => NavigateToEvent(ev.Id)"> @* Klick navigiert zum Termin *@
                             <div class="event-title">@ev.Title</div>
                             <div class="event-date">
                                 @ev.Start.ToString("dd.MM.yyyy")
-                                @if (ev.HasTime && !ev.IsAllDay)
+                                @if (ev.HasTime && !ev.IsAllDay) @* Uhrzeit nur bei Terminen mit Zeit-Angabe *@
                                 {
-                                    <span class="event-time"> - @ev.Time.ToString(@"hh\:mm")</span>
+                                    @if (ev.HasEndTime) @* Zeitspanne: Start–Ende anzeigen *@
+                                    {
+                                        <span class="event-time"> - @ev.Time.ToString(@"hh\:mm")–@ev.EndTime.ToString(@"hh\:mm")</span>
+                                    }
+                                    else @* Nur Startzeit *@
+                                    {
+                                        <span class="event-time"> - @ev.Time.ToString(@"hh\:mm")</span>
+                                    }
                                 }
                             </div>
                         </div>
@@ -34,54 +43,61 @@
             </div>
         </div>
     }
-    else if (notification?.Type == NotificationType.EventReminder && notification.Events.Count > 0)
+    else if (notification?.Type == NotificationType.EventReminder && notification.Events.Count > 0) @* Einzelner Termin-Reminder *@
     {
-        var ev = notification.Events[0];
-        <div class="notification-reminder @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")" @onclick="() => NavigateToEvent(ev.Id)">
-            <button class="notification-close" @onclick="Dismiss" @onclick:stopPropagation="true">×</button>
+        var ev = notification.Events[0]; // Erster (und einziger) Termin des Reminders
+        <div class="notification-reminder @(isVisible ? "show" : "") @(isDismissing ? "dismissing" : "")" @onclick="() => NavigateToEvent(ev.Id)"> @* Gesamte Card klickbar *@
+            <button class="notification-close" @onclick="Dismiss" @onclick:stopPropagation="true">×</button> @* stopPropagation: verhindert Navigation beim Schließen *@
             <div class="notification-content">
                 <div class="notification-title">@ev.Title</div>
                 <div class="notification-info">
                     @ev.Start.ToString("dd.MM.yyyy")
-                    @if (ev.HasTime && !ev.IsAllDay)
+                    @if (ev.HasTime && !ev.IsAllDay) @* Uhrzeit nur bei Terminen mit Zeit-Angabe *@
                     {
-                        <span> - @ev.Time.ToString(@"hh\:mm")</span>
+                        @if (ev.HasEndTime) @* Zeitspanne: Start–Ende anzeigen *@
+                        {
+                            <span> - @ev.Time.ToString(@"hh\:mm")–@ev.EndTime.ToString(@"hh\:mm")</span>
+                        }
+                        else @* Nur Startzeit *@
+                        {
+                            <span> - @ev.Time.ToString(@"hh\:mm")</span>
+                        }
                     }
                 </div>
-                <div class="notification-countdown">@GetCountdownText(ev)</div>
+                <div class="notification-countdown">@GetCountdownText(ev)</div> @* Dynamischer Countdown-Text *@
             </div>
         </div>
     }
 }
 
 @code {
-    private NotificationData? notification;
+    private NotificationData? notification; // Aktuell angezeigte Benachrichtigung
     private bool isVisible = false;
     private bool isDismissing = false; // True während Exit-Animation läuft
 
-    public void Show(NotificationData data)
+    public void Show(NotificationData data) // Zeigt Benachrichtigung an (wird von AppNotificationService aufgerufen)
     {
         System.Diagnostics.Debug.WriteLine($"[NOTIFICATION_COMPONENT] Show aufgerufen - Type: {data.Type}, Events: {data.Events.Count}");
         notification = data;
         isDismissing = false;
         isVisible = true;
-        StateHasChanged();
+        StateHasChanged(); // UI neu rendern
     }
 
     private async Task Dismiss() // Async: spielt Exit-Animation ab, dann versteckt
     {
         isDismissing = true; // Exit-Animation starten
-        StateHasChanged();
+        StateHasChanged(); // CSS-Klasse 'dismissing' aktivieren
         await Task.Delay(460); // Warten bis Animation fertig (~0.44s)
         isVisible = false;
         isDismissing = false;
-        StateHasChanged();
+        StateHasChanged(); // Komponente aus DOM entfernen
     }
 
     private async Task NavigateToEvent(int eventId) // Dismiss abwarten, dann navigieren
     {
         await Dismiss(); // Warte auf Exit-Animation (460ms), dann verstecken
-        Navigation.NavigateTo($"/Kalender?eventId={eventId}");
+        Navigation.NavigateTo($"/Kalender?eventId={eventId}"); // Zur Kalender-Seite mit Termin-ID navigieren
     }
 
     private string GetCountdownText(CalendarEvent ev) // Gibt lesbaren Countdown-Text zurück
@@ -90,11 +106,11 @@
 
         if (ev.HasTime && !ev.IsAllDay) // Termin mit Uhrzeit?
         {
-            eventDateTime = ev.Start.Date + ev.Time;
+            eventDateTime = ev.Start.Date + ev.Time; // Datum + Uhrzeit kombinieren
         }
         else
         {
-            eventDateTime = ev.Start.Date;
+            eventDateTime = ev.Start.Date; // Nur Datum (Ganztags-Termin)
         }
 
         var timeUntil = eventDateTime - DateTime.Now; // Verbleibende Zeit bis Termin
@@ -107,13 +123,13 @@
         {
             return $"in {(int)timeUntil.TotalHours} Stunden";
         }
-        else
+        else // Mehrere Tage
         {
             return $"in {(int)timeUntil.TotalDays} Tagen";
         }
     }
 
-    public void Dispose()
+    public void Dispose() // IDisposable: Ressourcen freigeben
     {
         // Cleanup - aktuell nichts zu tun
     }

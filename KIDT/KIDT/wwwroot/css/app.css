@@ -47,8 +47,8 @@ html[data-theme="blau"] {
     --clr-surface:      #363854;
     --clr-surface-dark: #282a3e;
     --clr-surface-rgb:  54, 56, 84;
-    --clr-text:         #c8c8f8;
-    --clr-text-rgb:     200, 200, 248;
+    --clr-text:         #e0dcff; /* Heller als vorher (#c8c8f8) für besseren Kontrast auf dunklem Grund */
+    --clr-text-rgb:     224, 220, 255;
     --clr-accent:       #9090f8;
     --clr-text-muted:   #7878b8;
     --clr-event-card:   #42446a;
@@ -61,8 +61,8 @@ html[data-theme="rot"] {
     --clr-surface:      #541818;
     --clr-surface-dark: #3d1010;
     --clr-surface-rgb:  84, 24, 24;
-    --clr-text:         #f0d0b8;
-    --clr-text-rgb:     240, 208, 184;
+    --clr-text:         #f8e4d0; /* Heller als vorher (#f0d0b8) für besseren Kontrast auf dunklem Grund */
+    --clr-text-rgb:     248, 228, 208;
     --clr-accent:       #d08848;
     --clr-text-muted:   #a06840;
     --clr-event-card:   #6a2020;
@@ -118,7 +118,7 @@ html[data-theme="rot"] .delete-btn img {
 
 html, body {
     background-color: var(--clr-surface);
-    overflow: hidden;
+    overflow: hidden; /* Verhindert Scrollen auf Root-Ebene */
     height: 100%;
     margin: 0;
     padding: 0;
@@ -165,14 +165,14 @@ h1:focus {
     display: none;
     left: 0;
     padding: 0.6rem 1.25rem 0.7rem 1.25rem;
-    position: fixed;
+    position: fixed; /* Bleibt am unteren Bildschirmrand haften */
     width: 100%;
-    z-index: 1000;
+    z-index: 1000; /* Über allem anderen sichtbar */
 }
 
 #blazor-error-ui .dismiss {
     cursor: pointer;
-    position: absolute;
+    position: absolute; /* Absolut innerhalb #blazor-error-ui positioniert */
     right: 0.75rem;
     top: 0.5rem;
 }
@@ -193,13 +193,13 @@ h1:focus {
 
 @supports (-webkit-touch-callout: none) {
     .status-bar-safe-area {
-        display: flex;
-        position: sticky;
+        display: flex; /* Flexbox für vertikale Safe-Area-Leiste */
+        position: sticky; /* Bleibt oben beim Scrollen haften */
         top: 0;
-        height: env(safe-area-inset-top);
+        height: env(safe-area-inset-top); /* Höhe = iOS-Safe-Area (Notch/Dynamic Island) */
         background-color: #f7f7f7;
         width: 100%;
-        z-index: 1;
+        z-index: 1; /* Über dem normalen Content-Fluss */
     }
 
     .flex-column, .navbar-brand {

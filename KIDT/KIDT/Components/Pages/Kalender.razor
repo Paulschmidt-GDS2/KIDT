@@ -68,7 +68,8 @@
                 <div class="week-header">
                     @foreach (var day in WeekDays) @* Wochentag-Header *@
                     {
-                        <div class="week-day-header">@day.ToString("ddd dd.MM", germanCulture)</div>
+                        var isHeaderToday = day.Date == DateTime.Today; // Check: Ist dieser Header-Tag heute?
+                        <div class="week-day-header @(isHeaderToday ? "today" : "")">@day.ToString("ddd dd.MM", germanCulture)</div>
                     }
                 </div>
                 <div class="week-body">

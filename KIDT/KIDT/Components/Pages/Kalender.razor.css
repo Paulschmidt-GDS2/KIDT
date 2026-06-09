@@ -90,8 +90,13 @@
     transition-duration: 0.08s;
 }
 
+.view-button:first-child {
+    border-radius: 4px 0 0 4px; /* Innerer Radius passend zum Container (6px Border - 2px = 4px) */
+}
+
 .view-button:last-child {
     border-right: none;
+    border-radius: 0 4px 4px 0; /* Innerer Radius rechts — verhindert Lücke durch overflow:hidden */
 }
 
 .view-button:hover {
@@ -203,11 +208,21 @@
     opacity: 0.4; /* Leicht transparent */
 }
 
-/* Heutiger Tag - Hervorhebung mit dickerer schwarzer Umrandung */
+/* Heutiger Tag - gefülltes Tagnummer-Badge */
 .day-cell.today {
-    border: 4px solid var(--clr-text) !important; /* Dickere schwarze Umrandung für klare Hervorhebung */
-    background: rgba(var(--clr-text-rgb), 0.04); /* Sehr subtiler dunkler Hintergrund */
-    font-weight: 700; /* Fettere Schrift für Tagesnummer */
+    border: 2px solid var(--clr-text); /* Normaler Rahmen wie andere Zellen */
+    background: rgba(var(--clr-text-rgb), 0.05); /* Sehr subtiler Hintergrund */
+}
+
+/* Badge: Tagesnummer gefüllt — text/surface sind stets kontrastierend in allen Themes */
+.day-cell.today .day-number {
+    display: inline-block; /* Nur so breit wie der Inhalt */
+    background: var(--clr-text); /* Gefüllter Hintergrund */
+    color: var(--clr-surface) !important; /* Kontrasttext — override des globalen * {color} */
+    border-radius: 3px; /* Passend zum App-Stil */
+    padding: 0 5px; /* Seitlicher Innenabstand */
+    min-width: 20px; /* Mindestbreite für einstellige Zahlen */
+    text-align: center; /* Zahl zentrieren */
 }
 
 /* Tagesnummer in Zelle */
@@ -299,11 +314,33 @@
     font-size: 13px; /* Etwas kleinere Schriftgröße */
 }
 
-/* Heutiger Tag in Wochenansicht */
+/* Heutiger Tag in Wochenansicht — konsistent zur Monatsansicht */
 .week-day.today {
-    border: 4px solid var(--clr-text) !important; /* Dickere schwarze Umrandung */
-    background: rgba(var(--clr-text-rgb), 0.04); /* Sehr subtiler dunkler Hintergrund */
-    font-weight: 700; /* Fettere Schrift */
+    border: 2px solid var(--clr-text); /* Normaler Rahmen */
+    background: rgba(var(--clr-text-rgb), 0.05); /* Sehr subtiler Hintergrund */
+}
+
+/* Badge: Tagesnummer in Wochenansicht */
+.week-day.today .day-number {
+    display: inline-block; /* Nur so breit wie der Inhalt */
+    background: var(--clr-text); /* Gefüllter Hintergrund */
+    color: var(--clr-surface) !important; /* Kontrasttext */
+    border-radius: 3px;
+    padding: 0 5px;
+    min-width: 20px;
+    text-align: center;
+}
+
+/* Header der heutigen Spalte in der Wochenansicht */
+.week-day-header.today {
+    background: var(--clr-text); /* Gefüllter Hintergrund */
+    color: var(--clr-surface) !important; /* Kontrasttext */
+    border-bottom-color: var(--clr-text); /* Rahmen harmonisch */
+}
+
+/* Globales * überschreibt geerbten color-Wert — daher hier force override */
+.week-day-header.today * {
+    color: var(--clr-surface) !important;
 }
 
 /* Body mit Tagesfeldern */

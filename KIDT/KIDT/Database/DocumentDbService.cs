@@ -9,7 +9,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
 {
     private readonly ChatDbContext db;
 
-    public DocumentDbService(ChatDbContext dbContext)
+    public DocumentDbService(ChatDbContext dbContext) // Konstruktor: DB-Context per Dependency Injection
     {
         this.db = dbContext;
     }
@@ -130,8 +130,8 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
         // Erstelle neue Verknüpfung (OHNE Navigation Properties!)
         ConversationDocument link = new ConversationDocument
         {
-            ConversationId = conversationId,
-            DocumentId = documentId,
+            ConversationId = conversationId, // Conversation-Fremdschlüssel
+            DocumentId = documentId, // Dokument-Fremdschlüssel
             AddedAt = DateTime.UtcNow,
             Conversation = null, // Explizit auf null setzen
             Document = null // Explizit auf null setzen
@@ -150,7 +150,7 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
             System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Fehler beim Verknüpfen: {ex.GetType().Name}");
             System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Message: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"[DocumentDbService] Stack: {ex.StackTrace}");
-            if (ex.InnerException != null)
+            if (ex.InnerException != null) // Inneren Fehler ebenfalls ausgeben
             {
                 System.Diagnostics.Debug.WriteLine($"[DocumentDbService] InnerException: {ex.InnerException.GetType().Name}");
                 System.Diagnostics.Debug.WriteLine($"[DocumentDbService] InnerMessage: {ex.InnerException.Message}");
@@ -249,10 +249,10 @@ public class DocumentDbService // Service: Dokumenten-Operationen (CRUD + Search
 
         this.db.ConversationDocuments.RemoveRange(links); // Entferne alle Verknüpfungen aus Datenbank
 
-        var allDocuments = await this.db.Documents.ToListAsync();
+        var allDocuments = await this.db.Documents.ToListAsync(); // Alle Dokumente laden
         Document doc = new Document();
         bool docFound = false;
-        foreach (Document d in allDocuments)
+        foreach (Document d in allDocuments) // Gesuchtes Dokument finden
         {
             if (d.Id == documentId)
             {

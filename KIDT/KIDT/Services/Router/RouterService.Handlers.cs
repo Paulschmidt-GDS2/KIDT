@@ -28,14 +28,14 @@ public partial class RouterService
 
         if (analysisDocs.Count == 0) // Kein Dokument per ID gefunden → Fallback auf Kontext-DocIDs
         {
-            foreach (int docId in lastDocIds)
+            foreach (int docId in lastDocIds) // Kontext-DocIDs als Fallback durchgehen
             {
-                Document doc = await docDbService.GetDocumentByIdAsync(docId);
-                if (doc != null && doc.Id > 0) analysisDocs.Add(doc);
+                Document doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument aus DB laden
+                if (doc != null && doc.Id > 0) analysisDocs.Add(doc); // Nur gültige Dokumente
             }
         }
 
-        RouterResponse response = new RouterResponse();
+        RouterResponse response = new RouterResponse(); // Routing-Antwort für DataAnalysis aufbauen
         response.ShouldRoute = true;
         response.TargetService = "dataAnalysis";
         response.MaxTokens = 2000;
@@ -50,28 +50,28 @@ public partial class RouterService
         DocumentDbService docDbService, CalendarService calendarService,
         List<Document> foundDocuments)
     {
-        if (functionName == "search_documents") return await HandleSearchDocumentsAsync(resultText, docDbService, foundDocuments);
-        if (functionName == "list_calendar_events") return await HandleListCalendarEventsAsync(resultText, calendarService);
-        if (functionName == "create_calendar_event") return HandleCreateCalendarEvent(resultText);
-        if (functionName == "delete_calendar_event") return HandleDeleteCalendarEvent(resultText);
-        if (functionName == "update_calendar_event") return HandleUpdateCalendarEvent(resultText);
-        if (functionName == "add_document_to_chat") return await HandleAddDocumentToChatAsync(resultText, docDbService, foundDocuments);
-        if (functionName == "create_folder") return HandleFolderOperationResult(resultText);
-        if (functionName == "delete_folder") return HandleFolderOperationResult(resultText);
-        if (functionName == "move_document_to_folder") return HandleFolderOperationResult(resultText);
-        if (functionName == "copy_document_to_folder") return HandleFolderOperationResult(resultText);
-        if (functionName == "remove_document_from_folder") return HandleFolderOperationResult(resultText);
-        if (functionName == "list_documents_in_folder") return await HandleListDocumentsInFolderAsync(resultText, docDbService, foundDocuments);
-        if (functionName == "find_documents") return HandleFindDocumentsResult(resultText);
-        if (functionName == "list_all_folders") return HandleListAllFoldersResult(resultText);
-        if (functionName == "rename_folder") return HandleFolderOperationResult(resultText);
-        return null;
+        if (functionName == "search_documents") return await HandleSearchDocumentsAsync(resultText, docDbService, foundDocuments); // Dokument-Suche
+        if (functionName == "list_calendar_events") return await HandleListCalendarEventsAsync(resultText, calendarService); // Termine auflisten
+        if (functionName == "create_calendar_event") return HandleCreateCalendarEvent(resultText); // Termin erstellen
+        if (functionName == "delete_calendar_event") return HandleDeleteCalendarEvent(resultText); // Termin löschen
+        if (functionName == "update_calendar_event") return HandleUpdateCalendarEvent(resultText); // Termin aktualisieren
+        if (functionName == "add_document_to_chat") return await HandleAddDocumentToChatAsync(resultText, docDbService, foundDocuments); // Dokument verknüpfen
+        if (functionName == "create_folder") return HandleFolderOperationResult(resultText); // Ordner erstellen
+        if (functionName == "delete_folder") return HandleFolderOperationResult(resultText); // Ordner löschen
+        if (functionName == "move_document_to_folder") return HandleFolderOperationResult(resultText); // Dokument verschieben
+        if (functionName == "copy_document_to_folder") return HandleFolderOperationResult(resultText); // Dokument kopieren
+        if (functionName == "remove_document_from_folder") return HandleFolderOperationResult(resultText); // Dokument aus Ordner entfernen
+        if (functionName == "list_documents_in_folder") return await HandleListDocumentsInFolderAsync(resultText, docDbService, foundDocuments); // Ordner-Inhalt auflisten
+        if (functionName == "find_documents") return HandleFindDocumentsResult(resultText); // Dokument-Standort suchen
+        if (functionName == "list_all_folders") return HandleListAllFoldersResult(resultText); // Alle Ordner auflisten
+        if (functionName == "rename_folder") return HandleFolderOperationResult(resultText); // Ordner umbenennen
+        return null; // Unbekannte Funktion → kein Handler
     }
 
     private async Task<RouterResponse> HandleSearchDocumentsAsync( // Verarbeitet search_documents Ergebnis
         string resultText, DocumentDbService docDbService, List<Document> foundDocuments)
     {
-        var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText);
+        var toolResult = JsonSerializer.Deserialize<SearchResultJson>(resultText); // JSON-Ergebnis deserialisieren
 
         if (toolResult == null || toolResult.documentIds == null || toolResult.found == 0) // Keine Treffer?
         {
@@ -84,21 +84,19 @@ public partial class RouterService
 
         foreach (int docId in toolResult.documentIds) // Lade vollständige Dokumente aus DB
         {
-            Document doc = await docDbService.GetDocumentByIdAsync(docId);
-            if (doc != null && doc.Id > 0) foundDocuments.Add(doc);
+            Document doc = await docDbService.GetDocumentByIdAsync(docId); // Vollständiges Dokument laden
+            if (doc != null && doc.Id > 0) foundDocuments.Add(doc); // Nur gültige Dokumente
         }
 
-        List<string> fileNames = new List<string>();
-        List<int> docIds = new List<int>();
+        List<string> fileNames = new List<string>(); // Dateinamen für Anzeige-Nachricht
         foreach (Document d in foundDocuments)
         {
             string name = string.Empty;
-            if (d.FileName != null) name = d.FileName;
+            if (d.FileName != null) name = d.FileName; // Dateiname sicher auslesen
             fileNames.Add(name);
-            docIds.Add(d.Id);
         }
 
-        string message = $"{toolResult.found} Dokument(e) gefunden: {string.Join(", ", fileNames)} [DocID: {string.Join(",", docIds)}]";
+        string message = $"{toolResult.found} Dokument(e) gefunden: {string.Join(", ", fileNames)}"; // Kein DocID-Marker: wird über DocumentIdsJson gespeichert
 
         RouterResponse response = new RouterResponse();
         response.DirectResponse = message;
@@ -111,16 +109,16 @@ public partial class RouterService
     private async Task<RouterResponse> HandleListCalendarEventsAsync( // Verarbeitet list_calendar_events Ergebnis
         string resultText, CalendarService calendarService)
     {
-        var listResult = JsonSerializer.Deserialize<CalendarListResultJson>(resultText);
-        List<CalendarEvent> foundEvents = new List<CalendarEvent>();
+        var listResult = JsonSerializer.Deserialize<CalendarListResultJson>(resultText); // JSON-Ergebnis deserialisieren
+        List<CalendarEvent> foundEvents = new List<CalendarEvent>(); // Geladene CalendarEvent-Objekte
         string message = "Keine Termine gefunden.";
 
         if (listResult != null && listResult.found > 0 && listResult.events != null) // Termine gefunden?
         {
             foreach (var e in listResult.events) // Lade vollständige Events aus DB
             {
-                var fullEvent = await calendarService.GetEventByIdAsync(e.id);
-                if (fullEvent != null) foundEvents.Add(fullEvent);
+                var fullEvent = await calendarService.GetEventByIdAsync(e.id); // Vollständiges Event per ID holen
+                if (fullEvent != null) foundEvents.Add(fullEvent); // Nur gefundene Events hinzufügen
             }
             message = $"{listResult.found} Termin(e) gefunden";
         }
@@ -135,7 +133,7 @@ public partial class RouterService
 
     private RouterResponse HandleCreateCalendarEvent(string resultText) // Verarbeitet create_calendar_event Ergebnis
     {
-        var result = JsonSerializer.Deserialize<CalendarCreateResultJson>(resultText);
+        var result = JsonSerializer.Deserialize<CalendarCreateResultJson>(resultText); // JSON-Ergebnis deserialisieren
         RouterResponse response = new RouterResponse();
         response.ToolWasUsed = true;
 
@@ -147,7 +145,7 @@ public partial class RouterService
         else // Fehler beim Erstellen
         {
             string errorMsg = "Termin konnte nicht erstellt werden.";
-            if (result != null && result.message != null) errorMsg = result.message;
+            if (result != null && result.message != null) errorMsg = result.message; // Tool-Fehlermeldung übernehmen
             response.DirectResponse = errorMsg;
             response.Reason = "Termin-Erstellung fehlgeschlagen";
         }
@@ -156,21 +154,21 @@ public partial class RouterService
 
     private RouterResponse HandleDeleteCalendarEvent(string resultText) // Verarbeitet delete_calendar_event Ergebnis
     {
-        var result = JsonSerializer.Deserialize<CalendarDeleteResultJson>(resultText);
+        var result = JsonSerializer.Deserialize<CalendarDeleteResultJson>(resultText); // JSON-Ergebnis deserialisieren
         RouterResponse response = new RouterResponse();
         response.ToolWasUsed = true;
 
         if (result != null && result.needsClarification && result.events != null) // Mehrere Treffer → Rückfrage
         {
-            var lines = new List<string>();
-            foreach (var e in result.events)
+            var lines = new List<string>(); // Termin-Optionen als Liste aufbauen
+            foreach (var e in result.events) // Jeden Treffer als Auswahloption formatieren
             {
                 string timeInfo = string.Empty;
-                if (e.time != "Ganztägig") timeInfo = $" ({e.time})";
+                if (e.time != "Ganztägig") timeInfo = $" ({e.time})"; // Uhrzeit nur wenn nicht ganztägig
                 lines.Add($"• ID {e.id}: {e.title}" + timeInfo);
             }
             string msg = string.Empty;
-            if (result.message != null) msg = result.message;
+            if (result.message != null) msg = result.message; // Tool-Nachricht (z.B. "Welchen Termin meinst du?")
             response.DirectResponse = msg + "\n" + string.Join("\n", lines);
             response.Reason = "Mehrdeutiger Termin (Rückfrage)";
             return response;
@@ -184,7 +182,7 @@ public partial class RouterService
         else // Fehler beim Löschen
         {
             string errorMsg = "Termin konnte nicht gelöscht werden.";
-            if (result != null && result.message != null) errorMsg = result.message;
+            if (result != null && result.message != null) errorMsg = result.message; // Tool-Fehlermeldung übernehmen
             response.DirectResponse = errorMsg;
             response.Reason = "Termin-Löschung fehlgeschlagen";
         }
@@ -193,21 +191,21 @@ public partial class RouterService
 
     private RouterResponse HandleUpdateCalendarEvent(string resultText) // Verarbeitet update_calendar_event Ergebnis
     {
-        var result = JsonSerializer.Deserialize<CalendarUpdateResultJson>(resultText);
+        var result = JsonSerializer.Deserialize<CalendarUpdateResultJson>(resultText); // JSON-Ergebnis deserialisieren
         RouterResponse response = new RouterResponse();
         response.ToolWasUsed = true;
 
         if (result != null && result.needsClarification && result.events != null) // Mehrere Treffer → Rückfrage
         {
-            var lines = new List<string>();
-            foreach (var e in result.events)
+            var lines = new List<string>(); // Termin-Optionen als Liste aufbauen
+            foreach (var e in result.events) // Jeden Treffer als Auswahloption formatieren
             {
                 string timeInfo = string.Empty;
-                if (e.time != "Ganztägig") timeInfo = $" ({e.time})";
+                if (e.time != "Ganztägig") timeInfo = $" ({e.time})"; // Uhrzeit nur wenn nicht ganztägig
                 lines.Add($"• ID {e.id}: {e.title}" + timeInfo);
             }
             string msg = string.Empty;
-            if (result.message != null) msg = result.message;
+            if (result.message != null) msg = result.message; // Tool-Nachricht übernehmen
             response.DirectResponse = msg + "\n" + string.Join("\n", lines);
             response.Reason = "Mehrdeutiger Termin (Rückfrage)";
             return response;
@@ -221,7 +219,7 @@ public partial class RouterService
         else // Fehler beim Aktualisieren
         {
             string errorMsg = "Termin konnte nicht aktualisiert werden.";
-            if (result != null && result.message != null) errorMsg = result.message;
+            if (result != null && result.message != null) errorMsg = result.message; // Tool-Fehlermeldung übernehmen
             response.DirectResponse = errorMsg;
             response.Reason = "Termin-Update fehlgeschlagen";
         }
@@ -235,7 +233,7 @@ public partial class RouterService
 
         try
         {
-            var result = JsonSerializer.Deserialize<FolderResultJson>(resultText);
+            var result = JsonSerializer.Deserialize<FolderResultJson>(resultText); // JSON-Ergebnis deserialisieren
 
             if (result != null && result.success) // Tool wurde aufgerufen UND hat erfolgreich abgeschlossen
             {
@@ -245,7 +243,7 @@ public partial class RouterService
             else // Tool wurde aufgerufen, aber die Operation ist fehlgeschlagen
             {
                 string errorMsg = "Die Operation konnte nicht ausgeführt werden.";
-                if (result != null && result.message != null) errorMsg = result.message;
+                if (result != null && result.message != null) errorMsg = result.message; // Tool-Fehlermeldung übernehmen
                 response.DirectResponse = errorMsg;
                 response.Reason = "Ordner-Operation fehlgeschlagen";
             }
@@ -261,13 +259,13 @@ public partial class RouterService
     private async Task<RouterResponse> HandleListDocumentsInFolderAsync( // Verarbeitet list_documents_in_folder → gibt Dokument-Cards zurück wie search_documents
         string resultText, DocumentDbService docDbService, List<Document> foundDocuments)
     {
-        var listResult = JsonSerializer.Deserialize<FolderListResultJson>(resultText);
+        var listResult = JsonSerializer.Deserialize<FolderListResultJson>(resultText); // JSON-Ergebnis deserialisieren
 
         if (listResult == null || !listResult.success || listResult.documents == null || listResult.found == 0) // Keine Dokumente?
         {
             RouterResponse emptyResponse = new RouterResponse();
             string msg = "Keine Dokumente im Ordner gefunden.";
-            if (listResult != null && listResult.message != null) msg = listResult.message;
+            if (listResult != null && listResult.message != null) msg = listResult.message; // Tool-Nachricht übernehmen
             emptyResponse.DirectResponse = msg;
             emptyResponse.Reason = "Ordner-Inhalt leer";
             emptyResponse.ToolWasUsed = true;
@@ -276,18 +274,8 @@ public partial class RouterService
 
         foreach (var docInfo in listResult.documents) // Vollständige Dokumente aus DB laden (für Thumbnails etc.)
         {
-            Document doc = await docDbService.GetDocumentByIdAsync(docInfo.id);
-            if (doc != null && doc.Id > 0) foundDocuments.Add(doc);
-        }
-
-        List<string> fileNames = new List<string>(); // Dateinamen + DocIDs für Kontext-Marker
-        List<int> docIds = new List<int>();
-        foreach (Document d in foundDocuments)
-        {
-            string name = string.Empty;
-            if (d.FileName != null) name = d.FileName;
-            fileNames.Add(name);
-            docIds.Add(d.Id);
+            Document doc = await docDbService.GetDocumentByIdAsync(docInfo.id); // Vollständiges Dokument per ID laden
+            if (doc != null && doc.Id > 0) foundDocuments.Add(doc); // Nur gültige Dokumente
         }
 
         string baseMsg;
@@ -299,7 +287,7 @@ public partial class RouterService
         {
             baseMsg = $"{listResult.found} Dokument(e) gefunden";
         }
-        string message = $"{baseMsg} [DocID: {string.Join(",", docIds)}]"; // DocID-Marker für Follow-up-Analyse
+        string message = baseMsg; // Kein DocID-Marker: DocIDs werden über FoundDocuments.DocumentIdsJson gespeichert
 
         RouterResponse response = new RouterResponse();
         response.DirectResponse = message;
@@ -316,19 +304,19 @@ public partial class RouterService
 
         try
         {
-            var result = JsonSerializer.Deserialize<AllFoldersResultJson>(resultText);
+            var result = JsonSerializer.Deserialize<AllFoldersResultJson>(resultText); // JSON-Ergebnis deserialisieren
 
             if (result == null || !result.success || result.folders == null || result.found == 0) // Keine Ordner?
             {
                 string noFolders = "Es gibt noch keine Ordner.";
-                if (result != null && result.message != null) noFolders = result.message;
+                if (result != null && result.message != null) noFolders = result.message; // Tool-Nachricht übernehmen
                 response.DirectResponse = noFolders;
                 response.Reason = "Ordnerliste leer";
                 return response;
             }
 
             var lines = new List<string>(); // Ordner als Liste aufbauen
-            foreach (FolderItemJson f in result.folders)
+            foreach (FolderItemJson f in result.folders) // Jeden Ordner als Listeneintrag formatieren
             {
                 string docLabel;
                 if (f.documentCount == 1) // Singular oder Plural?
@@ -339,10 +327,10 @@ public partial class RouterService
                 {
                     docLabel = $"{f.documentCount} Dokumente";
                 }
-                lines.Add($"• {f.name} ({docLabel})");
+                lines.Add($"• {f.name} ({docLabel})"); // Ordner-Eintrag mit Dokumentanzahl
             }
 
-            response.DirectResponse = $"{result.found} Ordner vorhanden:\n{string.Join("\n", lines)}";
+            response.DirectResponse = $"{result.found} Ordner vorhanden:\n{string.Join("\n", lines)}"; // Gesamtergebnis zusammenbauen
             response.Reason = "Ordner aufgelistet";
         }
         catch // JSON-Parse-Fehler
@@ -361,12 +349,12 @@ public partial class RouterService
 
         try
         {
-            var result = JsonSerializer.Deserialize<FindDocumentsResultJson>(resultText);
+            var result = JsonSerializer.Deserialize<FindDocumentsResultJson>(resultText); // JSON-Ergebnis deserialisieren
 
             if (result == null || !result.success || result.documents == null || result.found == 0) // Keine Treffer?
             {
                 string noFound = "Kein Dokument mit diesem Namen gefunden.";
-                if (result != null && result.message != null) noFound = result.message;
+                if (result != null && result.message != null) noFound = result.message; // Tool-Nachricht übernehmen
                 response.DirectResponse = noFound;
                 response.Reason = "Dokument-Suche ohne Ergebnis";
                 return response;
@@ -374,14 +362,14 @@ public partial class RouterService
 
             var sentences = new List<string>(); // Sätze pro Dokument aufbauen
 
-            foreach (var doc in result.documents)
+            foreach (var doc in result.documents) // Jeden gefundenen Dokument-Eintrag verarbeiten
             {
-                List<string> locations = new List<string>();
+                List<string> locations = new List<string>(); // Standorte dieses Dokuments
                 if (doc.inFolders != null)
                 {
-                    foreach (string loc in doc.inFolders) locations.Add(loc);
+                    foreach (string loc in doc.inFolders) locations.Add(loc); // Ordner-Zugehörigkeiten übernehmen
                 }
-                if (locations.Count == 0) locations.Add("Hauptbereich"); // Fallback
+                if (locations.Count == 0) locations.Add("Hauptbereich"); // Kein Ordner → Hauptbereich als Fallback
 
                 // --- Natürlichsprachliche Formulierung ---
                 string sentence = string.Empty;
@@ -396,33 +384,33 @@ public partial class RouterService
                 }
                 else // Mehrere Standorte
                 {
-                    var ordnerListe = new List<string>();
+                    var ordnerListe = new List<string>(); // Echte Ordner (ohne Hauptbereich)
                     bool inHauptbereich = false;
 
-                    foreach (string loc in locations)
+                    foreach (string loc in locations) // Standorte klassifizieren
                     {
-                        if (loc == "Hauptbereich") inHauptbereich = true;
-                        else ordnerListe.Add(loc);
+                        if (loc == "Hauptbereich") inHauptbereich = true; // Hauptbereich-Flag setzen
+                        else ordnerListe.Add(loc); // Echte Ordner sammeln
                     }
 
-                    string ordnerText = string.Join(" und ", ordnerListe); // Ordner auflisten
+                    string ordnerText = string.Join(" und ", ordnerListe); // Ordnernamen verbinden
 
-                    if (inHauptbereich && ordnerListe.Count == 0)
+                    if (inHauptbereich && ordnerListe.Count == 0) // Nur Hauptbereich (mehrfach gelistet)
                         sentence = $"Die Datei {doc.fileName} liegt nur im Hauptbereich.";
-                    else if (inHauptbereich && ordnerListe.Count == 1)
+                    else if (inHauptbereich && ordnerListe.Count == 1) // Hauptbereich + 1 Ordner
                         sentence = $"Die Datei {doc.fileName} liegt im Ordner {ordnerText} und im Hauptbereich.";
-                    else if (inHauptbereich)
+                    else if (inHauptbereich) // Hauptbereich + mehrere Ordner
                         sentence = $"Die Datei {doc.fileName} liegt in den Ordnern {ordnerText} und im Hauptbereich.";
-                    else if (ordnerListe.Count == 1)
+                    else if (ordnerListe.Count == 1) // Genau 1 Ordner (kein Hauptbereich)
                         sentence = $"Die Datei {doc.fileName} liegt im Ordner {ordnerText}.";
-                    else
+                    else // Mehrere Ordner (kein Hauptbereich)
                         sentence = $"Die Datei {doc.fileName} liegt in den Ordnern {ordnerText}.";
                 }
 
-                sentences.Add(sentence);
+                sentences.Add(sentence); // Formulierten Satz zur Liste
             }
 
-            response.DirectResponse = string.Join(" ", sentences);
+            response.DirectResponse = string.Join(" ", sentences); // Alle Sätze zu einem Text zusammenführen
             response.Reason = "Dokument-Standort";
         }
         catch // JSON-Parse-Fehler
@@ -437,24 +425,24 @@ public partial class RouterService
     private async Task<RouterResponse> HandleAddDocumentToChatAsync( // Verarbeitet add_document_to_chat Ergebnis
         string resultText, DocumentDbService docDbService, List<Document> foundDocuments)
     {
-        var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText);
+        var addResult = JsonSerializer.Deserialize<AddDocumentResultJson>(resultText); // JSON-Ergebnis deserialisieren
         RouterResponse response = new RouterResponse();
         response.ToolWasUsed = true;
 
-        bool alreadyLinked = addResult != null && addResult.message != null && addResult.message.Contains("bereits");
+        bool alreadyLinked = addResult != null && addResult.message != null && addResult.message.Contains("bereits"); // Dokument bereits verknüpft?
         bool isSuccess = addResult != null && (addResult.success || alreadyLinked); // Erfolg oder bereits verknüpft?
 
         if (isSuccess) // Dokument verfügbar?
         {
-            Document docTemp = await docDbService.GetDocumentByIdAsync(addResult!.documentId);
+            Document docTemp = await docDbService.GetDocumentByIdAsync(addResult!.documentId); // Vollständiges Dokument aus DB laden
             bool docFound = false;
             Document doc = new Document();
-            if (docTemp != null && docTemp.Id > 0)
+            if (docTemp != null && docTemp.Id > 0) // Gültiges Dokument?
             {
                 doc = docTemp;
                 docFound = true;
             }
-            if (docFound) foundDocuments.Add(doc);
+            if (docFound) foundDocuments.Add(doc); // Dokument zur Ergebnis-Liste
 
             if (docFound) // Dokument gefunden → zu DataAnalysis routen
             {
@@ -467,7 +455,7 @@ public partial class RouterService
             }
 
             string fileName = "Unbekannt";
-            if (addResult!.fileName != null) fileName = addResult.fileName;
+            if (addResult!.fileName != null) fileName = addResult.fileName; // Dateiname sicher auslesen
             response.DirectResponse = $"Dokument '{fileName}' wurde zum Chat hinzugefügt.";
             response.FoundDocuments = foundDocuments;
             response.Reason = "Dokument hinzugefügt";
@@ -475,7 +463,7 @@ public partial class RouterService
         else // Fehler beim Hinzufügen
         {
             string errorMsg = "Dokument konnte nicht hinzugefügt werden.";
-            if (addResult != null && addResult.message != null) errorMsg = addResult.message;
+            if (addResult != null && addResult.message != null) errorMsg = addResult.message; // Tool-Fehlermeldung übernehmen
             response.DirectResponse = errorMsg;
             response.Reason = "Dokument-Verknüpfung fehlgeschlagen";
         }

@@ -97,8 +97,9 @@ body {
     overflow-wrap: anywhere; /* Text bei Bedarf umbrechen */
     margin: 0; /* Kein Außenabstand */
     box-sizing: border-box; /* Padding in Breite einrechnen */
-    white-space: pre-wrap; /* Zeilenumbrüche und Whitespace beibehalten */
+    white-space: normal; /* Template-Whitespace nicht als sichtbare Zeilen rendern */
     animation: bubble-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    font-size: 16px; /* ← SCHRIFTGRÖSSE CHAT-NACHRICHTEN (User + Assistent) hier ändern */
 }
 
 @keyframes bubble-in {
@@ -141,32 +142,38 @@ body {
     margin-top: 8px; /* Abstand nach oben */
 }
 
+/* Typewriter-Span: pre-wrap nur hier, damit LLM-Zeilenumbrüche erhalten bleiben
+   ohne dass Blazor-Template-Whitespace außerhalb des Spans die Bubble aufbläht */
+.typewriter {
+    white-space: pre-wrap;
+}
+
 /* === LOADING-ANIMATION === */
 
-/* "KI denkt nach": Wandernder Licht-Schleier von rechts nach links */
+/* "KI denkt nach": Wandernder Licht-Schleier gleichmäßig von links nach rechts */
 .loading-shimmer-text {
     display: inline; /* Inline — Cursor folgt direkt dahinter */
     font-size: 18px; /* Passend zu blinking-cursor Schriftgröße */
     margin-right: 2px; /* Puffer vor dem blinkenden Cursor */
     background: linear-gradient(
         90deg,
-        var(--clr-text)                    20%, /* Volle Textfarbe links */
-        rgba(var(--clr-text-rgb), 0.28)    50%, /* Abgedunkelte Mitte – der "Schleier" */
-        var(--clr-text)                    80%  /* Volle Textfarbe rechts */
-    ); /* Gradient wandert über Text – erzeugt den Schleier-Effekt */
-    background-size: 260% 100%; /* Breiter als Element: Sweep startet/endet außerhalb */
+        var(--clr-text)                     0%, /* Volle Textfarbe am Rand */
+        rgba(var(--clr-text-rgb), 0.25)    50%, /* Schleier-Kern genau in Gradient-Mitte */
+        var(--clr-text)                   100%  /* Volle Textfarbe am anderen Rand */
+    ); /* Sichtbares Fenster = genau halbe Gradient-Breite → Dimm-Zone überquert Text linear */
+    background-size: 200% 100%; /* Exakt 2× Elementbreite: eine Durchquerung = ein Zyklus */
     background-clip: text;
     -webkit-background-clip: text; /* WebKit-Prefix für MAUI WebView */
     -webkit-text-fill-color: transparent; /* Text "transparent" → zeigt Gradient darunter */
     color: transparent;
     animation:
-        loading-shimmer 2.4s linear infinite,                    /* Endloser Schleier-Sweep */
+        loading-shimmer 2.4s linear infinite,                    /* Gleichmäßiger Schleier-Sweep */
         shimmer-appear  0.45s cubic-bezier(0.22, 1, 0.36, 1) both; /* Einblend-Effekt beim Erscheinen */
 }
 
 @keyframes loading-shimmer {
-    0%   { background-position:  120% center; } /* Schleier startet rechts außen */
-    100% { background-position: -120% center; } /* Schleier endet links außen */
+    0%   { background-position: 100% center; } /* Dimm-Zone startet am linken Textrand */
+    100% { background-position:   0% center; } /* Dimm-Zone endet am rechten Textrand */
 }
 
 @keyframes shimmer-appear {

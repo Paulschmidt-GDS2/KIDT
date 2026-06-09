@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.RegularExpressions;
 using KIDT.Models;
 
 namespace KIDT.Components.Pages;
@@ -28,8 +29,8 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
     private ElementReference textareaRef;
     private ElementReference messagesRef;
 
-    // Eingabe wächst stufenweise pro Zeile
-    private const int MaxRows = 19;
+    // --- Eingabe ---
+    private const int MaxRows = 19; // Maximale Zeilen im Textarea
     private const int Cols = 60;
     private int rows = 1;
 
@@ -39,7 +40,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         get { return inputText; } // Aktuellen Text zurückgeben
         set
         {
-            if (value == null) value = string.Empty;
+            if (value == null) value = string.Empty; // Null-Wert auf leer normalisieren
             inputText = value;
             UpdateRows(); // Zeilenanzahl bei jeder Eingabe neu berechnen
         }
@@ -88,16 +89,16 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
                 {
                     try
                     {
-                        var docIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.DocumentIdsJson);
-                        if (docIds != null && docIds.Count > 0)
+                        var docIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.DocumentIdsJson); // JSON → DocID-Liste deserialisieren
+                        if (docIds != null && docIds.Count > 0) // IDs vorhanden?
                         {
                             using var docScope = ServiceProvider.CreateScope();
                             var docDbService = docScope.ServiceProvider.GetRequiredService<KIDT.Database.DocumentDbService>();
 
                             foreach (var docId in docIds)
                             {
-                                var doc = await docDbService.GetDocumentByIdAsync(docId);
-                                if (doc != null) chatMsg.FoundDocuments.Add(doc);
+                                var doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument per ID laden
+                                if (doc != null) chatMsg.FoundDocuments.Add(doc); // Gefundenes Dokument hinzufügen
                             }
                         }
                     }
@@ -111,16 +112,16 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
                 {
                     try
                     {
-                        var eventIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.EventIdsJson);
-                        if (eventIds != null && eventIds.Count > 0)
+                        var eventIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(dbMsg.EventIdsJson); // JSON → EventID-Liste deserialisieren
+                        if (eventIds != null && eventIds.Count > 0) // IDs vorhanden?
                         {
                             using var calScope = ServiceProvider.CreateScope();
                             var calendarService = calScope.ServiceProvider.GetRequiredService<KIDT.Services.CalendarService>();
 
                             foreach (var eventId in eventIds)
                             {
-                                var evt = await calendarService.GetEventByIdAsync(eventId);
-                                if (evt != null) chatMsg.FoundEvents.Add(evt);
+                                var evt = await calendarService.GetEventByIdAsync(eventId); // Termin per ID laden
+                                if (evt != null) chatMsg.FoundEvents.Add(evt); // Gefundenen Termin hinzufügen
                             }
                         }
                     }
@@ -130,7 +131,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
                     }
                 }
 
-                chatMsg.DisplayText = dbMsg.Text; // Kein Typewriter beim Laden aus DB
+                chatMsg.DisplayText = StripDocIdMarkers(dbMsg.Text); // DocID-Marker aus Anzeigetext entfernen
                 Messages.Add(chatMsg);
             }
 
@@ -183,7 +184,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
 
     private void UpdateRows() // Berechnet sichtbare Zeilen anhand Eingabetext und Cols-Breite
     {
-        if (string.IsNullOrEmpty(inputText))
+        if (string.IsNullOrEmpty(inputText)) // Leer: eine Zeile anzeigen
         {
             rows = 1;
             return;
@@ -194,7 +195,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         foreach (var line in lines)
         {
             int wraps = (int)Math.Ceiling(line.Length / (double)Cols); // Zeilenumbrüche durch Breite
-            if (wraps < 1) wraps = 1;
+            if (wraps < 1) wraps = 1; // Mindestens eine Zeile pro Abschnitt
             total += wraps;
         }
         rows = Math.Clamp(total, 1, MaxRows); // Auf Bereich [1, 19] beschränken
@@ -205,12 +206,12 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         message.DisplayText = "";
         int displayedLength = 0;
 
-        while (displayedLength < fullText.Length)
+        while (displayedLength < fullText.Length) // Solange noch Text übrig
         {
-            int remaining = fullText.Length - displayedLength;
+            int remaining = fullText.Length - displayedLength; // Noch nicht angezeigte Zeichen
             int step = remaining > 80 ? 3 : 2; // Adaptiv: bei viel Text schneller
-            displayedLength = Math.Min(displayedLength + step, fullText.Length);
-            message.DisplayText = fullText[..displayedLength];
+            displayedLength = Math.Min(displayedLength + step, fullText.Length); // Nächste Position berechnen
+            message.DisplayText = fullText[..displayedLength]; // Slice bis aktueller Position
             StateHasChanged();
             await Task.Delay(22); // ~45fps
         }
@@ -223,7 +224,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
     {
         canAbort = false;
         StateHasChanged();
-        if (cancelSource != null) cancelSource.Cancel();
+        if (cancelSource != null) cancelSource.Cancel(); // Abbruch-Signal senden
     }
 
     private string GetSendClass() // CSS-Klasse für Send/Abort-Button
@@ -413,6 +414,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         }
 
         assistantMessage.Text = fullMessage;
+        assistantMessage.DisplayText = StripDocIdMarkers(fullMessage); // DocID-Marker aus Anzeigetext entfernen
         StateHasChanged();
 
         await Task.Run(async () => // Assistent-Antwort mit DocIDs und EventIDs in DB speichern
@@ -430,6 +432,11 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         cancelSource = new CancellationTokenSource(); // Token für nächste Anfrage bereitstellen
         isSaving = false;
         StateHasChanged();
+    }
+
+    private static string StripDocIdMarkers(string text) // Entfernt [DocID: x,y]-Marker aus Anzeigetext (intern für RouterService benötigt, nicht für User sichtbar)
+    {
+        return Regex.Replace(text, @"\s*\[DocID:[^\]]*\]", "").TrimEnd(); // Muster: optionales Leerzeichen + [DocID:...] entfernen
     }
 
     private async Task ResetChat() // Setzt Chat vollständig zurück und navigiert zur Startseite

@@ -675,17 +675,17 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 4px 0 10px 0;
+    margin: 8px 0 12px 0; /* Etwas mehr Abstand für das größere Label */
 }
 
-/* Kleines Label (z.B. "ORDNER", "DOKUMENTE") */
+/* Label (z.B. "ORDNER", "DOKUMENTE") — ca. gleich groß wie Datei-/Ordnertitel */
 .section-label {
-    font-size: 11px;
+    font-size: 14px; /* ← SCHRIFTGRÖSSE SEKTION-TITEL (Ordner/Dokumente) hier ändern (vorher 11px) */
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.06em; /* Leicht reduziert gegenüber vorher (0.09em) passend zur größeren Schrift */
     color: var(--clr-text);
-    opacity: 0.4;
+    opacity: 0.65; /* Besser lesbar (vorher 0.4) */
     white-space: nowrap;
     flex-shrink: 0;
     user-select: none;
@@ -1045,8 +1045,13 @@
         font-size: 18px;
     }
 
+    .explorer-section-header {
+        margin: 10px 0 16px 0; /* 8px/12px * 1.3 ≈ 10px/16px */
+    }
+
     .section-label {
-        font-size: 14px;
+        font-size: 18px; /* 14px * 1.3 = 18.2px → 18px */
+        letter-spacing: 0.05em; /* Leicht reduziert im Fullscreen */
     }
 
     .folder-new-btn {

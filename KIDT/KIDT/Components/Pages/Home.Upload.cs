@@ -103,12 +103,9 @@ public partial class Home // Upload, Dokument-Öffnen, Dokument-zum-Chat-Hinzuf�
                             await docDbService.LinkDocumentToConversationAsync(documentId, conversationIdForSave);
                         }
 
-                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult);
-
-                        if (documentId > 0) // DocID-Marker für RouterService analyze_document
-                        {
-                            await Db.SaveMessageAsync(conversationIdForSave, false, $"[DocID: {documentId}]");
-                        }
+                        var uploadDocIds = new List<int>();
+                        if (documentId > 0) uploadDocIds.Add(documentId); // DocID in JSON-Feld speichern statt als Text-Marker
+                        await Db.SaveMessageAsync(conversationIdForSave, false, uploadResult, uploadDocIds); // Upload-Bestätigung mit DocID im JSON-Feld
 
                         await Db.UpdateConversationTitleAsync(conversationIdForSave);
 

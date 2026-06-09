@@ -12,66 +12,66 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
     private readonly IServiceProvider serviceProvider;
     private string apiKey = string.Empty;
 
-    public RouterService(IServiceProvider serviceProvider)
+    public RouterService(IServiceProvider serviceProvider) // Konstruktor: ServiceProvider für Scoped-Dienste (DB, Calendar etc.)
     {
         this.serviceProvider = serviceProvider;
     }
 
     public async Task InitializeAsync() // Lädt API-Key aus Datei
     {
-        if (this.apiKey.Length > 0) return;
-        string keyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "OpenRouter-api-key.txt");
-        this.apiKey = await File.ReadAllTextAsync(keyPath);
+        if (this.apiKey.Length > 0) return; // Bereits geladen → nichts tun
+        string keyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "OpenRouter-api-key.txt"); // Pfad zur Key-Datei
+        this.apiKey = await File.ReadAllTextAsync(keyPath); // Key einlesen
     }
 
     public async Task<RouterResponse> ProcessAsync(string userMessage, bool hasFile, int conversationId, CancellationToken cancellationToken = default) // Hauptmethode: Verarbeitet Nachricht, führt Tools aus und gibt Routing-Ergebnis zurück
     {
-        if (this.apiKey.Length == 0) await InitializeAsync();
+        if (this.apiKey.Length == 0) await InitializeAsync(); // API-Key bei Bedarf laden
 
-        using var scope = this.serviceProvider.CreateScope();
-        var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>();
-        var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>();
-        var folderDbService = scope.ServiceProvider.GetRequiredService<FolderDbService>();
-        var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>();
+        using var scope = this.serviceProvider.CreateScope(); // Scoped DI-Container erstellen
+        var docDbService = scope.ServiceProvider.GetRequiredService<DocumentDbService>(); // Dokument-DB-Service holen
+        var calendarService = scope.ServiceProvider.GetRequiredService<CalendarService>(); // Kalender-Service holen
+        var folderDbService = scope.ServiceProvider.GetRequiredService<FolderDbService>(); // Ordner-Service holen
+        var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Chat-DB-Service holen
 
         System.Diagnostics.Debug.WriteLine($"[ROUTER] ProcessAsync → Modell: gemini-2.5-flash-lite via OpenRouter, ConvId={conversationId}");
 
         try
         {
             // --- Kernel aufbauen ---
-            var builder = Kernel.CreateBuilder();
+            var builder = Kernel.CreateBuilder(); // SK-Builder initialisieren
             builder.Services.AddOpenAIChatCompletion(
                 modelId: "google/gemini-2.5-flash-lite",
                 apiKey: this.apiKey.Trim(),
-                endpoint: new Uri("https://openrouter.ai/api/v1")
+                endpoint: new Uri("https://openrouter.ai/api/v1") // OpenRouter-Endpunkt (Gemini-Proxy)
             );
-            var kernel = builder.Build();
-            McpToolsRegistry.RegisterTools(kernel, docDbService, calendarService, folderDbService, conversationId);
-            kernel.ImportPluginFromObject(new AnalysisTools(), "Analysis");
+            var kernel = builder.Build(); // Fertigen Kernel erstellen
+            McpToolsRegistry.RegisterTools(kernel, docDbService, calendarService, folderDbService, conversationId); // MCP-Tools registrieren
+            kernel.ImportPluginFromObject(new AnalysisTools(), "Analysis"); // Analysis-Plugin registrieren
 
-            var chatService = kernel.GetRequiredService<IChatCompletionService>();
+            var chatService = kernel.GetRequiredService<IChatCompletionService>(); // Chat-Service aus Kernel holen
 
             // --- System-Prompt mit aktuellem Datum ---
-            DateTime now = DateTime.Now;
+            DateTime now = DateTime.Now; // Aktuelles Datum/Uhrzeit für System-Prompt
             string systemPrompt = BuildSystemPrompt(
-                now.ToString("dddd", new System.Globalization.CultureInfo("de-DE")),
-                now.ToString("dd.MM.yyyy"), now.ToString("HH:mm"), now.ToString("yyyy-MM-dd"));
+                now.ToString("dddd", new System.Globalization.CultureInfo("de-DE")), // Wochentag auf Deutsch
+                now.ToString("dd.MM.yyyy"), now.ToString("HH:mm"), now.ToString("yyyy-MM-dd")); // Datum + Uhrzeit + ISO-Format
 
             // --- Chat-History aufbauen ---
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(systemPrompt);
+            var chatHistory = new ChatHistory(); // Neuen Chat-Verlauf starten
+            chatHistory.AddSystemMessage(systemPrompt); // System-Prompt als erste Nachricht
 
-            var lastDocIds = new List<int>();
+            var lastDocIds = new List<int>(); // Zuletzt referenzierte Dokument-IDs (für Follow-ups)
 
             if (conversationId > 0) // Letzte 10 Nachrichten aus DB laden
             {
-                var allMessages = await dbService.LoadMessagesAsync(conversationId);
+                var allMessages = await dbService.LoadMessagesAsync(conversationId); // Alle Nachrichten dieser Conversation laden
 
                 List<Message> recent;
                 if (allMessages.Count > 10) // Nur letzte 10 Nachrichten für Kontext
                 {
                     recent = new List<Message>();
-                    int startIndex = allMessages.Count - 10;
+                    int startIndex = allMessages.Count - 10; // Startindex für die letzten 10
                     for (int i = startIndex; i < allMessages.Count; i++)
                     {
                         recent.Add(allMessages[i]);
@@ -79,38 +79,50 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                 }
                 else
                 {
-                    recent = allMessages;
+                    recent = allMessages; // Weniger als 10 → alle verwenden
                 }
 
                 foreach (Message msg in recent) // Chat-History aufbauen
                 {
-                    if (msg.IsUser)
+                    if (msg.Text.StartsWith("[DocID:")) continue; // Interne Marker nicht in LLM-Kontext aufnehmen
+
+                    if (msg.IsUser) // User-Nachricht?
                     {
                         chatHistory.AddUserMessage(msg.Text);
                     }
-                    else
+                    else // Assistant-Nachricht
                     {
                         chatHistory.AddAssistantMessage(msg.Text);
                     }
                 }
 
-                int docSearchStart = Math.Max(0, recent.Count - 3);
-                for (int i = docSearchStart; i < recent.Count; i++) // DocIDs aus letzten 3 Nachrichten extrahieren
+                for (int i = 0; i < recent.Count; i++) // Alle recent messages nach DocIDs durchsuchen (kein 3er-Limit, übersteht auch Fehler-Nachrichten)
                 {
                     Message msg = recent[i];
-                    if (!msg.IsUser && msg.Text.Contains("[DocID:"))
+                    if (!msg.IsUser && !string.IsNullOrEmpty(msg.DocumentIdsJson)) // DocIDs aus JSON-Feld
                     {
-                        ExtractDocIds(msg.Text, lastDocIds);
+                        try
+                        {
+                            var ids = System.Text.Json.JsonSerializer.Deserialize<List<int>>(msg.DocumentIdsJson); // JSON → ID-Liste
+                            if (ids != null)
+                            {
+                                foreach (int id in ids)
+                                {
+                                    if (!lastDocIds.Contains(id)) lastDocIds.Add(id); // Duplikate vermeiden
+                                }
+                            }
+                        }
+                        catch { } // Parse-Fehler ignorieren
                     }
                 }
 
-                if (lastDocIds.Count > 0)
+                if (lastDocIds.Count > 0) // Kontext-DocIDs als System-Nachricht nach der Konversation (bewährter Ansatz)
                 {
-                    chatHistory.AddSystemMessage($"CONTEXT: Kürzlich gefundene DocIDs: {string.Join(", ", lastDocIds)}");
+                    chatHistory.AddSystemMessage($"CONTEXT: Kürzlich gefundene DocIDs: {string.Join(", ", lastDocIds)}"); // DocIDs für analyze_document-Routing
                 }
             }
 
-            chatHistory.AddUserMessage(userMessage);
+            chatHistory.AddUserMessage(userMessage); // Aktuelle User-Nachricht hinzufügen
 
             // FunctionChoiceBehavior statt ToolCallBehavior: bessere Gemini-Kompatibilität,
             // korrektes Plugin-Naming, kein Parallel-Call-Crash (GitHub #12554)
@@ -132,7 +144,7 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             ChatMessageContent response;
             try
             {
-                response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel);
+                response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // LLM aufrufen
             }
             catch (ArgumentOutOfRangeException ex) when (ex.Message.Contains("ChatFinishReason") || ex.Message.Contains("Unknown"))
             {
@@ -140,7 +152,7 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                 await Task.Delay(300, cancellationToken); // Kurze Pause vor Retry
                 try
                 {
-                    response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel);
+                    response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // Retry-Versuch
                 }
                 catch (ArgumentOutOfRangeException retryEx) when (retryEx.Message.Contains("ChatFinishReason") || retryEx.Message.Contains("Unknown"))
                 {
@@ -153,8 +165,8 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                             Temperature = 0.3,
                             MaxTokens = 200
                         };
-                        var fallbackResponse = await chatService.GetChatMessageContentAsync(chatHistory, fallbackSettings, kernel);
-                        if (!string.IsNullOrWhiteSpace(fallbackResponse.Content))
+                        var fallbackResponse = await chatService.GetChatMessageContentAsync(chatHistory, fallbackSettings, kernel); // Fallback-LLM-Aufruf ohne Tools
+                        if (!string.IsNullOrWhiteSpace(fallbackResponse.Content)) // Antwort vorhanden?
                         {
                             RouterResponse clarifyResponse = new RouterResponse();
                             clarifyResponse.DirectResponse = fallbackResponse.Content.Trim();
@@ -177,17 +189,17 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Gemini antwortet → Content: \"{(response.Content ?? "").Substring(0, Math.Min(80, (response.Content ?? "").Length))}\"");
 
             string responseText = string.Empty;
-            if (response.Content != null) responseText = response.Content.Trim();
+            if (response.Content != null) responseText = response.Content.Trim(); // Content extrahieren (kann null sein)
 
             // --- Tool-Calls verarbeiten ---
-            var foundDocuments = new List<Document>();
-            bool hasToolCalls = false;
+            var foundDocuments = new List<Document>(); // Gefundene Dokumente für Antwort
+            bool hasToolCalls = false; // Marker: LLM wollte Tool aufrufen
 
-            if (response.Items != null)
+            if (response.Items != null) // Antwort enthält Items (Tool-Calls oder Text)?
             {
-                foreach (var item in response.Items)
+                foreach (var item in response.Items) // Alle Response-Items durchgehen
                 {
-                    if (item is Microsoft.SemanticKernel.FunctionCallContent functionCall)
+                    if (item is Microsoft.SemanticKernel.FunctionCallContent functionCall) // Ist es ein Tool-Call?
                     {
                         hasToolCalls = true;
 
@@ -209,15 +221,15 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                                 continue; // Nächsten Tool-Call versuchen
                             }
 
-                            var result = await fn.InvokeAsync(kernel, functionCall.Arguments);
+                            var result = await fn.InvokeAsync(kernel, functionCall.Arguments); // Tool ausführen
 
-                            string resultStr = result.ToString() ?? string.Empty;
+                            string resultStr = result.ToString() ?? string.Empty; // Ergebnis als String
                             System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Ergebnis ({normalizedFunctionName}): {resultStr.Substring(0, Math.Min(100, resultStr.Length))}");
 
                             RouterResponse? toolResponse = await DispatchToolResultAsync(
                                 normalizedFunctionName, resultStr, docDbService, calendarService, foundDocuments);
 
-                            if (toolResponse != null) return toolResponse;
+                            if (toolResponse != null) return toolResponse; // Handler hat Ergebnis produziert → sofort zurückgeben
                         }
                         catch (Exception ex)
                         {
@@ -232,22 +244,22 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             }
 
             // --- Kein Tool: JSON-Route oder direkte Konversations-Antwort ---
-            if (responseText.TrimStart().StartsWith("{"))
+            if (responseText.TrimStart().StartsWith("{")) // Antwort beginnt mit '{' → mögliche JSON-Route
             {
                 try
                 {
                     var routingJson = JsonSerializer.Deserialize<SimpleRoutingJson>(responseText,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitiv parsen
 
                     if (routingJson != null && routingJson.route == "dataAnalysis") // DataAnalysis Follow-up
                     {
                         System.Diagnostics.Debug.WriteLine($"[ROUTER] → JSON-Route: dataAnalysis (Follow-up)");
 
-                        var contextDocs = new List<Document>();
+                        var contextDocs = new List<Document>(); // Kontext-Dokumente aus Kontext-DocIDs laden
                         foreach (int docId in lastDocIds)
                         {
-                            Document doc = await docDbService.GetDocumentByIdAsync(docId);
-                            if (doc != null && doc.Id > 0) contextDocs.Add(doc);
+                            Document doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument aus DB holen
+                            if (doc != null && doc.Id > 0) contextDocs.Add(doc); // Nur gültige Dokumente
                         }
 
                         RouterResponse dataResponse = new RouterResponse();
@@ -303,8 +315,17 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             "Aktionen wie Kopieren, Verschieben, Erstellen, Loeschen IMMER zuerst das Tool aufrufen — danach kommt automatisch die Bestaetigung. " +
             "Schreibe KEINE eigene Bestaetigung wie 'Ich habe X kopiert' oder 'Erledigt' — nur der Tool-Aufruf zaehlt.\n\n" +
             "Du hast Zugriff auf verschiedene Tools. Nutze sie anhand ihrer Beschreibung je nach Nutzeranfrage.\n\n" +
-            "Kalender: Bei JEDER Frage nach Terminen, auch wenn die Frage wiederholt wird, IMMER list_calendar_events aufrufen — niemals Termine aus dem Gespraechsverlauf wiederholen ohne das Tool erneut aufzurufen. Wenn Titel, Datum und Zeit bekannt sind, erstelle den Termin sofort ohne Rückfrage. Fehlende Pflichtfelder (Titel, Datum, Zeit) kurz erfragen.\n" +
-            "Kontext-Referenzen bei Kalender-Aktionen: Sagt der Nutzer 'dieser Termin', 'den Termin', 'ihn' o.ae., benutze den zuletzt im Gespraechsverlauf erwahnten Termin-Titel und das zugehoerige Datum. Nur wenn der Gespraechsverlauf wirklich keinen eindeutigen Hinweis liefert, darf kurz nachgefragt werden.\n\n" +
+            "KALENDER - Termin erstellen: Pflichtfelder = title + date + isAllDay.\n" +
+            "isAllDay=true fuer ganztaegig (kein startTime noetig). isAllDay=false fuer Uhrzeit (dann startTime angeben, z.B. '14:00').\n" +
+            "Zeitspanne: isAllDay=false + startTime + endTime. Nur Startzeit: isAllDay=false + startTime ohne endTime.\n" +
+            "Alle Pflichtfelder bekannt? → create_calendar_event SOFORT aufrufen.\n" +
+            "Fehlende Pflichtfelder kurz erfragen (ein Satz):\n" +
+            "  Alle fehlen:  \"Wie heisst der Termin, wann und ganztaegig oder welche Uhrzeit?\"\n" +
+            "  Titel fehlt:  \"Wie soll der Termin heissen?\"\n" +
+            "  Datum fehlt:  \"Fuer welches Datum soll ich den Termin anlegen?\"\n" +
+            "  Zeit fehlt:   \"Soll der Termin ganztaegig sein oder zu welcher Uhrzeit?\"\n" +
+            "KALENDER - Termine anzeigen: list_calendar_events aufrufen — niemals Termine aus dem Gespraechsverlauf wiederholen ohne erneuten Tool-Aufruf.\n" +
+            "KALENDER - Kontext: 'dieser Termin', 'den Termin', 'ihn' → zuletzt erwahnten Termin verwenden. Nur bei echtem Zweifel nachfragen.\n\n" +
             "Dokument-Analyse: Ist eine DocID im CONTEXT sichtbar (z.B. 'CONTEXT: Kürzlich gefundene DocIDs: 7') → analyze_document(docId) aufrufen. Sonst → add_document_to_chat aufrufen.\n\n" +
             "Kopieren zu Root/Hauptbereich: copy_document_to_folder mit folderName='hauptbereich'.\n" +
             "Entfernen aus Root/Hauptbereich: remove_document_from_folder mit folderName='hauptbereich'.\n" +
@@ -318,8 +339,8 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
     private string NormalizeFunctionName(string rawName) // Entfernt Plugin-Prefix den Gemini manchmal fälschlicherweise anhängt
     {
         // Gemini gibt manchmal "Document_remove_document_from_folder" statt "remove_document_from_folder"
-        string[] knownPrefixes = { "Document_", "Folder_", "Calendar_", "Analysis_" };
-        foreach (string prefix in knownPrefixes)
+        string[] knownPrefixes = { "Document_", "Folder_", "Calendar_", "Analysis_" }; // Bekannte Gemini-Präfixe
+        foreach (string prefix in knownPrefixes) // Jeden bekannten Prefix prüfen
         {
             if (rawName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -333,9 +354,9 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
     {
         foreach (var plugin in kernel.Plugins) // Alle registrierten Plugins durchsuchen
         {
-            foreach (var func in plugin)
+            foreach (var func in plugin) // Alle Funktionen im Plugin prüfen
             {
-                if (string.Equals(func.Name, functionName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(func.Name, functionName, StringComparison.OrdinalIgnoreCase)) // Namen vergleichen (case-insensitiv)
                 {
                     return func; // Funktion gefunden
                 }
@@ -344,16 +365,4 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
         return null; // Nicht gefunden
     }
 
-    private void ExtractDocIds(string text, List<int> docIds) // Extrahiert DocIDs aus '[DocID: x,y]'-Markern
-    {
-        int startIdx = text.IndexOf("[DocID:") + 7;
-        int endIdx = text.IndexOf("]", startIdx);
-        if (startIdx > 6 && endIdx > startIdx)
-        {
-            foreach (var idStr in text.Substring(startIdx, endIdx - startIdx).Trim().Split(','))
-            {
-                if (int.TryParse(idStr.Trim(), out int docId)) docIds.Add(docId);
-            }
-        }
-    }
 }

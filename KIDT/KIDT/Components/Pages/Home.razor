@@ -13,12 +13,9 @@
 @inject IServiceProvider ServiceProvider
 @implements IDisposable
 
-<div class="chat-container">
-    @* Hauptcontainer *@
-    <div class="messages" @ref="messagesRef">
-        @* Bereich mit Nachrichten und Scroll *@
-        <div class="messages-inner">
-            @* Innenbereich, Nachrichtenliste *@
+<div class="chat-container"> @* Hauptcontainer *@
+    <div class="messages" @ref="messagesRef"> @* Bereich mit Nachrichten und Scroll *@
+        <div class="messages-inner"> @* Innenbereich, Nachrichtenliste *@
             @foreach (var msg in Messages)
             {
                 string bubbleClass; // Variable für CSS-Klasse der Bubble
@@ -40,18 +37,12 @@
                         }
                         <span class="blinking-cursor">_</span> @* Cursor blinkt immer weiter *@
                     }
-                    else if (msg.IsUser)
-                    @* Wenn User-Nachricht *@
+                    else if (msg.IsUser) @* Wenn User-Nachricht *@
                     {
                         @msg.Text @* Nur Text, keine Cards *@
                     }
-                    else
-                    @* Wenn Assistent-Nachricht *@
+                    else @* Wenn Assistent-Nachricht *@
                     {
-                        @if (!string.IsNullOrEmpty(msg.ModelLabel)) @* Debug-Label: nur wenn Modell bekannt *@
-                        {
-                            <span class="model-debug-label">[@msg.ModelLabel]</span> @* Modell-Label über der Antwort *@
-                        }
                         <span class="typewriter">@msg.DisplayText</span> @* Typewriter-Text *@
 
                         @* Zeige gefundene Dokumente als Cards (nur bei Assistent-Nachrichten) *@

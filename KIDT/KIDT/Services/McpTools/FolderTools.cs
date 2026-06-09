@@ -11,24 +11,24 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
 {
     private readonly FolderDbService folderDbService;
 
-    public FolderTools(FolderDbService folderDbService)
+    public FolderTools(FolderDbService folderDbService) // Konstruktor: FolderDbService per DI injizieren
     {
         this.folderDbService = folderDbService;
     }
 
     [McpServerTool]
-    [Description("Erstellt einen neuen Ordner für Dokumente. NUR aufrufen wenn User explizit einen Ordner erstellen möchte.")]
-    public async Task<string> CreateFolder(
+    [Description("Erstellt einen neuen Ordner für Dokumente.")]
+    public async Task<string> CreateFolder( // Tool: Legt neuen Ordner in DB an, prüft Duplikat
         [Description("Name des neuen Ordners")] string name)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(name)) // Leerer Name?
             {
                 return JsonSerializer.Serialize(new { success = false, message = "Ordnername darf nicht leer sein." });
             }
 
-            bool exists = await this.folderDbService.FolderNameExistsAsync(name); // Duplikat-Pruefung
+            bool exists = await this.folderDbService.FolderNameExistsAsync(name); // Duplikat-Prüfung
             if (exists)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ein Ordner mit dem Namen '{name}' existiert bereits." });
@@ -45,22 +45,22 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Löscht einen Ordner inklusive aller darin enthaltenen Dokumente. Dokumente die auch woanders liegen bleiben erhalten.")]
-    public async Task<string> DeleteFolder(
+    [Description("Löscht einen Ordner inklusive aller darin enthaltenen Dokumente. Dokumente die auch an anderen Standorten liegen bleiben dort erhalten.")]
+    public async Task<string> DeleteFolder( // Tool: Löscht Ordner und alle exklusiven Dokumente aus DB
         [Description("Name des zu löschenden Ordners")] string name)
     {
         try
         {
-            Folder? folder = await this.folderDbService.GetFolderByNameAsync(name);
-            if (folder == null)
+            Folder? folder = await this.folderDbService.GetFolderByNameAsync(name); // Ordner per Name suchen
+            if (folder == null) // Ordner nicht gefunden?
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{name}' nicht gefunden." });
             }
 
-            List<Document> docsInFolder = await this.folderDbService.GetDocumentsInFolderAsync(folder.Id);
+            List<Document> docsInFolder = await this.folderDbService.GetDocumentsInFolderAsync(folder.Id); // Dokumentanzahl für Rückmeldung
             int docCount = docsInFolder.Count;
 
-            await this.folderDbService.DeleteFolderAsync(folder.Id);
+            await this.folderDbService.DeleteFolderAsync(folder.Id); // Ordner und Inhalt aus DB entfernen
             return JsonSerializer.Serialize(new { success = true, message = $"Ordner '{name}' und {docCount} Dokument(e) wurden gelöscht." });
         }
         catch (Exception ex)
@@ -71,34 +71,44 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Verschiebt ein Dokument an einen Standort — es ist danach NUR noch dort. folderName='hauptbereich' = nur in Root.")]
-    public async Task<string> MoveDocumentToFolder(
-        [Description("Dateiname oder Teil des Dateinamens")] string documentName,
-        [Description("Ziel-Ordnername oder 'hauptbereich' für Root")] string folderName)
+    [Description("Verschiebt ein Dokument zu einem Standort — danach ist es NUR noch dort, alle bisherigen Standorte werden entfernt. folderName='hauptbereich' = in den Root-Bereich ohne Ordner. Verwende documentId (int) wenn die ID aus einem früheren Suchergebnis bekannt ist, sonst documentName.")]
+    public async Task<string> MoveDocumentToFolder( // Tool: Entfernt Dokument von allen Standorten und setzt es ans Ziel
+        [Description("Ziel-Ordnername oder 'hauptbereich' für Root")] string folderName,
+        [Description("Dateiname oder Teil des Dateinamens — nur wenn documentId nicht bekannt")] string documentName = "",
+        [Description("Dokument-ID (int) aus einem Suchergebnis — hat Vorrang vor documentName")] int documentId = -1)
     {
         try
         {
-            Document? doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
-            if (doc == null)
+            Document? doc = null;
+            if (documentId >= 0) // ID bekannt? → direkt laden (präziser als Namenssuche)
             {
-                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit '{documentName}' gefunden." });
+                doc = await this.folderDbService.GetDocumentByIdAsync(documentId);
+            }
+            if (doc == null && !string.IsNullOrEmpty(documentName)) // Fallback: per Name suchen
+            {
+                doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
+            }
+            if (doc == null) // Dokument nicht gefunden?
+            {
+                string searchInfo = documentId >= 0 ? $"ID {documentId}" : $"'{documentName}'"; // Fehlermeldung kontextuell
+                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit {searchInfo} gefunden." });
             }
 
             int? targetFolderId = null;
-            string lower = folderName.ToLower().Trim();
+            string lower = folderName.ToLower().Trim(); // Normalisieren für Alias-Vergleich
 
-            if (lower != "root" && lower != "hauptbereich")
+            if (lower != "root" && lower != "hauptbereich") // Kein Root-Alias → Ordner suchen
             {
-                Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName);
-                if (folder == null)
+                Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Zielordner aus DB laden
+                if (folder == null) // Ordner nicht gefunden?
                 {
                     return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
                 }
                 targetFolderId = folder.Id;
             }
 
-            bool nameConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, targetFolderId); // Duplikat am Ziel pruefen
-            if (nameConflict)
+            bool nameConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, targetFolderId); // Duplikat am Ziel prüfen
+            if (nameConflict) // Namenskonflikt?
             {
                 string targetLabel = targetFolderId.HasValue ? $"Ordner '{folderName}'" : "Hauptbereich";
                 return JsonSerializer.Serialize(new { success = false, message = $"Im {targetLabel} existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
@@ -116,50 +126,60 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Kopiert ein Dokument an einen Standort. Bleibt überall wo es bereits liegt. folderName='hauptbereich' = auch in Root sichtbar.")]
-    public async Task<string> CopyDocumentToFolder(
-        [Description("Dateiname oder Teil des Dateinamens")] string documentName,
-        [Description("Ziel-Ordnername oder 'hauptbereich' für Root")] string folderName)
+    [Description("Legt ein Dokument zusätzlich an einem weiteren Standort ab — es bleibt überall wo es bereits liegt (kein Entfernen bestehender Standorte). folderName='hauptbereich' = auch in Root sichtbar. Verwende documentId (int) wenn die ID aus einem früheren Suchergebnis bekannt ist, sonst documentName.")]
+    public async Task<string> CopyDocumentToFolder( // Tool: Fügt Dokument an Zielstandort hinzu, ohne es woanders zu entfernen
+        [Description("Ziel-Ordnername oder 'hauptbereich' für Root")] string folderName,
+        [Description("Dateiname oder Teil des Dateinamens — nur wenn documentId nicht bekannt")] string documentName = "",
+        [Description("Dokument-ID (int) aus einem Suchergebnis — hat Vorrang vor documentName")] int documentId = -1)
     {
         try
         {
-            Document? doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
-            if (doc == null)
+            Document? doc = null;
+            if (documentId >= 0) // ID bekannt? → direkt laden
             {
-                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit '{documentName}' gefunden." });
+                doc = await this.folderDbService.GetDocumentByIdAsync(documentId);
+            }
+            if (doc == null && !string.IsNullOrEmpty(documentName)) // Fallback: per Name suchen
+            {
+                doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
+            }
+            if (doc == null) // Dokument nicht gefunden?
+            {
+                string searchInfo = documentId >= 0 ? $"ID {documentId}" : $"'{documentName}'";
+                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit {searchInfo} gefunden." });
             }
 
-            string lower = folderName.ToLower().Trim();
+            string lower = folderName.ToLower().Trim(); // Normalisieren für Alias-Vergleich
 
-            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner")
+            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner") // Root-Alias erkannt?
             {
-                if (doc.IsInRoot)
+                if (doc.IsInRoot) // Bereits im Hauptbereich?
                 {
                     return JsonSerializer.Serialize(new { success = false, message = $"'{doc.FileName}' ist bereits im Hauptbereich." });
                 }
-                bool rootConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, null); // Duplikat im Hauptbereich pruefen
+                bool rootConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, null); // Duplikat im Hauptbereich prüfen
                 if (rootConflict)
                 {
                     return JsonSerializer.Serialize(new { success = false, message = $"Im Hauptbereich existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
                 }
-                await this.folderDbService.CopyDocumentToRootAsync(doc.Id);
+                await this.folderDbService.CopyDocumentToRootAsync(doc.Id); // Dokument in Root kopieren
                 return JsonSerializer.Serialize(new { success = true, message = $"'{doc.FileName}' ist jetzt auch im Hauptbereich sichtbar.", documentId = doc.Id });
             }
 
-            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName);
-            if (folder == null)
+            Folder? targetFolder = await this.folderDbService.GetFolderByNameAsync(folderName); // Zielordner aus DB laden
+            if (targetFolder == null) // Ordner nicht gefunden?
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
             }
 
-            bool folderConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, folder.Id); // Duplikat im Zielordner pruefen
+            bool folderConflict = await this.folderDbService.DocumentNameExistsInLocationAsync(doc.FileName, targetFolder.Id); // Duplikat im Zielordner prüfen
             if (folderConflict)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"In Ordner '{folderName}' existiert bereits eine Datei mit dem Namen '{doc.FileName}'." });
             }
 
-            bool copied = await this.folderDbService.CopyDocumentToFolderAsync(doc.Id, folder.Id);
-            if (!copied)
+            bool copied = await this.folderDbService.CopyDocumentToFolderAsync(doc.Id, targetFolder.Id); // Dokument in Zielordner kopieren
+            if (!copied) // Kopieren fehlgeschlagen (bereits vorhanden)?
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"'{doc.FileName}' ist bereits in Ordner '{folderName}'." });
             }
@@ -173,40 +193,62 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Entfernt ein Dokument von einem Standort. folderName='hauptbereich' = aus Root entfernen. Letzte Kopie → wird aus DB gelöscht.")]
-    public async Task<string> RemoveDocumentFromFolder(
-        [Description("Dateiname oder Teil des Dateinamens")] string documentName,
-        [Description("Ordnername ODER 'hauptbereich' um aus Root zu entfernen")] string folderName)
+    [Description("Entfernt ein Dokument von einem bestimmten Standort. Ist es an keinem anderen Standort mehr vorhanden, wird es vollständig aus der Bibliothek gelöscht. folderName='hauptbereich' = aus Root entfernen. Verwende documentId (int) wenn die ID bekannt ist, sonst documentName.")]
+    public async Task<string> RemoveDocumentFromFolder( // Tool: Entfernt Dokument nur von angegebenem Standort; löscht aus DB wenn letzte Kopie
+        [Description("Ordnername ODER 'hauptbereich' um aus Root zu entfernen")] string folderName,
+        [Description("Dateiname oder Teil des Dateinamens — nur wenn documentId nicht bekannt")] string documentName = "",
+        [Description("Dokument-ID (int) aus einem Suchergebnis — hat Vorrang vor documentName")] int documentId = -1)
     {
         try
         {
-            Document? doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
-            if (doc == null)
+            Document? doc = null;
+            if (documentId >= 0) // ID bekannt? → direkt laden
             {
-                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit '{documentName}' gefunden." });
+                doc = await this.folderDbService.GetDocumentByIdAsync(documentId);
+            }
+            if (doc == null && !string.IsNullOrEmpty(documentName)) // Fallback: per Name suchen
+            {
+                doc = await this.folderDbService.FindDocumentByNameAsync(documentName);
+            }
+            if (doc == null) // Dokument nicht gefunden?
+            {
+                string searchInfo = documentId >= 0 ? $"ID {documentId}" : $"'{documentName}'";
+                return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit {searchInfo} gefunden." });
             }
 
-            string lower = folderName.ToLower().Trim();
+            string lower = folderName.ToLower().Trim(); // Normalisieren für Alias-Vergleich
 
-            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner")
+            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner") // Root-Alias erkannt?
             {
-                bool wasDeleted = await this.folderDbService.DeleteDocumentFromLocationAsync(doc.Id, null);
-                string msg = wasDeleted
-                    ? $"'{doc.FileName}' wurde vollständig gelöscht (war nur im Hauptbereich)."
-                    : $"'{doc.FileName}' wurde aus dem Hauptbereich entfernt und ist noch in anderen Ordnern vorhanden.";
+                bool wasDeleted = await this.folderDbService.DeleteDocumentFromLocationAsync(doc.Id, null); // Aus Root entfernen
+                string msg;
+                if (wasDeleted) // Letzte Kopie → vollständig gelöscht
+                {
+                    msg = $"'{doc.FileName}' wurde vollständig gelöscht (war nur im Hauptbereich).";
+                }
+                else // Noch in anderen Ordnern vorhanden
+                {
+                    msg = $"'{doc.FileName}' wurde aus dem Hauptbereich entfernt und ist noch in anderen Ordnern vorhanden.";
+                }
                 return JsonSerializer.Serialize(new { success = true, message = msg, documentId = doc.Id });
             }
 
-            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName);
-            if (folder == null)
+            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Zielordner aus DB laden
+            if (folder == null) // Ordner nicht gefunden?
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
             }
 
-            bool removed = await this.folderDbService.DeleteDocumentFromLocationAsync(doc.Id, folder.Id);
-            string resultMsg = removed
-                ? $"'{doc.FileName}' wurde vollständig gelöscht (war nur in '{folderName}')."
-                : $"'{doc.FileName}' wurde aus '{folderName}' entfernt und ist noch an anderen Standorten vorhanden.";
+            bool removed = await this.folderDbService.DeleteDocumentFromLocationAsync(doc.Id, folder.Id); // Aus Ordner entfernen
+            string resultMsg;
+            if (removed) // Letzte Kopie → vollständig gelöscht
+            {
+                resultMsg = $"'{doc.FileName}' wurde vollständig gelöscht (war nur in '{folderName}').";
+            }
+            else // Noch an anderen Standorten vorhanden
+            {
+                resultMsg = $"'{doc.FileName}' wurde aus '{folderName}' entfernt und ist noch an anderen Standorten vorhanden.";
+            }
             return JsonSerializer.Serialize(new { success = true, message = resultMsg, documentId = doc.Id });
         }
         catch (Exception ex)
@@ -217,36 +259,48 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Zeigt in welchen Ordnern eine bekannte Datei liegt. Aufrufen wenn User nach dem Speicherort fragt ('Wo liegt', 'In welchem Ordner') — NICHT fuer die Suche ob eine Datei existiert.")]
-    public async Task<string> FindDocuments(
-        [Description("Dateiname oder Teil des Dateinamens")] string documentName)
+    [Description("Zeigt an welchen Standorten (Ordner, Hauptbereich) ein Dokument liegt. Verwende documentId (int) wenn bekannt, sonst documentName.")]
+    public async Task<string> FindDocuments( // Tool: Gibt alle Standorte (Root + Ordner) eines Dokuments zurück
+        [Description("Dateiname oder Teil des Dateinamens (wenn documentId nicht bekannt)")] string documentName = "",
+        [Description("Dokument-ID (int) aus einem Suchergebnis — hat Vorrang vor documentName")] int documentId = -1)
     {
-        List<Document> docs = await this.folderDbService.FindDocumentsByNameAsync(documentName);
+        List<Document> docs = new List<Document>();
 
-        if (docs.Count == 0)
+        if (documentId >= 0) // ID bekannt? → direkt laden
         {
-            return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit '{documentName}' gefunden." });
+            Document? byId = await this.folderDbService.GetDocumentByIdAsync(documentId);
+            if (byId != null) docs.Add(byId); // Gefunden → zur Liste hinzufügen
+        }
+        if (docs.Count == 0 && !string.IsNullOrEmpty(documentName)) // Fallback: per Name suchen
+        {
+            docs = await this.folderDbService.FindDocumentsByNameAsync(documentName);
+        }
+
+        if (docs.Count == 0) // Kein Treffer?
+        {
+            string searchInfo = documentId >= 0 ? $"ID {documentId}" : $"'{documentName}'";
+            return JsonSerializer.Serialize(new { success = false, message = $"Kein Dokument mit {searchInfo} gefunden." });
         }
 
         List<object> docList = new List<object>();
-        List<Folder> allFolders = await this.folderDbService.GetAllFoldersAsync();
+        List<Folder> allFolders = await this.folderDbService.GetAllFoldersAsync(); // Alle Ordner für Namensauflösung laden
 
-        foreach (Document d in docs)
+        foreach (Document d in docs) // Für jedes gefundene Dokument: Standorte ermitteln
         {
-            List<int> folderIds = await this.folderDbService.GetDocumentFolderIdsAsync(d.Id);
+            List<int> folderIds = await this.folderDbService.GetDocumentFolderIdsAsync(d.Id); // Ordner-IDs des Dokuments
             List<string> folderNames = new List<string>();
 
-            if (d.IsInRoot) folderNames.Add("Hauptbereich");
+            if (d.IsInRoot) folderNames.Add("Hauptbereich"); // Dokument liegt in Root?
 
-            foreach (int fid in folderIds)
+            foreach (int fid in folderIds) // Ordner-IDs zu Namen auflösen
             {
                 foreach (Folder f in allFolders)
                 {
-                    if (f.Id == fid) { folderNames.Add(f.Name); break; }
+                    if (f.Id == fid) { folderNames.Add(f.Name); break; } // Ordnername gefunden
                 }
             }
 
-            if (folderNames.Count == 0) folderNames.Add("Hauptbereich");
+            if (folderNames.Count == 0) folderNames.Add("Hauptbereich"); // Fallback: Root annehmen
 
             docList.Add(new { id = d.Id, fileName = d.FileName, fileType = d.FileType, inFolders = folderNames });
         }
@@ -255,17 +309,17 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Zeigt alle Dokumente in einem bestimmten Ordner an. 'hauptbereich' oder 'root' = Dokumente im Hauptbereich (ohne Ordner).")]
-    public async Task<string> ListDocumentsInFolder(
+    [Description("Zeigt alle Dokumente in einem bestimmten Ordner. 'hauptbereich' oder 'root' = Dokumente im Hauptbereich (ohne Ordner).")]
+    public async Task<string> ListDocumentsInFolder( // Tool: Gibt alle Dokumente eines Ordners oder des Hauptbereichs zurück
         [Description("Name des Ordners ODER 'hauptbereich'/'root' für Dokumente ohne Ordner")] string folderName)
     {
         try
         {
-            string lower = folderName.ToLower().Trim();
+            string lower = folderName.ToLower().Trim(); // Normalisieren für Alias-Vergleich
 
-            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner") // Root-Bereich: alle Dokumente mit IsInRoot=true
+            if (lower == "hauptbereich" || lower == "root" || lower == "hauptordner") // Root-Bereich
             {
-                List<Document> rootDocs = await this.folderDbService.GetRootDocumentsAsync();
+                List<Document> rootDocs = await this.folderDbService.GetRootDocumentsAsync(); // Root-Dokumente laden
 
                 if (rootDocs.Count == 0)
                 {
@@ -273,7 +327,7 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 }
 
                 List<object> rootList = new List<object>();
-                foreach (Document d in rootDocs)
+                foreach (Document d in rootDocs) // Durchlaufe Root-Dokumente
                 {
                     rootList.Add(new { id = d.Id, fileName = d.FileName, fileType = d.FileType });
                 }
@@ -281,13 +335,13 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 return JsonSerializer.Serialize(new { success = true, found = rootDocs.Count, message = $"{rootDocs.Count} Dokument(e) im Hauptbereich.", documents = rootList });
             }
 
-            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName);
+            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Ordner aus DB laden
             if (folder == null)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
             }
 
-            List<Document> docs = await this.folderDbService.GetDocumentsInFolderAsync(folder.Id);
+            List<Document> docs = await this.folderDbService.GetDocumentsInFolderAsync(folder.Id); // Dokumente im Ordner laden
 
             if (docs.Count == 0)
             {
@@ -295,7 +349,7 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
             }
 
             List<object> docList = new List<object>();
-            foreach (Document d in docs)
+            foreach (Document d in docs) // Durchlaufe Ordner-Dokumente
             {
                 docList.Add(new { id = d.Id, fileName = d.FileName, fileType = d.FileType });
             }
@@ -310,8 +364,8 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Benennt einen bestehenden Ordner um. Aufrufen wenn User einen Ordner umbenennen möchte.")]
-    public async Task<string> RenameFolder(
+    [Description("Benennt einen bestehenden Ordner um.")]
+    public async Task<string> RenameFolder( // Tool: Ändert den Namen eines Ordners, prüft Duplikat
         [Description("Aktueller Name des Ordners")] string folderName,
         [Description("Neuer Name des Ordners")] string newName)
     {
@@ -322,19 +376,19 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
                 return JsonSerializer.Serialize(new { success = false, message = "Neuer Ordnername darf nicht leer sein." });
             }
 
-            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Name -> ID auflösen
+            Folder? folder = await this.folderDbService.GetFolderByNameAsync(folderName); // Name → ID auflösen
             if (folder == null)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ordner '{folderName}' nicht gefunden." });
             }
 
-            bool nameExists = await this.folderDbService.FolderNameExistsAsync(newName); // Neuer Name bereits vergeben?
+            bool nameExists = await this.folderDbService.FolderNameExistsAsync(newName); // Duplikat-Prüfung
             if (nameExists)
             {
                 return JsonSerializer.Serialize(new { success = false, message = $"Ein Ordner mit dem Namen '{newName}' existiert bereits." });
             }
 
-            bool success = await this.folderDbService.RenameFolderAsync(folder.Id, newName); // Umbenennen per ID
+            bool success = await this.folderDbService.RenameFolderAsync(folder.Id, newName); // Umbenennen per ID in DB
             if (!success)
             {
                 return JsonSerializer.Serialize(new { success = false, message = "Umbenennen fehlgeschlagen." });
@@ -350,7 +404,7 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Listet alle vorhandenen Ordner auf. Aufrufen wenn User fragt 'Welche Ordner gibt es', 'Zeige mir die Ordner', 'Was für Ordner habe ich'.")]
+    [Description("Listet alle vorhandenen Ordner mit ihrer Dokumentenanzahl auf.")]
     public async Task<string> ListAllFolders() // Tool: Gibt Liste aller Ordner mit Dokumentenanzahl zurück
     {
         try

@@ -7,7 +7,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
 {
     private readonly ChatDbContext db;
 
-    public ChatDbService(ChatDbContext dbContext)
+    public ChatDbService(ChatDbContext dbContext) // Konstruktor: DB-Context per Dependency Injection
     {
         this.db = dbContext; // Context per Dependency Injection erhalten
     }
@@ -54,8 +54,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
         message.Text = safeText; // Nachrichtentext
         message.Timestamp = DateTime.UtcNow; // Aktueller Zeitstempel
 
-        // Nur setzen wenn Spalte existiert (Fallback für fehlende Migration)
-        try
+        try // Fallback: Spalten optional setzen (falls Migration fehlt)
         {
             if (documentIds != null && documentIds.Count > 0) // Dokument-IDs vorhanden?
             {
@@ -200,10 +199,10 @@ public class ChatDbService // Service für Datenbank-Zugriff
                 title = title.Substring(0, 47) + "..."; // Kürze auf 50 Zeichen
             }
 
-            var allConversations = await this.db.Conversations.ToListAsync();
+            var allConversations = await this.db.Conversations.ToListAsync(); // Alle Conversations laden
             Conversation conv = new Conversation();
             bool convFound = false;
-            foreach (Conversation c in allConversations)
+            foreach (Conversation c in allConversations) // Gesuchte Conversation finden
             {
                 if (c.Id == conversationId)
                 {
@@ -235,8 +234,7 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
         this.db.Messages.RemoveRange(messages); // Lösche alle Nachrichten
 
-        // Lösche ConversationDocuments-Verknüpfungen (Documents selbst bleiben erhalten!)
-        var allConversationDocs = await this.db.ConversationDocuments.ToListAsync(); // Lade alle ConversationDocuments
+        var allConversationDocs = await this.db.ConversationDocuments.ToListAsync(); // ConversationDocuments laden (Documents selbst bleiben erhalten!)
         var conversationDocs = new List<ConversationDocument>();
         foreach (var cd in allConversationDocs) // Gehe durch alle ConversationDocuments
         {
@@ -248,10 +246,10 @@ public class ChatDbService // Service für Datenbank-Zugriff
 
         this.db.ConversationDocuments.RemoveRange(conversationDocs); // Lösche Verknüpfungen
 
-        var allConversations = await this.db.Conversations.ToListAsync();
+        var allConversations = await this.db.Conversations.ToListAsync(); // Alle Conversations laden
         Conversation conv = new Conversation();
         bool convFound = false;
-        foreach (Conversation c in allConversations)
+        foreach (Conversation c in allConversations) // Gesuchte Conversation finden
         {
             if (c.Id == conversationId)
             {
@@ -267,6 +265,39 @@ public class ChatDbService // Service für Datenbank-Zugriff
         }
 
         await this.db.SaveChangesAsync(); // Speichere alle Änderungen in Datenbank
+    }
+
+    public async Task CleanDocIdMarkersFromMessagesAsync() // Bereinigt alle [DocID:]-Marker aus bestehenden DB-Nachrichten
+    {
+        var allMessages = await this.db.Messages.ToListAsync(); // Alle Nachrichten laden
+        bool hasChanges = false; // Marker: ob überhaupt etwas geändert wurde
+
+        foreach (Message msg in allMessages) // Jede Nachricht prüfen
+        {
+            if (msg.Text == null) continue; // Leere Nachricht überspringen
+
+            if (msg.Text.TrimStart().StartsWith("[DocID:")) // Standalone-Marker: Nachricht vollständig löschen
+            {
+                this.db.Messages.Remove(msg); // Internen Marker-Eintrag entfernen
+                hasChanges = true;
+                continue;
+            }
+
+            if (msg.Text.Contains("[DocID:")) // Eingebetteter Marker: aus Nachrichtentext herausschneiden
+            {
+                string cleaned = System.Text.RegularExpressions.Regex.Replace(msg.Text, @"\s*\[DocID:[^\]]*\]", "").TrimEnd(); // Marker-Muster entfernen
+                if (cleaned != msg.Text) // Nur speichern wenn sich Text geändert hat
+                {
+                    msg.Text = cleaned;
+                    hasChanges = true;
+                }
+            }
+        }
+
+        if (hasChanges) // Nur speichern wenn etwas geändert wurde
+        {
+            await this.db.SaveChangesAsync(); // Alle Änderungen in einem Durchgang speichern
+        }
     }
 
     private static int CompareMessagesByTimestampAsc(Message a, Message b) // Vergleich: älteste Nachricht zuerst
