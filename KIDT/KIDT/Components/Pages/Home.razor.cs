@@ -279,10 +279,21 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         StateHasChanged();
         await JSRuntime.InvokeVoidAsync("chatScrollHelper.forceScrollToBottom");
 
-        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true, LoadingText = "LLM denkt nach" }; // Loading-Indikator mit konstantem Label
+        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Indikator: zuerst nur die Punkte
         Messages.Add(loadingMessage);
         canAbort = true;
         StateHasChanged();
+
+        var loadingLabelCts = new CancellationTokenSource(); // Label "LLM denkt nach" erst nach ~2.5s einblenden
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(2500, loadingLabelCts.Token); // Erst nur Punkte, dann Label
+                await InvokeAsync(() => { loadingMessage.LoadingText = "LLM denkt nach"; StateHasChanged(); });
+            }
+            catch (OperationCanceledException) { } // Modellwechsel/Antwort früher → Label nicht mehr nötig
+        });
 
         int conversationIdForSave = currentConversationId;
 
@@ -339,6 +350,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
             {
                 if (!firstChunkReceived && !string.IsNullOrEmpty(chunk.LoadingLabel)) // Status-Update vor erster Antwort: nur Lade-Label wechseln
                 {
+                    loadingLabelCts.Cancel(); // Verzögertes "LLM denkt nach" überstimmen
                     loadingMessage.LoadingText = chunk.LoadingLabel; // z.B. "Lokales Modell denkt nach"
                     StateHasChanged();
                     continue; // Loading-Bubble bleibt, Punkte laufen weiter
@@ -348,6 +360,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
                 {
                     firstChunkReceived = true;
                     canAbort = false;
+                    loadingLabelCts.Cancel(); // Verzögertes Label abbrechen
                     await minDelayTask; // MinDelay abwarten
                     Messages.Remove(loadingMessage);
                     Messages.Add(assistantMessage);
@@ -377,6 +390,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
             System.Diagnostics.Debug.WriteLine($"[CHAT] Fehler: {ex.Message}");
         }
 
+        loadingLabelCts.Cancel(); // Verzögertes Label in jedem Fall beenden
         streamComplete = true; // Drain-Task beenden
         await Task.WhenAll(drainTask, saveUserMessageTask);
 
