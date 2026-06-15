@@ -4,6 +4,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text.Json;
 using KIDT.Database;
 using KIDT.Models;
+using KIDT.Services.Logic;
 
 namespace KIDT.Services;
 
@@ -34,14 +35,14 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
         var folderDbService = scope.ServiceProvider.GetRequiredService<FolderDbService>(); // Ordner-Service holen
         var dbService = scope.ServiceProvider.GetRequiredService<ChatDbService>(); // Chat-DB-Service holen
 
-        System.Diagnostics.Debug.WriteLine($"[ROUTER] ProcessAsync → Modell: gemini-2.5-flash-lite via OpenRouter, ConvId={conversationId}");
+        System.Diagnostics.Debug.WriteLine($"[ROUTER] ProcessAsync → Modell: gemini-2.5-flash via OpenRouter, ConvId={conversationId}");
 
         try
         {
             // --- Kernel aufbauen ---
             var builder = Kernel.CreateBuilder(); // SK-Builder initialisieren
             builder.Services.AddOpenAIChatCompletion(
-                modelId: "google/gemini-2.5-flash-lite",
+                modelId: "google/gemini-2.5-flash",
                 apiKey: this.apiKey.Trim(),
                 endpoint: new Uri("https://openrouter.ai/api/v1") // OpenRouter-Endpunkt (Gemini-Proxy)
             );
@@ -211,6 +212,9 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
                         if (normalizedFunctionName == "analyze_document") // Direkt zu DataAnalysis routen
                             return await HandleAnalyzeDocumentAsync(functionCall, docDbService, lastDocIds);
 
+                        if (normalizedFunctionName == "generate_response") // Generative/aufwändige Aufgabe → lokales Modell übernimmt
+                            return BuildLocalModelResponse();
+
                         try
                         {
                             // Plugin-übergreifende Funktionssuche (robust gegen falsche Plugin-Prefixe von Gemini)
@@ -311,43 +315,37 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
         return
             $"Heute ist {dayOfWeek}, der {dateGerman}, {time} Uhr. ({dateIso})\n" +
             "Antworte immer auf Deutsch. Verwende 'du', nicht 'Sie'.\n\n" +
-            "KRITISCH: Du darfst NIEMALS behaupten eine Aktion ausgefuehrt zu haben ohne vorher das passende Tool aufgerufen zu haben. " +
-            "Aktionen wie Kopieren, Verschieben, Erstellen, Loeschen IMMER zuerst das Tool aufrufen — danach kommt automatisch die Bestaetigung. " +
-            "Schreibe KEINE eigene Bestaetigung wie 'Ich habe X kopiert' oder 'Erledigt' — nur der Tool-Aufruf zaehlt.\n\n" +
+            "KRITISCH: Du darfst NIEMALS behaupten eine Aktion ausgeführt zu haben ohne vorher das passende Tool aufgerufen zu haben. " +
+            "Aktionen wie Kopieren, Verschieben, Erstellen, Löschen IMMER zuerst das Tool aufrufen — danach kommt automatisch die Bestätigung. " +
+            "Schreibe KEINE eigene Bestätigung wie 'Ich habe X kopiert' oder 'Erledigt' — nur der Tool-Aufruf zählt.\n\n" +
             "Du hast Zugriff auf verschiedene Tools. Nutze sie anhand ihrer Beschreibung je nach Nutzeranfrage.\n\n" +
+            "AUFGABENTEILUNG: Kurze Fakten, Smalltalk und kurze Bestätigungen beantwortest du selbst direkt. " +
+            "Für umfangreiche oder generative Aufgaben (Texte/Inhalte verfassen, ausführlich erklären, zusammenfassen, umformulieren, übersetzen, Code schreiben, brainstormen) rufe generate_response auf — das übernimmt dann das leistungsstarke lokale Modell. " +
+            "Passt ein konkretes Tool (Kalender, Ordner, Dokumentsuche, Dokument-Analyse), nutze dieses statt generate_response.\n\n" +
             "KALENDER - Termin erstellen: Pflichtfelder = title + date + isAllDay.\n" +
-            "isAllDay=true fuer ganztaegig (kein startTime noetig). isAllDay=false fuer Uhrzeit (dann startTime angeben, z.B. '14:00').\n" +
+            "isAllDay=true für ganztägig (kein startTime nötig). isAllDay=false für Uhrzeit (dann startTime angeben, z.B. '14:00').\n" +
             "Zeitspanne: isAllDay=false + startTime + endTime. Nur Startzeit: isAllDay=false + startTime ohne endTime.\n" +
             "Alle Pflichtfelder bekannt? → create_calendar_event SOFORT aufrufen.\n" +
             "Fehlende Pflichtfelder kurz erfragen (ein Satz):\n" +
-            "  Alle fehlen:  \"Wie heisst der Termin, wann und ganztaegig oder welche Uhrzeit?\"\n" +
-            "  Titel fehlt:  \"Wie soll der Termin heissen?\"\n" +
+            "  Alle fehlen:  \"Wie heißt der Termin, wann und ganztägig oder welche Uhrzeit?\"\n" +
+            "  Titel fehlt:  \"Wie soll der Termin heißen?\"\n" +
             "  Datum fehlt:  \"Fuer welches Datum soll ich den Termin anlegen?\"\n" +
             "  Zeit fehlt:   \"Soll der Termin ganztaegig sein oder zu welcher Uhrzeit?\"\n" +
             "KALENDER - Termine anzeigen: list_calendar_events aufrufen — niemals Termine aus dem Gespraechsverlauf wiederholen ohne erneuten Tool-Aufruf.\n" +
-            "KALENDER - Kontext: 'dieser Termin', 'den Termin', 'ihn' → zuletzt erwahnten Termin verwenden. Nur bei echtem Zweifel nachfragen.\n\n" +
+            "KALENDER - Kontext: 'dieser Termin', 'den Termin', 'ihn' → zuletzt erwähnten Termin verwenden. Nur bei echtem Zweifel nachfragen.\n\n" +
             "Dokument-Analyse: Ist eine DocID im CONTEXT sichtbar (z.B. 'CONTEXT: Kürzlich gefundene DocIDs: 7') → analyze_document(docId) aufrufen. Sonst → add_document_to_chat aufrufen.\n\n" +
             "Kopieren zu Root/Hauptbereich: copy_document_to_folder mit folderName='hauptbereich'.\n" +
             "Entfernen aus Root/Hauptbereich: remove_document_from_folder mit folderName='hauptbereich'.\n" +
             "Alle Ordner anzeigen: list_all_folders aufrufen.\n" +
             "Dokumente im Hauptbereich/Root anzeigen: list_documents_in_folder mit folderName='hauptbereich'.\n\n" +
             "Dokument loeschen: remove_document_from_folder aufrufen — Standort (Ordnername oder 'hauptbereich') muss bekannt sein. Ist er unklar: zuerst find_documents aufrufen um zu sehen wo die Datei liegt, dann dem User die Standorte zeigen und fragen von wo er sie entfernen moechte.\n\n" +
-            "Fehlende Informationen: Wenn eine Anfrage unklar ist oder Pflichtangaben fehlen, stelle EINE gezielte Rueckfrage um die fehlende Information zu erhalten. Nicht raten, nicht ein Tool mit falschen Parametern aufrufen.\n\n" +
+            "Fehlende Informationen: Wenn eine Anfrage unklar ist oder Pflichtangaben fehlen, stelle EINE gezielte Rückfrage um die fehlende Information zu erhalten. Nicht raten, nicht ein Tool mit falschen Parametern aufrufen.\n\n" +
             "Konversation ohne Tool-Bezug: kurz und freundlich auf Deutsch antworten (max 2-3 Saetze).";
     }
 
     private string NormalizeFunctionName(string rawName) // Entfernt Plugin-Prefix den Gemini manchmal fälschlicherweise anhängt
     {
-        // Gemini gibt manchmal "Document_remove_document_from_folder" statt "remove_document_from_folder"
-        string[] knownPrefixes = { "Document_", "Folder_", "Calendar_", "Analysis_" }; // Bekannte Gemini-Präfixe
-        foreach (string prefix in knownPrefixes) // Jeden bekannten Prefix prüfen
-        {
-            if (rawName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return rawName.Substring(prefix.Length); // Prefix entfernen
-            }
-        }
-        return rawName; // Kein Prefix → unverändert
+        return RouterFunctionName.Normalize(rawName); // Delegiert an testbare Logik-Klasse
     }
 
     private KernelFunction? FindFunctionInKernel(Kernel kernel, string functionName) // Sucht Funktion in allen Plugins (robust gegen Plugin-Zuordnungsfehler)

@@ -19,7 +19,7 @@ public class DocumentTools // MCP-Tools: search_documents und add_document_to_ch
     }
 
     [McpServerTool]
-    [Description("Sucht ob ein Dokument in der Bibliothek vorhanden ist und zeigt es als Card an. Aufrufen wenn User fragt ob eine Datei existiert ('Hast du', 'Gibt es', 'Suche', 'Finde') — NICHT fuer Ordner-Standort-Abfragen.")]
+    [Description("Sucht Dokumente in der Bibliothek anhand von Dateiname oder Stichwort und zeigt die Treffer als Card an. Verwenden, wenn der Nutzer ein Dokument finden, sehen oder öffnen möchte oder wissen will, ob es existiert. Liefert die Dokumente selbst — nicht deren Ordner-Standort (dafür find_documents).")]
     public async Task<string> SearchDocuments( // Tool: Sucht Dokumente nach Suchbegriff
         [Description("Der Suchbegriff (Dateiname oder Stichwort)")] string searchQuery)
     {

@@ -1,7 +1,7 @@
 # KIDT - Technische Projektdokumentation
 
 .NET MAUI 10 / Blazor Hybrid Desktop-App (Windows)
-Router-LLM: google/gemini-2.5-flash-lite via OpenRouter
+Router-LLM: google/gemini-2.5-flash via OpenRouter
 Analyse-LLM: qwen3.5:9b via Ollama (lokal)
 Datenbank: MySQL via Entity Framework Core
 
@@ -54,7 +54,7 @@ qwen3.5:9b uebernimmt: ausschliesslich Dokument-Analyse (wenn analyze_document a
 
 | Modell                 | Engine         | Aufgabe                                        | Konfiguration                    |
 |------------------------|----------------|------------------------------------------------|----------------------------------|
-| gemini-2.5-flash-lite  | OpenRouter API | Routing, Tool-Calls, Konversation              | Temperature 0.1, MaxTokens 2000  |
+| gemini-2.5-flash       | OpenRouter API | Routing, Tool-Calls, Konversation              | Temperature 0.1, MaxTokens 2000  |
 | qwen3.5:9b             | Ollama lokal   | Dokument-Analyse (PDF/Text-Inhalt)             | Temperature 0.3, MaxTokens 2000  |
 
 ---
@@ -699,7 +699,7 @@ Server=localhost;Port=3306;Database=kidt_chat;User=root;Password=...;
 
 In `RouterService.cs`:
 ```csharp
-modelId: "google/gemini-2.5-flash-lite",
+modelId: "google/gemini-2.5-flash",
 endpoint: new Uri("https://openrouter.ai/api/v1")
 ```
 Jedes OpenRouter-kompatible Modell kann eingesetzt werden.

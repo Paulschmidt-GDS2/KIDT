@@ -31,11 +31,7 @@
                 <div class="@bubbleClass">
                     @if (msg.IsLoading) @* Check: Ist dies eine Loading-Nachricht? *@
                     {
-                        @if (!string.IsNullOrEmpty(msg.LoadingText)) @* Shimmer-Text erscheint nach 2.5s *@
-                        {
-                            <span class="loading-shimmer-text">@msg.LoadingText</span>
-                        }
-                        <span class="blinking-cursor">_</span> @* Cursor blinkt immer weiter *@
+                        <span class="loading-label">@msg.LoadingText</span><span class="loading-dots"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span> @* Konstantes Label + animierte Punkte (1→2→3→Neustart) *@
                     }
                     else if (msg.IsUser) @* Wenn User-Nachricht *@
                     {

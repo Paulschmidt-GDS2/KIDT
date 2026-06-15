@@ -259,7 +259,7 @@ public class FolderTools // MCP-Tools für Ordner-Verwaltung (create, delete, mo
     }
 
     [McpServerTool]
-    [Description("Zeigt an welchen Standorten (Ordner, Hauptbereich) ein Dokument liegt. Verwende documentId (int) wenn bekannt, sonst documentName.")]
+    [Description("Zeigt NUR die Standorte (Ordner/Hauptbereich), an denen ein Dokument abgelegt ist — nicht das Dokument selbst. Verwenden, wenn der Nutzer wissen will, WO eine Datei liegt, oder bevor sie verschoben/entfernt wird und der Standort unklar ist. Zum bloßen Finden/Anzeigen eines Dokuments stattdessen search_documents. Verwende documentId (int) wenn bekannt, sonst documentName.")]
     public async Task<string> FindDocuments( // Tool: Gibt alle Standorte (Root + Ordner) eines Dokuments zurück
         [Description("Dateiname oder Teil des Dateinamens (wenn documentId nicht bekannt)")] string documentName = "",
         [Description("Dokument-ID (int) aus einem Suchergebnis — hat Vorrang vor documentName")] int documentId = -1)

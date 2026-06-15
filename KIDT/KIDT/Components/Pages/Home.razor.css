@@ -150,41 +150,53 @@ body {
 
 /* === LOADING-ANIMATION === */
 
-/* "KI denkt nach": Wandernder Licht-Schleier gleichmäßig von links nach rechts */
-.loading-shimmer-text {
-    display: inline; /* Inline — Cursor folgt direkt dahinter */
-    font-size: 18px; /* Passend zu blinking-cursor Schriftgröße */
-    margin-right: 2px; /* Puffer vor dem blinkenden Cursor */
-    background: linear-gradient(
-        90deg,
-        var(--clr-text)                     0%, /* Volle Textfarbe am Rand */
-        rgba(var(--clr-text-rgb), 0.25)    50%, /* Schleier-Kern genau in Gradient-Mitte */
-        var(--clr-text)                   100%  /* Volle Textfarbe am anderen Rand */
-    ); /* Sichtbares Fenster = genau halbe Gradient-Breite → Dimm-Zone überquert Text linear */
-    background-size: 200% 100%; /* Exakt 2× Elementbreite: eine Durchquerung = ein Zyklus */
-    background-clip: text;
-    -webkit-background-clip: text; /* WebKit-Prefix für MAUI WebView */
-    -webkit-text-fill-color: transparent; /* Text "transparent" → zeigt Gradient darunter */
-    color: transparent;
-    animation:
-        loading-shimmer 2.4s linear infinite,                    /* Gleichmäßiger Schleier-Sweep */
-        shimmer-appear  0.45s cubic-bezier(0.22, 1, 0.36, 1) both; /* Einblend-Effekt beim Erscheinen */
+/* "KI denkt nach": konstantes Label, kein Effekt/Schleier */
+.loading-label {
+    display: inline; /* Inline — Punkte folgen direkt dahinter */
+    font-size: 18px; /* Schriftgröße des Lade-Labels */
+    color: var(--clr-text); /* Normale Textfarbe, statisch */
 }
 
-@keyframes loading-shimmer {
-    0%   { background-position: 100% center; } /* Dimm-Zone startet am linken Textrand */
-    100% { background-position:   0% center; } /* Dimm-Zone endet am rechten Textrand */
+/* Drei Punkte: erscheinen nacheinander 1→2→3, dann Neustart bei Punkt 1 */
+.loading-dots {
+    display: inline; /* Direkt hinter dem Label */
 }
 
-@keyframes shimmer-appear {
-    from { opacity: 0; transform: translateY(-3px); } /* Einblenden von leicht oben */
-    to   { opacity: 1; transform: translateY(0);    }
+.loading-dots .dot {
+    font-size: 18px; /* Gleiche Größe wie Label */
+    color: var(--clr-text); /* Gleiche Farbe wie Label */
+    opacity: 0; /* Standard unsichtbar — reserviert aber Platz, damit nichts springt */
+}
+
+.loading-dots .dot:nth-child(1) {
+    opacity: 1; /* Erster Punkt immer sichtbar */
+}
+
+.loading-dots .dot:nth-child(2) {
+    animation: dot-step-2 1.2s steps(1, end) infinite; /* Erscheint im zweiten Drittel */
+}
+
+.loading-dots .dot:nth-child(3) {
+    animation: dot-step-3 1.2s steps(1, end) infinite; /* Erscheint im letzten Drittel */
+}
+
+@keyframes dot-step-2 {
+    0%   { opacity: 0; } /* Phase 1: nur Punkt 1 */
+    33%  { opacity: 1; } /* Ab Phase 2 sichtbar */
+    100% { opacity: 1; } /* Bleibt bis zum Zyklus-Ende, springt dann zurück auf 0 */
+}
+
+@keyframes dot-step-3 {
+    0%   { opacity: 0; } /* Phase 1+2: noch unsichtbar */
+    66%  { opacity: 1; } /* Ab Phase 3 sichtbar */
+    100% { opacity: 1; } /* Bleibt bis zum Zyklus-Ende, springt dann zurück auf 0 */
 }
 
 /* Fullscreen-Modus: Schriftgröße proportional skalieren */
 @media (min-width: 1400px) {
-    .loading-shimmer-text {
-        font-size: 23px; /* 18px * 1.3 – passend zu blinking-cursor im Fullscreen */
+    .loading-label,
+    .loading-dots .dot {
+        font-size: 23px; /* 18px * 1.3 im Fullscreen */
     }
 }
 
@@ -197,31 +209,6 @@ body {
     margin-bottom: 4px; /* Abstand zur eigentlichen Antwort */
     font-family: monospace; /* Monospace wie Debug-Ausgabe */
     letter-spacing: 0.02em;
-}
-
-/* Blinkender Cursor wie in Konsole */
-.blinking-cursor {
-    color: var(--clr-text); /* Farbe passend zum Text */
-    font-size: 18px; /* Gleiche Schriftgröße wie normaler Text */
-    animation: blink 0.8s infinite; /* Animation alle 0.8 Sekunden (schneller!) */
-}
-
-/* Fullscreen-Modus: Proportional 1.3x größer */
-@media (min-width: 1400px) {
-    .blinking-cursor {
-        font-size: 23px; /* 18px * 1.3 = 23.4px ? 23px */
-    }
-}
-
-/* Keyframes für Blink-Animation */
-@keyframes blink {
-    0%, 49% {
-        opacity: 1; /* Sichtbar */
-    }
-
-    50%, 100% {
-        opacity: 0; /* Unsichtbar */
-    }
 }
 
 /* === DATEI-BADGE === */

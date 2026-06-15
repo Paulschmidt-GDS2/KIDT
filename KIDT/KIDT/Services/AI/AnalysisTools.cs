@@ -13,4 +13,13 @@ internal class AnalysisTools // Dummy-SK-Plugin: stellt analyze_document als Ker
     {
         return docId.ToString();
     }
+
+    [KernelFunction("generate_response")]
+    [Description("Delegiert die Beantwortung an das leistungsstarke lokale Modell. Aufrufen, wenn die Antwort umfangreich, kreativ oder analytisch ist: Texte oder Inhalte verfassen/generieren, ausführlich erklären, zusammenfassen, umformulieren, übersetzen, Code schreiben oder brainstormen. NICHT aufrufen für kurze Fakten, Smalltalk, Bestätigungen oder wenn ein anderes Tool (Kalender, Ordner, Dokumentsuche, Dokument-Analyse) besser passt.")]
+    public string GenerateResponse( // Dummy-Return — Routing zum lokalen Modell erfolgt im RouterService-Handler
+        [Description("Worum es geht — die Aufgabe in einem kurzen Satz")]
+        string task)
+    {
+        return task;
+    }
 }

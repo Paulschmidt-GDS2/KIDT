@@ -17,7 +17,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         public bool IsUser { get; set; }
         public bool IsLoading { get; set; }
         public string DisplayText { get; set; } = string.Empty;
-        public string LoadingText { get; set; } = string.Empty; // Label nach 2.5s (z.B. "KI denkt nach")
+        public string LoadingText { get; set; } = string.Empty; // Konstantes Lade-Label (z.B. "KI denkt nach")
         public List<Document> FoundDocuments { get; set; } = new List<Document>();
         public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
         public string ModelLabel { get; set; } = string.Empty; // Debug: welches Modell hat geantwortet
@@ -279,21 +279,10 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         StateHasChanged();
         await JSRuntime.InvokeVoidAsync("chatScrollHelper.forceScrollToBottom");
 
-        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true }; // Loading-Spinner
+        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true, LoadingText = "KI denkt nach" }; // Loading-Indikator mit konstantem Label
         Messages.Add(loadingMessage);
         canAbort = true;
         StateHasChanged();
-
-        var loadingLabelCts = new CancellationTokenSource(); // Label "KI denkt nach" nach 2.5s einblenden
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(2500, loadingLabelCts.Token);
-                await InvokeAsync(() => { loadingMessage.LoadingText = "KI denkt nach"; StateHasChanged(); });
-            }
-            catch (OperationCanceledException) { } // Schnelle Antwort: Label nicht nötig
-        });
 
         int conversationIdForSave = currentConversationId;
 
@@ -352,7 +341,6 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
                 {
                     firstChunkReceived = true;
                     canAbort = false;
-                    loadingLabelCts.Cancel();
                     await minDelayTask; // MinDelay abwarten
                     Messages.Remove(loadingMessage);
                     Messages.Add(assistantMessage);
@@ -382,7 +370,6 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
             System.Diagnostics.Debug.WriteLine($"[CHAT] Fehler: {ex.Message}");
         }
 
-        loadingLabelCts.Cancel(); // Label-Task in jedem Fall beenden
         streamComplete = true; // Drain-Task beenden
         await Task.WhenAll(drainTask, saveUserMessageTask);
 

@@ -2,6 +2,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Text;
+using KIDT.Services.Logic;
 
 namespace KIDT.Services;
 
@@ -85,7 +86,7 @@ public class DataAnalysisService : IAsyncDisposable // Analyse-Service: nutzt qw
             string assistantMessage;
             if (response.Content != null)
             {
-                assistantMessage = CleanLlmResponse(response.Content);
+                assistantMessage = LlmResponseCleaner.Clean(response.Content); // Bereinigt lokale LLM-Antwort
             }
             else
             {
@@ -107,49 +108,5 @@ public class DataAnalysisService : IAsyncDisposable // Analyse-Service: nutzt qw
     public ValueTask DisposeAsync() // Ressourcen aufräumen (aktuell leer)
     {
         return ValueTask.CompletedTask;
-    }
-
-    private static string CleanLlmResponse(string response) // Bereinigt LLM-Antworten (Anführungszeichen, Emojis, Debug-Marker)
-    {
-        if (string.IsNullOrWhiteSpace(response)) return response;
-
-        response = response.Trim();
-
-        if (response.StartsWith("\"") && response.EndsWith("\"") && response.Length > 2) // Anführungszeichen entfernen
-            response = response.Substring(1, response.Length - 2);
-
-        response = response.Replace("✅", "").Replace("❌", "").Replace("🎉", "") // Häufige Emojis entfernen
-                           .Replace("⚠️", "").Replace("✓", "").Replace("→", "");
-
-        string[] debugMarkers = { "=== Input:", "=== Output:", "DENSE_CATEGORIES", "### QUERY REPORT", "As a solution", "--- Begin of code" };
-
-        bool hasDebugContent = false;
-        foreach (var marker in debugMarkers)
-        {
-            if (response.Contains(marker, StringComparison.OrdinalIgnoreCase)) { hasDebugContent = true; break; }
-        }
-        if (!hasDebugContent) return response.Trim();
-
-        string[] lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-        var cleaned = new StringBuilder();
-        bool skipMode = false;
-
-        foreach (string line in lines)
-        {
-            string trimmed = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.All(c => c == '=')) continue;
-
-            bool isDebugLine = false;
-            foreach (var marker in debugMarkers)
-            {
-                if (trimmed.Contains(marker, StringComparison.OrdinalIgnoreCase)) { isDebugLine = true; skipMode = true; break; }
-            }
-
-            if (!isDebugLine && !skipMode) cleaned.AppendLine(line);
-            else if (!isDebugLine && skipMode && trimmed.Length > 10) { skipMode = false; cleaned.AppendLine(line); }
-        }
-
-        string result = cleaned.ToString().Trim();
-        return string.IsNullOrWhiteSpace(result) ? "Wie kann ich dir helfen?" : result;
     }
 }

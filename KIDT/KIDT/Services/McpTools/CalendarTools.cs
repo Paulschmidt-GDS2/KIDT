@@ -2,6 +2,7 @@ using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Text.Json;
 using KIDT.Models;
+using KIDT.Services.Logic;
 
 namespace KIDT.Services.McpTools;
 
@@ -93,24 +94,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         List<object> eventList = new List<object>();
         foreach (CalendarEvent e in events) // Durchlaufe alle gefundenen Events
         {
-            // Formatiere Zeitangabe: Ganztägig vs. Zeitspanne vs. Startzeit vs. Keine Zeit
-            string timeString;
-            if (e.IsAllDay) // Ganztägiger Termin?
-            {
-                timeString = "Ganztägig";
-            }
-            else if (e.HasTime && e.HasEndTime) // Zeitspanne (Start + Ende)?
-            {
-                timeString = $"{e.Time:hh\\:mm} - {e.EndTime:hh\\:mm}"; // Format: "14:00 - 16:00"
-            }
-            else if (e.HasTime) // Nur Startzeit?
-            {
-                timeString = e.Time.ToString(@"hh\:mm"); // Format: "14:00"
-            }
-            else // Keine Uhrzeit
-            {
-                timeString = "Keine Zeit";
-            }
+            string timeString = CalendarLogic.FormatEventTime(e.IsAllDay, e.HasTime, e.Time, e.HasEndTime, e.EndTime); // Zeitangabe einheitlich formatieren
 
             eventList.Add(new // Füge Event zur Liste hinzu
             {
@@ -221,7 +205,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
                 {
                     continue; // Kein Konflikt möglich
                 }
-                bool overlaps = parsedStart < existing.EndTime && parsedEnd > existing.Time; // Überlappungsformel
+                bool overlaps = CalendarLogic.EventsOverlap(parsedStart, parsedEnd, existing.Time, existing.EndTime); // Zeitüberschneidung prüfen
                 if (overlaps) // Überlappung gefunden?
                 {
                     string existingTime = $"{existing.Time:hh\\:mm} - {existing.EndTime:hh\\:mm}"; // Formatiere bestehende Zeit
@@ -253,23 +237,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         await this.calendarService.AddEventAsync(newEvent); // Speichere in Datenbank
 
         // Zeitstring für Response
-        string timeString;
-        if (isAllDay) // Ganztägig?
-        {
-            timeString = "Ganztägig";
-        }
-        else if (hasTime && hasEndTime) // Zeitspanne?
-        {
-            timeString = $"{parsedStart:hh\\:mm} - {parsedEnd:hh\\:mm}"; // Format: "14:00 - 16:00"
-        }
-        else if (hasTime) // Nur Startzeit?
-        {
-            timeString = parsedStart.ToString(@"hh\:mm"); // Format: "14:00"
-        }
-        else
-        {
-            timeString = "Keine Zeit";
-        }
+        string timeString = CalendarLogic.FormatEventTime(isAllDay, hasTime, parsedStart, hasEndTime, parsedEnd); // Zeitangabe einheitlich formatieren
 
         return JsonSerializer.Serialize(new
         {
@@ -319,7 +287,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         if (!string.IsNullOrEmpty(date)) // Datum angegeben?
         {
             DateTime parsedDate;
-            string? parseError = ParseFlexibleDate(date, out parsedDate); // Datum flexibel parsen ("yyyy-MM-dd" oder "dd.MM")
+            string? parseError = CalendarLogic.ParseFlexibleDate(date, out parsedDate); // Datum flexibel parsen ("yyyy-MM-dd" oder "dd.MM")
             if (parseError != null)
                 return JsonSerializer.Serialize(new { success = false, message = parseError });
 
@@ -430,7 +398,7 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         else if (!string.IsNullOrEmpty(currentDate)) // Keine ID? Suche per Datum
         {
             DateTime parsedDate;
-            string? parseError = ParseFlexibleDate(currentDate, out parsedDate); // Datum flexibel parsen
+            string? parseError = CalendarLogic.ParseFlexibleDate(currentDate, out parsedDate); // Datum flexibel parsen
             if (parseError != null)
                 return JsonSerializer.Serialize(new { success = false, message = parseError });
 
@@ -577,22 +545,8 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
 
         if (!string.IsNullOrWhiteSpace(newColor)) // Neue Farbe angegeben?
         {
-            // Mappe Text-Farbnamen zu ColorIndex (0-7) - erlaubt natürlichsprachliche Eingabe
-            var colorMapping = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) // Case-Insensitive Mapping
-            {
-                { "grau", 0 }, { "oliv", 0 }, { "standard", 0 },
-                { "blau", 1 }, { "hellblau", 1 },
-                { "lachs", 2 }, { "rosa", 2 }, { "orange", 2 },
-                { "grün", 3 }, { "hellgrün", 3 },
-                { "gruen", 3 }, // Alternative Schreibweise
-                { "gelb", 4 }, { "gold", 4 },
-                { "lila", 5 }, { "violett", 5 }, { "purple", 5 },
-                { "pink", 6 }, { "magenta", 6 },
-                { "mint", 7 }, { "türkis", 7 }, { "tuerkis", 7 } // Mit/ohne Umlaut
-            };
-
             int colorIndexValue;
-            bool colorFound = colorMapping.TryGetValue(newColor.Trim(), out colorIndexValue); // Suche Farbe im Dictionary
+            bool colorFound = CalendarLogic.MapColorNameToIndex(newColor, out colorIndexValue); // Farbname → ColorIndex
             if (colorFound) // Farbe erkannt?
             {
                 eventToUpdate.ColorIndex = colorIndexValue;
@@ -655,33 +609,4 @@ public class CalendarTools // MCP-Tools: list_calendar_events, create_calendar_e
         });
     }
 
-    private static string? ParseFlexibleDate(string input, out DateTime result) // Parst "yyyy-MM-dd" oder "dd.MM" (aktuelles Jahr); gibt Fehlermeldung zurück oder null bei Erfolg
-    {
-        result = DateTime.MinValue;
-
-        if (input.Contains("-")) // Format "yyyy-MM-dd"
-        {
-            if (!DateTime.TryParse(input, out result))
-                return "Ungültiges Datum-Format. Nutze 'yyyy-MM-dd' oder 'dd.MM'.";
-            return null;
-        }
-
-        if (input.Contains(".")) // Format "dd.MM" ohne Jahr
-        {
-            var parts = input.Split('.');
-            if (parts.Length == 2)
-            {
-                bool dayOk = int.TryParse(parts[0], out int day);
-                bool monthOk = int.TryParse(parts[1], out int month);
-                if (dayOk && monthOk)
-                {
-                    result = new DateTime(DateTime.Now.Year, month, day);
-                    return null;
-                }
-            }
-            return "Ungültiges Datum-Format. Nutze 'dd.MM' (z.B. '19.03').";
-        }
-
-        return "Ungültiges Datum-Format. Nutze 'yyyy-MM-dd' oder 'dd.MM'.";
-    }
 }

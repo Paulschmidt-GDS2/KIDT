@@ -45,6 +45,37 @@ public partial class RouterService
         return response;
     }
 
+    private RouterResponse BuildClarificationResponse(string? toolMessage, List<CalendarEventJson> events) // Baut Rückfrage-Antwort bei mehrdeutigen Terminen (von Delete + Update genutzt)
+    {
+        List<string> lines = new List<string>(); // Termin-Optionen als Liste aufbauen
+        foreach (CalendarEventJson e in events) // Jeden Treffer als Auswahloption formatieren
+        {
+            string timeInfo = string.Empty;
+            if (e.time != "Ganztägig") timeInfo = $" ({e.time})"; // Uhrzeit nur wenn nicht ganztägig
+            lines.Add($"• ID {e.id}: {e.title}" + timeInfo);
+        }
+        string msg = string.Empty;
+        if (toolMessage != null) msg = toolMessage; // Tool-Nachricht übernehmen
+
+        RouterResponse response = new RouterResponse();
+        response.ToolWasUsed = true;
+        response.DirectResponse = msg + "\n" + string.Join("\n", lines); // Nachricht + Optionsliste
+        response.Reason = "Mehrdeutiger Termin (Rückfrage)";
+        return response;
+    }
+
+    private RouterResponse BuildLocalModelResponse() // Delegiert generative/aufwändige Aufgaben an das lokale Modell (qwen)
+    {
+        RouterResponse response = new RouterResponse(); // Routing-Antwort für DataAnalysis ohne Dokument
+        response.ShouldRoute = true;
+        response.TargetService = "dataAnalysis";
+        response.MaxTokens = 2000; // Großzügiges Limit für lange Antworten
+        response.FoundDocuments = new List<Document>(); // Reine Generierung: kein Dokument-Kontext
+        response.Reason = "Generierung → lokales Modell";
+        response.ToolWasUsed = true;
+        return response;
+    }
+
     private async Task<RouterResponse?> DispatchToolResultAsync( // Leitet Tool-Ergebnis an passenden Handler weiter
         string functionName, string resultText,
         DocumentDbService docDbService, CalendarService calendarService,
@@ -159,20 +190,7 @@ public partial class RouterService
         response.ToolWasUsed = true;
 
         if (result != null && result.needsClarification && result.events != null) // Mehrere Treffer → Rückfrage
-        {
-            var lines = new List<string>(); // Termin-Optionen als Liste aufbauen
-            foreach (var e in result.events) // Jeden Treffer als Auswahloption formatieren
-            {
-                string timeInfo = string.Empty;
-                if (e.time != "Ganztägig") timeInfo = $" ({e.time})"; // Uhrzeit nur wenn nicht ganztägig
-                lines.Add($"• ID {e.id}: {e.title}" + timeInfo);
-            }
-            string msg = string.Empty;
-            if (result.message != null) msg = result.message; // Tool-Nachricht (z.B. "Welchen Termin meinst du?")
-            response.DirectResponse = msg + "\n" + string.Join("\n", lines);
-            response.Reason = "Mehrdeutiger Termin (Rückfrage)";
-            return response;
-        }
+            return BuildClarificationResponse(result.message, result.events);
 
         if (result != null && result.success) // Termin erfolgreich gelöscht?
         {
@@ -196,20 +214,7 @@ public partial class RouterService
         response.ToolWasUsed = true;
 
         if (result != null && result.needsClarification && result.events != null) // Mehrere Treffer → Rückfrage
-        {
-            var lines = new List<string>(); // Termin-Optionen als Liste aufbauen
-            foreach (var e in result.events) // Jeden Treffer als Auswahloption formatieren
-            {
-                string timeInfo = string.Empty;
-                if (e.time != "Ganztägig") timeInfo = $" ({e.time})"; // Uhrzeit nur wenn nicht ganztägig
-                lines.Add($"• ID {e.id}: {e.title}" + timeInfo);
-            }
-            string msg = string.Empty;
-            if (result.message != null) msg = result.message; // Tool-Nachricht übernehmen
-            response.DirectResponse = msg + "\n" + string.Join("\n", lines);
-            response.Reason = "Mehrdeutiger Termin (Rückfrage)";
-            return response;
-        }
+            return BuildClarificationResponse(result.message, result.events);
 
         if (result != null && result.success) // Termin erfolgreich aktualisiert?
         {

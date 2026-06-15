@@ -1,6 +1,7 @@
 using Microsoft.SemanticKernel;
 using System.Reflection;
 using KIDT.Database;
+using KIDT.Services.Logic;
 using ModelContextProtocol.Server;
 
 namespace KIDT.Services;
@@ -67,7 +68,7 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
                     var function = KernelFunctionFactory.CreateFromMethod( // Erstelle Kernel-Funktion aus Methode
                         method,
                         toolInstance,
-                        functionName: ConvertToPythonCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments → search_documents)
+                        functionName: ToolNameConverter.ToSnakeCase(method.Name) // Konvertiere Name zu snake_case (SearchDocuments → search_documents)
                     );
 
                     functions.Add(function);
@@ -88,26 +89,4 @@ public static class McpToolsRegistry // Static Helper-Klasse: Registriert MCP-To
         }
     }
 
-    private static string ConvertToPythonCase(string name) // Hilfsmethode: PascalCase → snake_case
-    {
-        if (string.IsNullOrEmpty(name)) return name;
-
-        var result = new System.Text.StringBuilder();
-        result.Append(char.ToLower(name[0])); // Erstes Zeichen lowercase
-
-        for (int i = 1; i < name.Length; i++) // Durchlaufe restliche Zeichen
-        {
-            if (char.IsUpper(name[i])) // Uppercase-Zeichen?
-            {
-                result.Append('_'); // Füge Underscore hinzu
-                result.Append(char.ToLower(name[i]));
-            }
-            else
-            {
-                result.Append(name[i]);
-            }
-        }
-
-        return result.ToString();
-    }
 }

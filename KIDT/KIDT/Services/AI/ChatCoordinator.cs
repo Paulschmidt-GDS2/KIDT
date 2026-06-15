@@ -1,5 +1,6 @@
 using KIDT.Database;
 using KIDT.Models;
+using KIDT.Services.Logic;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 
@@ -47,7 +48,7 @@ public class ChatCoordinator : IAsyncDisposable // Orchestrator: RouterService (
     {
         if (!this.isInitialized) await InitializeAsync();
 
-        if (!IsValidUserInput(userMessage)) // Eingabe-Validierung (Gibberish, Wiederholungen)
+        if (!UserInputValidator.IsValid(userMessage)) // Eingabe-Validierung (Gibberish, Wiederholungen)
         {
             yield return new ChatStreamChunk
             {
@@ -82,7 +83,7 @@ public class ChatCoordinator : IAsyncDisposable // Orchestrator: RouterService (
                 IsComplete = true,
                 FoundDocuments = routerResponse.FoundDocuments,
                 FoundEvents = routerResponse.FoundEvents,
-                ModelLabel = "gemini-2.5-flash-lite via OpenRouter" // Router-Modell antwortet direkt
+                ModelLabel = "gemini-2.5-flash via OpenRouter" // Router-Modell antwortet direkt
             };
             yield break;
         }
@@ -168,24 +169,6 @@ public class ChatCoordinator : IAsyncDisposable // Orchestrator: RouterService (
     public string GetCurrentFileName() { return this.currentFileName; }
 
     public string GetCurrentFileContent() { return this.currentFileContent; }
-
-    private bool IsValidUserInput(string text) // Blockiert leere oder repetitive Eingaben
-    {
-        if (string.IsNullOrWhiteSpace(text) || text.Length < 2) return false;
-
-        if (text.Length > 40 && !text.Contains(' ')) // Sehr lange Wiederholungen blockieren
-        {
-            string pattern = text.Substring(0, Math.Min(5, text.Length));
-            int count = 0;
-            for (int i = 0; i <= text.Length - pattern.Length; i += pattern.Length)
-            {
-                if (text.Substring(i, pattern.Length).Equals(pattern, StringComparison.OrdinalIgnoreCase))
-                    count++;
-            }
-            if (count >= 4) return false;
-        }
-        return true;
-    }
 
     public async ValueTask DisposeAsync()
     {
