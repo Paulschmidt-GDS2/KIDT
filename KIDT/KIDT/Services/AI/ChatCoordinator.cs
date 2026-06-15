@@ -88,6 +88,9 @@ public class ChatCoordinator : IAsyncDisposable // Orchestrator: RouterService (
             yield break;
         }
 
+        // --- Wechsel zum lokalen Modell: Lade-Label umschalten (Loading-Bubble bleibt) ---
+        yield return new ChatStreamChunk { LoadingLabel = "Lokales Modell denkt nach", IsComplete = false }; // Status-Signal an UI
+
         // --- DataAnalysis: Dokument-Inhalt analysieren ---
         await this.dataAnalysis.InitializeAsync();
 

@@ -279,7 +279,7 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         StateHasChanged();
         await JSRuntime.InvokeVoidAsync("chatScrollHelper.forceScrollToBottom");
 
-        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true, LoadingText = "KI denkt nach" }; // Loading-Indikator mit konstantem Label
+        var loadingMessage = new ChatMessage { Text = string.Empty, IsUser = false, IsLoading = true, LoadingText = "LLM denkt nach" }; // Loading-Indikator mit konstantem Label
         Messages.Add(loadingMessage);
         canAbort = true;
         StateHasChanged();
@@ -337,6 +337,13 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         {
             await foreach (var chunk in Chat.SendStreamAsync(text, conversationIdForSave, false, cancelSource.Token).WithCancellation(cancelSource.Token))
             {
+                if (!firstChunkReceived && !string.IsNullOrEmpty(chunk.LoadingLabel)) // Status-Update vor erster Antwort: nur Lade-Label wechseln
+                {
+                    loadingMessage.LoadingText = chunk.LoadingLabel; // z.B. "Lokales Modell denkt nach"
+                    StateHasChanged();
+                    continue; // Loading-Bubble bleibt, Punkte laufen weiter
+                }
+
                 if (!firstChunkReceived) // Erster Chunk: Loading-Nachricht durch Assistent-Nachricht ersetzen
                 {
                     firstChunkReceived = true;

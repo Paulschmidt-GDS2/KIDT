@@ -9,4 +9,5 @@ public class ChatStreamChunk // Einzelner Streaming-Chunk (Text + Status + gefun
     public List<Document> FoundDocuments { get; set; } = new List<Document>();
     public List<CalendarEvent> FoundEvents { get; set; } = new List<CalendarEvent>();
     public string ModelLabel { get; set; } = string.Empty; // Debug: welches Modell hat diese Antwort erzeugt
+    public string LoadingLabel { get; set; } = string.Empty; // Status-Update: neues Lade-Label (z.B. bei Wechsel zum lokalen Modell)
 }
