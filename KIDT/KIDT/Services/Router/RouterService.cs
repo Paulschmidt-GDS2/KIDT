@@ -125,13 +125,14 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
 
             chatHistory.AddUserMessage(userMessage); // Aktuelle User-Nachricht hinzufügen
 
-            // FunctionChoiceBehavior statt ToolCallBehavior: bessere Gemini-Kompatibilität,
-            // korrektes Plugin-Naming, kein Parallel-Call-Crash (GitHub #12554)
+            // FunctionChoiceBehavior statt ToolCallBehavior: bessere Gemini-Kompatibilität, korrektes Plugin-Naming.
+            // AllowParallelCalls=true: Modell darf mehrere Aktionen in EINER Antwort auflisten (z.B. mehrfaches Löschen).
+            // Ausgeführt wird NICHT gleichzeitig — wir dispatchen die Calls manuell nacheinander (autoInvoke=false).
             var executionSettings = new OpenAIPromptExecutionSettings
             {
                 FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(
-                    autoInvoke: false, // Manueller Dispatch im RouterService
-                    options: new FunctionChoiceBehaviorOptions { AllowParallelCalls = false } // Gemini-Crash bei Parallel-Calls verhindern
+                    autoInvoke: false, // Manueller, sequentieller Dispatch im RouterService
+                    options: new FunctionChoiceBehaviorOptions { AllowParallelCalls = true } // Mehrere Calls pro Antwort erlauben (Stapel-Aktionen)
                 ),
                 Temperature = 0.1,
                 MaxTokens = 2000
@@ -141,160 +142,98 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
 
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Gemini aufgerufen → Nachricht: \"{userMessage.Substring(0, Math.Min(60, userMessage.Length))}\"");
 
-            // SK/Gemini-Kompatibilität: bei unbekanntem ChatFinishReason einmal retry
-            ChatMessageContent response;
-            try
-            {
-                response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // LLM aufrufen
-            }
-            catch (ArgumentOutOfRangeException ex) when (ex.Message.Contains("ChatFinishReason") || ex.Message.Contains("Unknown"))
-            {
-                System.Diagnostics.Debug.WriteLine($"[ROUTER] SK ChatFinishReason-Fehler, Retry nach 300ms... ({ex.Message})");
-                await Task.Delay(300, cancellationToken); // Kurze Pause vor Retry
-                try
-                {
-                    response = await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // Retry-Versuch
-                }
-                catch (ArgumentOutOfRangeException retryEx) when (retryEx.Message.Contains("ChatFinishReason") || retryEx.Message.Contains("Unknown"))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Retry fehlgeschlagen → Klaerungs-Fallback ({retryEx.Message})");
-                    try // Fallback: einfacher Call ohne Tools, Gemini kann nachfragen oder klaeren
-                    {
-                        var fallbackSettings = new OpenAIPromptExecutionSettings
-                        {
-                            FunctionChoiceBehavior = FunctionChoiceBehavior.None(), // Kein Tool-Aufruf erlaubt
-                            Temperature = 0.3,
-                            MaxTokens = 200
-                        };
-                        var fallbackResponse = await chatService.GetChatMessageContentAsync(chatHistory, fallbackSettings, kernel); // Fallback-LLM-Aufruf ohne Tools
-                        if (!string.IsNullOrWhiteSpace(fallbackResponse.Content)) // Antwort vorhanden?
-                        {
-                            RouterResponse clarifyResponse = new RouterResponse();
-                            clarifyResponse.DirectResponse = fallbackResponse.Content.Trim();
-                            clarifyResponse.Reason = "Klaerungs-Fallback (kein Tool)";
-                            return clarifyResponse;
-                        }
-                    }
-                    catch (Exception fallbackEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Klaerungs-Fallback fehlgeschlagen: {fallbackEx.Message}");
-                    }
-                    RouterResponse lastResort = new RouterResponse(); // Letzter Ausweg wenn auch Fallback scheitert
-                    lastResort.DirectResponse = "Ich habe deine Anfrage nicht ganz verstanden. Kannst du sie anders formulieren?";
-                    lastResort.Reason = "ChatFinishReason-Fehler (alle Fallbacks fehlgeschlagen)";
-                    return lastResort;
-                }
-            }
+            // --- Tool-Calls verarbeiten: Modell darf mehrere Aktionen in EINER Antwort auflisten, wir führen sie sequenziell aus ---
+            var foundDocuments = new List<Document>(); // Gefundene Dokumente für Antwort
+            var actionMessages = new List<string>(); // Meldungen mehrerer Aktions-Tools (Ordner/Termin)
+
+            ChatMessageContent? response = await GetChatWithRetryAsync(chatService, chatHistory, executionSettings, kernel, cancellationToken); // LLM-Aufruf
+            if (response == null) // Alle Versuche scheiterten → Klaerungs-Fallback ohne Tools
+                return await BuildClarifyFallbackAsync(chatService, chatHistory, kernel);
 
             cancellationToken.ThrowIfCancellationRequested();
             System.Diagnostics.Debug.WriteLine($"[ROUTER] Gemini antwortet → Content: \"{(response.Content ?? "").Substring(0, Math.Min(80, (response.Content ?? "").Length))}\"");
 
             string responseText = string.Empty;
-            if (response.Content != null) responseText = response.Content.Trim(); // Content extrahieren (kann null sein)
+            if (response.Content != null) responseText = response.Content.Trim(); // Content extrahieren
 
-            // --- Tool-Calls verarbeiten ---
-            var foundDocuments = new List<Document>(); // Gefundene Dokumente für Antwort
-            bool hasToolCalls = false; // Marker: LLM wollte Tool aufrufen
-
-            if (response.Items != null) // Antwort enthält Items (Tool-Calls oder Text)?
+            // Alle Tool-Calls der Antwort einsammeln (Reihenfolge beibehalten)
+            var functionCalls = new List<FunctionCallContent>();
+            if (response.Items != null)
             {
-                foreach (var item in response.Items) // Alle Response-Items durchgehen
+                foreach (var item in response.Items) // Alle FunctionCallContent-Items sammeln
                 {
-                    if (item is Microsoft.SemanticKernel.FunctionCallContent functionCall) // Ist es ein Tool-Call?
-                    {
-                        hasToolCalls = true;
-
-                        // --- Funktionsname normalisieren: Gemini hängt manchmal Plugin-Prefix an ---
-                        // z.B. "Document_remove_document_from_folder" → "remove_document_from_folder"
-                        string normalizedFunctionName = NormalizeFunctionName(functionCall.FunctionName);
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Call → {functionCall.PluginName}.{functionCall.FunctionName} (normalisiert: {normalizedFunctionName})");
-
-                        if (normalizedFunctionName == "analyze_document") // Direkt zu DataAnalysis routen
-                            return await HandleAnalyzeDocumentAsync(functionCall, docDbService, lastDocIds);
-
-                        if (normalizedFunctionName == "generate_response") // Generative/aufwändige Aufgabe → lokales Modell übernimmt
-                            return BuildLocalModelResponse();
-
-                        try
-                        {
-                            // Plugin-übergreifende Funktionssuche (robust gegen falsche Plugin-Prefixe von Gemini)
-                            KernelFunction? fn = FindFunctionInKernel(kernel, normalizedFunctionName);
-                            if (fn == null)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"[ROUTER] Funktion '{normalizedFunctionName}' nicht gefunden → Fallback");
-                                continue; // Nächsten Tool-Call versuchen
-                            }
-
-                            var result = await fn.InvokeAsync(kernel, functionCall.Arguments); // Tool ausführen
-
-                            string resultStr = result.ToString() ?? string.Empty; // Ergebnis als String
-                            System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Ergebnis ({normalizedFunctionName}): {resultStr.Substring(0, Math.Min(100, resultStr.Length))}");
-
-                            RouterResponse? toolResponse = await DispatchToolResultAsync(
-                                normalizedFunctionName, resultStr, docDbService, calendarService, foundDocuments);
-
-                            if (toolResponse != null) return toolResponse; // Handler hat Ergebnis produziert → sofort zurückgeben
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Fehler ({normalizedFunctionName}): {ex.GetType().Name}: {ex.Message}");
-                            RouterResponse toolErrorResponse = new RouterResponse();
-                            toolErrorResponse.DirectResponse = $"Fehler bei '{normalizedFunctionName}': {ex.Message}. Bitte erneut versuchen.";
-                            toolErrorResponse.Reason = "Tool-Fehler";
-                            return toolErrorResponse;
-                        }
-                    }
+                    if (item is FunctionCallContent fc) functionCalls.Add(fc);
                 }
             }
 
-            // --- Kein Tool: JSON-Route oder direkte Konversations-Antwort ---
-            if (responseText.TrimStart().StartsWith("{")) // Antwort beginnt mit '{' → mögliche JSON-Route
+            // Tool-Calls NACHEINANDER abarbeiten (kein gleichzeitiges Ausführen)
+            foreach (FunctionCallContent functionCall in functionCalls)
             {
+                string normalizedFunctionName = NormalizeFunctionName(functionCall.FunctionName); // Gemini-Präfix entfernen
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Call → {functionCall.PluginName}.{functionCall.FunctionName} (normalisiert: {normalizedFunctionName})");
+
+                // Routing-Tools (Analyse/Generierung) beenden sofort — gesammelte Aktionen haben Vorrang
+                if (normalizedFunctionName == "analyze_document")
+                {
+                    if (actionMessages.Count > 0) return BuildAggregatedActionResponse(actionMessages);
+                    return await HandleAnalyzeDocumentAsync(functionCall, docDbService, lastDocIds);
+                }
+                if (normalizedFunctionName == "generate_response")
+                {
+                    if (actionMessages.Count > 0) return BuildAggregatedActionResponse(actionMessages);
+                    return BuildLocalModelResponse();
+                }
+
                 try
                 {
-                    var routingJson = JsonSerializer.Deserialize<SimpleRoutingJson>(responseText,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitiv parsen
-
-                    if (routingJson != null && routingJson.route == "dataAnalysis") // DataAnalysis Follow-up
+                    KernelFunction? fn = FindFunctionInKernel(kernel, normalizedFunctionName); // Funktion über alle Plugins suchen
+                    if (fn == null)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[ROUTER] → JSON-Route: dataAnalysis (Follow-up)");
+                        System.Diagnostics.Debug.WriteLine($"[ROUTER] Funktion '{normalizedFunctionName}' nicht gefunden");
+                        continue; // Nächsten Call versuchen
+                    }
 
-                        var contextDocs = new List<Document>(); // Kontext-Dokumente aus Kontext-DocIDs laden
-                        foreach (int docId in lastDocIds)
+                    var result = await fn.InvokeAsync(kernel, functionCall.Arguments); // Tool ausführen
+                    string resultStr = result.ToString() ?? string.Empty; // Ergebnis als String
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Ergebnis ({normalizedFunctionName}): {resultStr.Substring(0, Math.Min(100, resultStr.Length))}");
+
+                    RouterResponse? toolResponse = await DispatchToolResultAsync(normalizedFunctionName, resultStr, docDbService, calendarService, foundDocuments); // Ergebnis an Handler
+
+                    // Aktions-Tool (Ordner/Termin schreiben): Meldung sammeln, nächsten Call abarbeiten
+                    if (IsActionTool(normalizedFunctionName) && toolResponse != null)
+                    {
+                        if (toolResponse.Reason == "Mehrdeutiger Termin (Rückfrage)") // Rückfrage hat Vorrang → sofort zurück
                         {
-                            Document doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument aus DB holen
-                            if (doc != null && doc.Id > 0) contextDocs.Add(doc); // Nur gültige Dokumente
+                            if (actionMessages.Count > 0 && toolResponse.DirectResponse != null)
+                                toolResponse.DirectResponse = string.Join("\n", actionMessages) + "\n" + toolResponse.DirectResponse; // Bisheriges voranstellen
+                            return toolResponse;
                         }
+                        if (toolResponse.DirectResponse != null) actionMessages.Add(toolResponse.DirectResponse); // Meldung sammeln
+                        continue; // nächste Aktion derselben Antwort
+                    }
 
-                        RouterResponse dataResponse = new RouterResponse();
-                        dataResponse.ShouldRoute = true;
-                        dataResponse.TargetService = "dataAnalysis";
-                        dataResponse.MaxTokens = 2000;
-                        dataResponse.FoundDocuments = contextDocs;
-                        dataResponse.Reason = "DataAnalysis (Follow-up)";
-                        return dataResponse;
+                    // Routing/Card-Tool: einzeln zurückgeben (gesammelte Aktionen hätten Vorrang)
+                    if (toolResponse != null)
+                    {
+                        if (actionMessages.Count > 0) return BuildAggregatedActionResponse(actionMessages);
+                        return toolResponse;
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON-Parse-Fehler: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] Tool-Fehler ({normalizedFunctionName}): {ex.GetType().Name}: {ex.Message}");
+                    RouterResponse toolErrorResponse = new RouterResponse();
+                    toolErrorResponse.DirectResponse = $"Fehler bei '{normalizedFunctionName}': {ex.Message}. Bitte erneut versuchen.";
+                    toolErrorResponse.Reason = "Tool-Fehler";
+                    return toolErrorResponse;
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(responseText) && !hasToolCalls) // Direkte Gemini-Antwort
-            {
-                System.Diagnostics.Debug.WriteLine($"[ROUTER] → Direkte Konversations-Antwort von Gemini");
-                RouterResponse convResponse = new RouterResponse();
-                convResponse.DirectResponse = responseText;
-                convResponse.Reason = "Konversation";
-                return convResponse;
-            }
+            // Mehrere Aktionen gesammelt → gebündelte Antwort
+            if (actionMessages.Count > 0) return BuildAggregatedActionResponse(actionMessages);
 
-            System.Diagnostics.Debug.WriteLine($"[ROUTER] → Fallback (kein Tool, keine Antwort)");
-            RouterResponse fallback = new RouterResponse(); // Sicherheits-Fallback
-            fallback.DirectResponse = "Wie kann ich dir helfen?";
-            fallback.Reason = "Fallback";
-            return fallback;
+            // Kein verwertbarer Tool-Call → JSON-Route / direkte Antwort / Fallback
+            return await HandleNoToolResponseAsync(responseText, docDbService, lastDocIds);
         }
         catch (OperationCanceledException)
         {
@@ -322,6 +261,7 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             "AUFGABENTEILUNG: Kurze Fakten, Smalltalk und kurze Bestätigungen beantwortest du selbst direkt. " +
             "Für umfangreiche oder generative Aufgaben (Texte/Inhalte verfassen, ausführlich erklären, zusammenfassen, umformulieren, übersetzen, Code schreiben, brainstormen) rufe generate_response auf — das übernimmt dann das leistungsstarke lokale Modell. " +
             "Passt ein konkretes Tool (Kalender, Ordner, Dokumentsuche, Dokument-Analyse), nutze dieses statt generate_response.\n\n" +
+            "MEHRERE AKTIONEN: Nennt der Nutzer in EINER Nachricht mehrere gleichartige Aktionen (z.B. mehrere Ordner löschen oder erstellen), rufe das passende Tool für JEDE einzelne Aktion auf — alle Aufrufe in derselben Antwort, ein Aufruf pro Aktion.\n\n" +
             "KALENDER - Termin erstellen: Pflichtfelder = title + date + isAllDay.\n" +
             "isAllDay=true für ganztägig (kein startTime nötig). isAllDay=false für Uhrzeit (dann startTime angeben, z.B. '14:00').\n" +
             "Zeitspanne: isAllDay=false + startTime + endTime. Nur Startzeit: isAllDay=false + startTime ohne endTime.\n" +
@@ -361,6 +301,134 @@ public partial class RouterService // Analysiert User-Nachrichten, ruft Tools au
             }
         }
         return null; // Nicht gefunden
+    }
+
+    private async Task<ChatMessageContent?> GetChatWithRetryAsync( // LLM-Aufruf mit Retry bei SK/Gemini ChatFinishReason-Fehler; null = alle Versuche gescheitert
+        IChatCompletionService chatService, ChatHistory chatHistory,
+        OpenAIPromptExecutionSettings executionSettings, Kernel kernel, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // LLM aufrufen
+        }
+        catch (ArgumentOutOfRangeException ex) when (ex.Message.Contains("ChatFinishReason") || ex.Message.Contains("Unknown"))
+        {
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] SK ChatFinishReason-Fehler, Retry nach 300ms... ({ex.Message})");
+            await Task.Delay(300, cancellationToken); // Kurze Pause vor Retry
+            try
+            {
+                return await chatService.GetChatMessageContentAsync(chatHistory, executionSettings, kernel); // Retry-Versuch
+            }
+            catch (ArgumentOutOfRangeException retryEx) when (retryEx.Message.Contains("ChatFinishReason") || retryEx.Message.Contains("Unknown"))
+            {
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] Retry fehlgeschlagen ({retryEx.Message})");
+                return null; // Signal: alle Versuche gescheitert
+            }
+        }
+    }
+
+    private async Task<RouterResponse> BuildClarifyFallbackAsync(IChatCompletionService chatService, ChatHistory chatHistory, Kernel kernel) // Fallback ohne Tools: Modell darf nachfragen/klaeren
+    {
+        try
+        {
+            var fallbackSettings = new OpenAIPromptExecutionSettings
+            {
+                FunctionChoiceBehavior = FunctionChoiceBehavior.None(), // Kein Tool-Aufruf erlaubt
+                Temperature = 0.3,
+                MaxTokens = 200
+            };
+            var fallbackResponse = await chatService.GetChatMessageContentAsync(chatHistory, fallbackSettings, kernel); // Fallback-LLM-Aufruf ohne Tools
+            if (!string.IsNullOrWhiteSpace(fallbackResponse.Content)) // Antwort vorhanden?
+            {
+                RouterResponse clarifyResponse = new RouterResponse();
+                clarifyResponse.DirectResponse = fallbackResponse.Content.Trim();
+                clarifyResponse.Reason = "Klaerungs-Fallback (kein Tool)";
+                return clarifyResponse;
+            }
+        }
+        catch (Exception fallbackEx)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] Klaerungs-Fallback fehlgeschlagen: {fallbackEx.Message}");
+        }
+        RouterResponse lastResort = new RouterResponse(); // Letzter Ausweg
+        lastResort.DirectResponse = "Ich habe deine Anfrage nicht ganz verstanden. Kannst du sie anders formulieren?";
+        lastResort.Reason = "ChatFinishReason-Fehler (alle Fallbacks fehlgeschlagen)";
+        return lastResort;
+    }
+
+    private async Task<RouterResponse> HandleNoToolResponseAsync(string responseText, DocumentDbService docDbService, List<int> lastDocIds) // Antwort ohne Tool-Call: JSON-Route / direkte Antwort / Fallback
+    {
+        if (responseText.TrimStart().StartsWith("{")) // Antwort beginnt mit '{' → mögliche JSON-Route
+        {
+            try
+            {
+                var routingJson = JsonSerializer.Deserialize<SimpleRoutingJson>(responseText,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Case-insensitiv parsen
+
+                if (routingJson != null && routingJson.route == "dataAnalysis") // DataAnalysis Follow-up
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ROUTER] → JSON-Route: dataAnalysis (Follow-up)");
+
+                    var contextDocs = new List<Document>(); // Kontext-Dokumente aus Kontext-DocIDs laden
+                    foreach (int docId in lastDocIds)
+                    {
+                        Document doc = await docDbService.GetDocumentByIdAsync(docId); // Dokument aus DB holen
+                        if (doc != null && doc.Id > 0) contextDocs.Add(doc); // Nur gültige Dokumente
+                    }
+
+                    RouterResponse dataResponse = new RouterResponse();
+                    dataResponse.ShouldRoute = true;
+                    dataResponse.TargetService = "dataAnalysis";
+                    dataResponse.MaxTokens = 2000;
+                    dataResponse.FoundDocuments = contextDocs;
+                    dataResponse.Reason = "DataAnalysis (Follow-up)";
+                    return dataResponse;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ROUTER] JSON-Parse-Fehler: {ex.Message}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(responseText)) // Direkte Gemini-Antwort
+        {
+            System.Diagnostics.Debug.WriteLine($"[ROUTER] → Direkte Konversations-Antwort von Gemini");
+            RouterResponse convResponse = new RouterResponse();
+            convResponse.DirectResponse = responseText;
+            convResponse.Reason = "Konversation";
+            return convResponse;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[ROUTER] → Fallback (kein Tool, keine Antwort)");
+        RouterResponse fallback = new RouterResponse(); // Sicherheits-Fallback
+        fallback.DirectResponse = "Wie kann ich dir helfen?";
+        fallback.Reason = "Fallback";
+        return fallback;
+    }
+
+    private bool IsActionTool(string functionName) // Schreib-Tools (Ordner/Termin), die in einer Nachricht verkettet werden dürfen
+    {
+        string[] actionTools =
+        {
+            "create_folder", "delete_folder", "rename_folder",
+            "move_document_to_folder", "copy_document_to_folder", "remove_document_from_folder",
+            "create_calendar_event", "delete_calendar_event", "update_calendar_event"
+        };
+        foreach (string name in actionTools) // Gegen die Liste prüfen
+        {
+            if (name == functionName) return true;
+        }
+        return false;
+    }
+
+    private RouterResponse BuildAggregatedActionResponse(List<string> messages) // Bündelt mehrere Aktions-Meldungen zu einer Antwort
+    {
+        RouterResponse response = new RouterResponse();
+        response.ToolWasUsed = true;
+        response.DirectResponse = string.Join("\n", messages); // Jede Aktion in eigener Zeile
+        response.Reason = "Stapel-Aktion";
+        return response;
     }
 
 }

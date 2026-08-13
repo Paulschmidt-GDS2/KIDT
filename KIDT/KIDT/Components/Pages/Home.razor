@@ -153,6 +153,54 @@
     </div>
 </div>
 
+@* Willkommens-/Übersichts-Popup beim App-Start *@
+@if (showWelcome)
+{
+    <div class="@GetWelcomeBackdropClass()" @onclick="CloseWelcome"> @* Klick auf den Hintergrund schließt das Popup *@
+        <div class="@GetWelcomePopupClass()" @onclick:stopPropagation="true"> @* stopPropagation: Klick im Popup schließt nicht *@
+            <h2 class="welcome-title">Willkommen bei KIDT</h2>
+            <p class="welcome-intro">Schreib einfach, was du brauchst — KIDT erledigt es und wählt automatisch das passende Werkzeug.</p>
+
+            <div class="welcome-grid"> @* Übersicht: was du mit KIDT tun kannst *@
+                <div class="welcome-card">
+                    <div class="welcome-card-head"> @* Icon + Titel auf gleicher Höhe *@
+                        <img src="images/file.png" alt="" class="welcome-card-icon" />
+                        <span class="welcome-card-title">Dokumente</span>
+                    </div>
+                    <div class="welcome-card-text">Hochladen, finden und zusammenfassen lassen.</div>
+                </div>
+                <div class="welcome-card">
+                    <div class="welcome-card-head">
+                        <img src="images/add_folder.png" alt="" class="welcome-card-icon" />
+                        <span class="welcome-card-title">Ordner</span>
+                    </div>
+                    <div class="welcome-card-text">Anlegen und Dokumente einsortieren.</div>
+                </div>
+                <div class="welcome-card">
+                    <div class="welcome-card-head">
+                        <img src="images/calendar.png" alt="" class="welcome-card-icon" />
+                        <span class="welcome-card-title">Termine</span>
+                    </div>
+                    <div class="welcome-card-text">Anlegen, ändern und im Blick behalten.</div>
+                </div>
+                <div class="welcome-card">
+                    <div class="welcome-card-head">
+                        <img src="images/new-chat.png" alt="" class="welcome-card-icon" />
+                        <span class="welcome-card-title">Texte & Wissen</span>
+                    </div>
+                    <div class="welcome-card-text">Schreiben, erklären und übersetzen lassen.</div>
+                </div>
+            </div>
+
+            <p class="welcome-example">Zum Beispiel: „Fasse dieses Dokument zusammen" oder „Leg morgen 14 Uhr einen Termin an".</p>
+
+            <div class="welcome-actions">
+                <button class="dialog-button save-button welcome-button" @onclick="CloseWelcome">Los geht's</button>
+            </div>
+        </div>
+    </div>
+}
+
 @* Edit-Dialog für Termin-Bearbeitung (nur sichtbar wenn showEventEditDialog = true) *@
 @if (showEventEditDialog && editingEvent != null)
 {

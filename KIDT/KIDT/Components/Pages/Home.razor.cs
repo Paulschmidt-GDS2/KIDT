@@ -48,12 +48,21 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
 
     private CancellationTokenSource? cancelSource; // Token für Abbruch laufender AI-Anfragen
     private bool canAbort = false; // Abbrechen-Button nur sichtbar vor erstem Chunk
+    private bool showWelcome = false; // Willkommens-Übersicht beim App-Start anzeigen
+    private bool welcomeClosing = false; // Läuft gerade die Ausblend-Animation?
+    private static bool welcomeShown = false; // Übersicht nur einmal pro App-Start zeigen
 
     protected override async Task OnInitializedAsync() // Wird beim Laden der Seite aufgerufen
     {
         var backgroundTask = Task.Run(Chat.InitializeAsync); // KI-Modell im Hintergrund laden
 
         KIDT.Services.ChatEventService.OnNewChatRequested += HandleNewChatRequest; // Neuer-Chat-Event registrieren
+
+        if (!welcomeShown) // Willkommens-Übersicht einmal pro App-Start einblenden
+        {
+            welcomeShown = true;
+            showWelcome = true;
+        }
 
         if (ChatId > 0) // Bestehenden Chat laden
         {
@@ -146,6 +155,29 @@ public partial class Home // Kern: Chat-Zustand, Initialisierung, Nachrichtenver
         {
             currentConversationId = 0;
         }
+    }
+
+    private async Task CloseWelcome() // Schließt die Übersicht mit Ausblend-Animation (Pop wie im Rest der App)
+    {
+        if (welcomeClosing) return; // Schließt bereits → Doppel-Trigger ignorieren
+        welcomeClosing = true; // Exit-Animation starten
+        StateHasChanged();
+        await Task.Delay(200); // Animationsdauer abwarten
+        showWelcome = false; // Popup entfernen
+        welcomeClosing = false; // Zustand zurücksetzen
+        StateHasChanged();
+    }
+
+    private string GetWelcomeBackdropClass() // CSS-Klasse für den Hintergrund (mit/ohne Ausblenden)
+    {
+        if (welcomeClosing) return "welcome-backdrop welcome-closing";
+        return "welcome-backdrop";
+    }
+
+    private string GetWelcomePopupClass() // CSS-Klasse für das Popup (mit/ohne Ausblenden)
+    {
+        if (welcomeClosing) return "welcome-popup welcome-popup-closing";
+        return "welcome-popup";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender) // JS-Hooks registrieren und Auto-Scroll

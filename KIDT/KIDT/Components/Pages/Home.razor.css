@@ -211,6 +211,169 @@ body {
     letter-spacing: 0.02em;
 }
 
+/* === WILLKOMMENS-POPUP (App-Start) === */
+
+.welcome-backdrop {
+    position: fixed; /* Über allem */
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(var(--clr-text-rgb), 0.7); /* Abdunkeln wie bei Dialogen */
+    display: flex;
+    align-items: flex-start; /* Etwas weiter oben statt exakt mittig */
+    justify-content: center;
+    padding-top: 6vh; /* Leicht über der Bildschirmmitte */
+    z-index: 1000;
+    animation: welcome-backdrop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.welcome-popup {
+    width: 70%; /* ~70% der Bildschirmbreite */
+    max-width: 920px;
+    max-height: 82vh; /* Bei kleinen Bildschirmen scrollbar */
+    overflow-y: auto;
+    background: var(--clr-surface);
+    border: 2px solid var(--clr-text);
+    border-radius: 12px;
+    padding: 36px 40px; /* Großzügiger Innenabstand */
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    animation: welcome-popup-in 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: 0.04s;
+}
+
+.welcome-title {
+    font-size: 30px; /* Große, klare Überschrift */
+    font-weight: 700;
+    color: var(--clr-text);
+    margin: 0 0 12px 0;
+}
+
+.welcome-intro {
+    font-size: 18px;
+    color: var(--clr-text);
+    opacity: 0.9;
+    margin: 0 0 28px 0;
+    line-height: 1.55;
+}
+
+.welcome-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Zwei Spalten */
+    gap: 18px;
+}
+
+.welcome-card {
+    border: 2px solid var(--clr-text);
+    border-radius: 6px; /* Wie die Dokument-Cards der App */
+    padding: 18px 20px;
+    background: rgba(var(--clr-text-rgb), 0.02); /* Subtiler Theme-Hintergrund wie App-Cards */
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); /* App-Übergänge */
+    animation: welcome-card-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; /* Gestaffeltes Einpoppen, danach Hover frei */
+}
+
+.welcome-card:hover {
+    background: rgba(var(--clr-surface-rgb), 0.35); /* Hover-Hintergrund wie App-Cards */
+    transform: translateY(-2px); /* Leichtes Anheben wie App-Cards */
+}
+
+.welcome-card:nth-child(1) { animation-delay: 0.08s; } /* Karten nacheinander einpoppen */
+.welcome-card:nth-child(2) { animation-delay: 0.14s; }
+.welcome-card:nth-child(3) { animation-delay: 0.20s; }
+.welcome-card:nth-child(4) { animation-delay: 0.26s; }
+
+.welcome-card-head {
+    display: flex; /* Icon + Titel nebeneinander */
+    align-items: center; /* Titel vertikal mittig zum Icon */
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.welcome-card-icon {
+    width: 34px; /* App-Icon */
+    height: 34px;
+    object-fit: contain;
+    flex-shrink: 0; /* Icon nicht stauchen */
+}
+
+.welcome-card-title {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--clr-text);
+    margin: 0; /* Sitzt in der Kopfzeile, mittig zum Icon */
+}
+
+.welcome-card-text {
+    font-size: 15px;
+    color: var(--clr-text);
+    opacity: 0.8; /* Etwas gedimmt */
+    line-height: 1.5;
+}
+
+.welcome-example {
+    font-size: 15px;
+    color: var(--clr-text);
+    opacity: 0.7; /* Dezentes Beispiel */
+    margin: 26px 0 0 0;
+    line-height: 1.55;
+}
+
+.welcome-actions {
+    display: flex;
+    justify-content: flex-end; /* Button rechts */
+    margin-top: 26px;
+}
+
+.welcome-button {
+    font-size: 16px; /* Größerer, deutlicher Button */
+    padding: 11px 26px;
+    border-radius: 6px;
+}
+
+@keyframes welcome-backdrop-in {
+    from { opacity: 0; } /* Einblenden */
+    to   { opacity: 1; }
+}
+
+@keyframes welcome-popup-in {
+    from { opacity: 0; transform: translateY(-14px) scale(0.97); } /* Leicht von oben einfahren */
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes welcome-card-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.96); } /* Von unten einpoppen */
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Ausblenden beim Schließen (Pop wie im Rest der App) */
+.welcome-closing {
+    animation: welcome-backdrop-out 0.2s ease both;
+}
+
+.welcome-popup-closing {
+    animation: welcome-popup-out 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes welcome-backdrop-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+@keyframes welcome-popup-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-10px) scale(0.95); } /* Nach oben wegpoppen */
+}
+
+/* Schmale Fenster: Karten einspaltig, Popup breiter */
+@media (max-width: 760px) {
+    .welcome-grid {
+        grid-template-columns: 1fr;
+    }
+    .welcome-popup {
+        width: 90%;
+    }
+}
+
 /* === DATEI-BADGE === */
 
 /* Badge für angeh×ngte Datei */
